@@ -412,6 +412,7 @@ $tabAdvanced.Controls.Add($tabsAdvanced)
 $tabScrcpy = New-Object System.Windows.Forms.TabPage
 $tabScrcpy.Text = 'Mirroring (scrcpy)'
 $tabScrcpy.BackColor = [System.Drawing.SystemColors]::Control
+$tabScrcpy.AutoScroll = $true
 $tabsAdvanced.TabPages.Add($tabScrcpy)
 
 $tabMore = New-Object System.Windows.Forms.TabPage
@@ -776,6 +777,8 @@ $lblProxyHint.Size = New-Object System.Drawing.Size(840, 20)
 $tabTether.Controls.Add($lblProxyHint)
 
 # --- tab 3: scrcpy -----------------------------------------------------------
+$script:scrcpyLabels = @{}
+
 function New-ScrcpyLabel {
     param([string]$Text, [int]$X, [int]$Y, [int]$Width = 60)
     $label = New-Object System.Windows.Forms.Label
@@ -783,6 +786,8 @@ function New-ScrcpyLabel {
     $label.Location = New-Object System.Drawing.Point($X, ($Y + 3))
     $label.Size = New-Object System.Drawing.Size($Width, 20)
     $tabScrcpy.Controls.Add($label)
+    # kept so the label can follow its control into a group box
+    $script:scrcpyLabels[$Text] = $label
 }
 
 New-ScrcpyLabel -Text 'Max size' -X 16 -Y 18 -Width 58
@@ -1034,6 +1039,52 @@ $btnRecordAudio.Location = New-Object System.Drawing.Point(486, 25)
 $btnRecordAudio.Size = New-Object System.Drawing.Size(120, 26)
 $grpAudio.Controls.Add($btnRecordAudio)
 $toolTip.SetToolTip($btnRecordAudio, 'Record that audio source to an .opus/.m4a file instead of playing it')
+
+
+# The mirroring page was one flat field of forty controls. They now sit in the
+# box that says what they change, in the order you would actually use them.
+$grpVideo = New-Object System.Windows.Forms.GroupBox
+$grpVideo.Text = 'Picture'
+$tabScrcpy.Controls.Add($grpVideo)
+
+$grpWindowOpts = New-Object System.Windows.Forms.GroupBox
+$grpWindowOpts.Text = 'Window'
+$tabScrcpy.Controls.Add($grpWindowOpts)
+
+$grpPhoneOpts = New-Object System.Windows.Forms.GroupBox
+$grpPhoneOpts.Text = 'While mirroring, the phone'
+$tabScrcpy.Controls.Add($grpPhoneOpts)
+
+$grpTarget = New-Object System.Windows.Forms.GroupBox
+$grpTarget.Text = 'What to mirror, and recording'
+$tabScrcpy.Controls.Add($grpTarget)
+
+$grpControl = New-Object System.Windows.Forms.GroupBox
+$grpControl.Text = 'Keyboard, mouse and OTG'
+$tabScrcpy.Controls.Add($grpControl)
+
+foreach ($entry in @(
+        @($grpVideo, @($cmbMaxSize, $cmbBitrate, $cmbFps, $cmbCodec),
+            @('Max size', 'Bit rate', 'Max FPS', 'Codec')),
+        @($grpWindowOpts, @($chkFullscreen, $chkBorderless, $chkOnTop, $chkNoScreensaver), @()),
+        @($grpPhoneOpts, @($chkScreenOff, $chkStayAwake, $chkNoAudio, $chkViewOnly, $chkPowerOff), @()),
+        @($grpTarget, @($cmbDisplay, $btnListDisplays, $chkNewDisplay, $txtNewDisplay, $txtStartApp,
+            $chkRecord, $txtRecord, $btnBrowseRecord, $chkExtraArgs, $txtExtraArgs),
+            @('Display', 'Start app')),
+        @($grpControl, @($chkOtg, $cmbKeyboard, $cmbMouse, $cmbGamepad, $btnKeyboardLayout),
+            @('Keyboard', 'Mouse', 'Gamepad')))) {
+    foreach ($control in $entry[1]) {
+        $tabScrcpy.Controls.Remove($control)
+        $entry[0].Controls.Add($control)
+    }
+    foreach ($name in $entry[2]) {
+        $label = $script:scrcpyLabels[$name]
+        if ($label) {
+            $tabScrcpy.Controls.Remove($label)
+            $entry[0].Controls.Add($label)
+        }
+    }
+}
 
 $btnScrcpy = New-Object System.Windows.Forms.Button
 $btnScrcpy.Text = 'Launch scrcpy'
@@ -2038,6 +2089,8 @@ $btnSmsExport.Size = New-Object System.Drawing.Size(112, 28)
 $tabSms.Controls.Add($btnSmsExport)
 
 # --- tab: camera -------------------------------------------------------------
+$script:cameraLabels = @{}
+
 function New-CameraLabel {
     param([string]$Text, [int]$X, [int]$Y, [int]$Width = 60)
     $label = New-Object System.Windows.Forms.Label
@@ -2045,6 +2098,7 @@ function New-CameraLabel {
     $label.Location = New-Object System.Drawing.Point($X, ($Y + 3))
     $label.Size = New-Object System.Drawing.Size($Width, 20)
     $tabCamera.Controls.Add($label)
+    $script:cameraLabels[$Text] = $label
 }
 
 New-CameraLabel -Text 'Camera' -X 16 -Y 16 -Width 52
@@ -2136,6 +2190,27 @@ $btnCameraBrowse.Text = 'Browse...'
 $btnCameraBrowse.Location = New-Object System.Drawing.Point(618, 85)
 $btnCameraBrowse.Size = New-Object System.Drawing.Size(90, 26)
 $tabCamera.Controls.Add($btnCameraBrowse)
+
+
+# The camera settings and the microphone are two different jobs that happen to
+# share a tab, so each gets its own box.
+$grpCamera = New-Object System.Windows.Forms.GroupBox
+$grpCamera.Text = 'Camera  (phone camera as a video source, Android 12+)'
+$tabCamera.Controls.Add($grpCamera)
+
+foreach ($control in @($cmbCamera, $btnCameraList, $cmbCameraFacing, $cmbCameraSize, $cmbCameraFps,
+        $cmbCameraAr, $chkCameraHighSpeed, $chkCameraTorch, $chkCameraMic, $chkCameraRecord,
+        $txtCameraRecord, $btnCameraBrowse, $lblCameraHint)) {
+    $tabCamera.Controls.Remove($control)
+    $grpCamera.Controls.Add($control)
+}
+foreach ($name in @('Camera', 'Facing', 'Size', 'FPS', 'Aspect')) {
+    $label = $script:cameraLabels[$name]
+    if ($label) {
+        $tabCamera.Controls.Remove($label)
+        $grpCamera.Controls.Add($label)
+    }
+}
 
 $btnCameraStart = New-Object System.Windows.Forms.Button
 $btnCameraStart.Text = 'Start camera'
@@ -7284,6 +7359,121 @@ function Export-RunningList {
 
 # --- explicit layout for the two full-size tabs ------------------------------
 
+
+function Update-MirrorLayout {
+    # the groups stack down the page; inside each one the controls sit on rows
+    $width = $tabScrcpy.ClientSize.Width
+    if ($width -lt 300) { return }
+    $inner = $width - 24
+    $half = [int](($inner - 12) / 2)
+
+    $grpVideo.SetBounds(12, 6, $inner, 56)
+    $x = 12
+    foreach ($pair in @(@('Max size', $cmbMaxSize, 58, 80), @('Bit rate', $cmbBitrate, 52, 80),
+            @('Max FPS', $cmbFps, 58, 70), @('Codec', $cmbCodec, 46, 110))) {
+        $script:scrcpyLabels[$pair[0]].SetBounds($x, 26, $pair[2], 20)
+        $x += $pair[2] + 4
+        $pair[1].SetBounds($x, 22, $pair[3], 24)
+        $x += $pair[3] + 16
+    }
+
+    $grpWindowOpts.SetBounds(12, 68, $half, 80)
+    $null = Set-CheckRow -Left 12 -Top 24 -Limit ($half - 16) -Boxes @($chkFullscreen, $chkBorderless,
+        $chkOnTop, $chkNoScreensaver)
+
+    $grpPhoneOpts.SetBounds((24 + $half), 68, $half, 80)
+    $null = Set-CheckRow -Left 12 -Top 24 -Limit ($half - 16) -Boxes @($chkScreenOff, $chkStayAwake,
+        $chkNoAudio, $chkViewOnly, $chkPowerOff)
+
+    $grpTarget.SetBounds(12, 154, $inner, 116)
+    $script:scrcpyLabels['Display'].SetBounds(12, 26, 46, 20)
+    $cmbDisplay.SetBounds(62, 22, 70, 24)
+    $btnListDisplays.SetBounds(138, 21, $btnListDisplays.Width, 26)
+    $chkNewDisplay.SetBounds(($btnListDisplays.Bounds.Right + 12), 24, 110, 22)
+    $txtNewDisplay.SetBounds(($chkNewDisplay.Bounds.Right + 4), 22, 130, 24)
+    $script:scrcpyLabels['Start app'].SetBounds(($txtNewDisplay.Bounds.Right + 12), 26, 62, 20)
+    $txtStartApp.SetBounds(($txtNewDisplay.Bounds.Right + 78), 22,
+        [Math]::Max(90, ($inner - $txtNewDisplay.Bounds.Right - 90)), 24)
+
+    $chkRecord.SetBounds(12, 54, 80, 22)
+    $txtRecord.SetBounds(96, 52, [Math]::Max(120, ($inner - 96 - $btnBrowseRecord.Width - 24)), 24)
+    $btnBrowseRecord.SetBounds(($txtRecord.Bounds.Right + 8), 51, $btnBrowseRecord.Width, 26)
+
+    $chkExtraArgs.SetBounds(12, 86, 96, 20)
+    $txtExtraArgs.SetBounds(112, 84, [Math]::Max(140, ($inner - 130)), 24)
+
+    $grpControl.SetBounds(12, 276, $inner, 56)
+    $chkOtg.SetBounds(12, 24, 150, 22)
+    $x = 170
+    foreach ($pair in @(@('Keyboard', $cmbKeyboard), @('Mouse', $cmbMouse), @('Gamepad', $cmbGamepad))) {
+        $script:scrcpyLabels[$pair[0]].SetBounds($x, 26, 62, 20)
+        $pair[1].SetBounds(($x + 64), 22, 90, 24)
+        $x += 164
+    }
+    $btnKeyboardLayout.SetBounds($x, 21, $btnKeyboardLayout.Width, 26)
+
+    $null = Set-ButtonRowLeft -Left 12 -Top 340 -Buttons @($btnScrcpy, $btnScrcpyShare, $btnOtg,
+        $btnScrcpyClose, $btnShowCommand)
+}
+
+function Set-CheckRow {
+    # check boxes side by side, each as wide as its own text, wrapping to a
+    # second line rather than sliding out of the box
+    param($Boxes, [int]$Left, [int]$Top, [int]$Gap = 10, [int]$Limit = 0)
+
+    $x = $Left
+    $y = $Top
+    foreach ($box in $Boxes) {
+        $needed = [System.Windows.Forms.TextRenderer]::MeasureText($box.Text, $box.Font).Width + 26
+        if ($Limit -gt 0 -and $x -gt $Left -and ($x + $needed) -gt $Limit) {
+            $x = $Left
+            $y += 26
+        }
+        $box.SetBounds($x, $y, $needed, 22)
+        $x += $needed + $Gap
+    }
+    return $x
+}
+
+
+function Update-CamMicLayout {
+    $width = $tabCamera.ClientSize.Width
+    $height = $tabCamera.ClientSize.Height
+    if ($width -lt 300 -or $height -lt 200) { return }
+    $inner = $width - 24
+
+    $grpCamera.SetBounds(12, 6, $inner, 128)
+    $script:cameraLabels['Camera'].SetBounds(12, 26, 52, 20)
+    $cmbCamera.SetBounds(68, 22, [Math]::Max(160, ($inner - 420)), 24)
+    $btnCameraList.SetBounds(($cmbCamera.Bounds.Right + 8), 21, $btnCameraList.Width, 26)
+    $script:cameraLabels['Facing'].SetBounds(($btnCameraList.Bounds.Right + 14), 26, 46, 20)
+    $cmbCameraFacing.SetBounds(($btnCameraList.Bounds.Right + 64), 22, 100, 24)
+
+    $x = 12
+    foreach ($pair in @(@('Size', $cmbCameraSize, 40, 110), @('FPS', $cmbCameraFps, 32, 70),
+            @('Aspect', $cmbCameraAr, 48, 90))) {
+        $script:cameraLabels[$pair[0]].SetBounds($x, 58, $pair[2], 20)
+        $x += $pair[2] + 4
+        $pair[1].SetBounds($x, 54, $pair[3], 24)
+        $x += $pair[3] + 16
+    }
+    $null = Set-CheckRow -Left $x -Top 56 -Boxes @($chkCameraHighSpeed, $chkCameraTorch, $chkCameraMic)
+
+    $chkCameraRecord.SetBounds(12, 90, 90, 22)
+    $txtCameraRecord.SetBounds(106, 88, [Math]::Max(120, ($inner - 106 - $btnCameraBrowse.Width - 24)), 24)
+    $btnCameraBrowse.SetBounds(($txtCameraRecord.Bounds.Right + 8), 87, $btnCameraBrowse.Width, 26)
+    $lblCameraHint.SetBounds(12, 112, [Math]::Max(200, $inner - 24), 18)
+
+    $null = Set-ButtonRowLeft -Left 12 -Top 142 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
+        $btnCameraStop, $btnCameraCommand)
+
+    $grpAudio.SetBounds(12, 182, $inner, 92)
+    $lblAudioSource.SetBounds(12, 30, 50, 20)
+    $cmbAudioSource.SetBounds(66, 26, 200, 24)
+    $null = Set-ButtonRowLeft -Left 274 -Top 25 -Buttons @($btnListen, $btnListenStop, $btnRecordAudio)
+    $lblAudioHint.SetBounds(12, 62, [Math]::Max(200, $inner - 24), 20)
+}
+
 function Update-ToolsLayout {
     # every control sits inside the group that names it, and the groups stack
     # down the page in one place
@@ -7565,6 +7755,8 @@ function Update-RightLayout {
 
     Update-RadioLayout
     Update-DeviceTabLayout
+    Update-MirrorLayout
+    Update-CamMicLayout
 }
 
 function Update-ShellLayout {
@@ -8937,6 +9129,7 @@ $txtPhoneNumber.Add_KeyDown({
 $tabsTethering.Add_SelectedIndexChanged({ Update-RightLayout })
 $tabsAdvanced.Add_SelectedIndexChanged({
     Update-ToolsLayout
+    Update-MirrorLayout
     Update-RightLayout
 })
 

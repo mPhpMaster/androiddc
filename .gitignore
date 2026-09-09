@@ -1,21 +1,50 @@
-# local snapshots and one-off helpers - not part of the source
-backups/
+# Nothing here is ours to redistribute. get-upstream.ps1 fetches both packages
+# from their official releases and checks every archive against SHA256, so the
+# repository stays at a few hundred KB instead of carrying ~28 MB of binaries.
 
-# Upstream binaries from scrcpy and gnirehtet. They are not ours to
-# redistribute and get-upstream.ps1 fetches them on demand, so the repository
-# stays small instead of carrying ~28 MB of other people's releases.
+# --- comes with scrcpy (win64) ----------------------------------------------
+scrcpy.exe
+scrcpy-server
+scrcpy-noconsole.vbs
+scrcpy-console.bat
+scrcpy.png
+disconnected.png
+icon.png
+open_a_terminal_here.bat
+LICENSE.txt
+adb.exe
+AdbWinApi.dll
+AdbWinUsbApi.dll
+SDL2.dll
+SDL3.dll
+libusb-1.0.dll
+# the FFmpeg DLLs carry their soname, which changes with every scrcpy release
+avcodec-*.dll
+avformat-*.dll
+avutil-*.dll
+swresample-*.dll
+swscale-*.dll
+
+# --- comes with gnirehtet (rust, win64) -------------------------------------
+gnirehtet.exe
+gnirehtet.apk
+gnirehtet-run.cmd
+
+# --- a safety net, in case a future release adds a file not listed above ----
 *.exe
 *.dll
 *.apk
 *.zip
-scrcpy-server
-scrcpy-noconsole.vbs
-open_a_terminal_here.bat
-gnirehtet-run.cmd
-scrcpy.png
-disconnected.png
-LICENSE.txt
+*.tar.gz
 
-# what a run leaves behind
+# --- local only --------------------------------------------------------------
+backups/
 *.log
 1.png
+*.png.tmp
+
+# assets/ is ours, so it stays even though it is full of png
+!assets/
+!assets/*.png
+!assets/*.ico
+!assets/*.svg
