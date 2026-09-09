@@ -311,7 +311,14 @@ function Copy-Into {
 [Net.ServicePointManager]::SecurityProtocol =
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-if (-not $Destination) { $Destination = (Get-Location).Path }
+# $PSScriptRoot is empty when the script is piped in or dot-sourced oddly. The
+# current directory is then the only sensible guess, but it is said out loud
+# rather than left for someone to discover after the files land elsewhere.
+$guessed = $false
+if (-not $Destination) {
+    $Destination = (Get-Location).Path
+    $guessed = $true
+}
 $Destination = [System.IO.Path]::GetFullPath($Destination)
 if (-not (Test-Path -LiteralPath $Destination)) { $null = New-Item -ItemType Directory -Path $Destination -Force }
 
@@ -321,6 +328,10 @@ if (-not (Test-Path -LiteralPath $CacheFolder)) { $null = New-Item -ItemType Dir
 Write-Host ''
 Write-Host 'Upstream packages for AndroidDC' -ForegroundColor White
 Write-Note "destination : $Destination"
+if ($guessed) {
+    Write-Warn 'that is the current directory, because this script could not tell where it lives'
+    Write-Warn 'pass -Destination if the files should go somewhere else'
+}
 Write-Note "archives    : $CacheFolder"
 
 # what each package has to leave behind to count as present
