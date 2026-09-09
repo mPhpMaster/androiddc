@@ -1,0 +1,21 @@
+# local snapshots and one-off helpers - not part of the source
+backups/
+
+# Upstream binaries from scrcpy and gnirehtet. They are not ours to
+# redistribute and get-upstream.ps1 fetches them on demand, so the repository
+# stays small instead of carrying ~28 MB of other people's releases.
+*.exe
+*.dll
+*.apk
+*.zip
+scrcpy-server
+scrcpy-noconsole.vbs
+open_a_terminal_here.bat
+gnirehtet-run.cmd
+scrcpy.png
+disconnected.png
+LICENSE.txt
+
+# what a run leaves behind
+*.log
+1.png

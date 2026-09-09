@@ -1,0 +1,63 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  parse:
+    name: PowerShell parses
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every .ps1 must parse
+        shell: pwsh
+        run: |
+          $failed = 0
+          Get-ChildItem -Path . -Recurse -Filter *.ps1 |
+            Where-Object { $_.FullName -notmatch '\\backups\\' } |
+            ForEach-Object {
+              $errors = $null
+              $null = [System.Management.Automation.Language.Parser]::ParseFile(
+                $_.FullName, [ref]$null, [ref]$errors)
+              if ($errors) {
+                $failed++
+                Write-Host "::error file=$($_.Name)::$($errors.Count) parse error(s)"
+                foreach ($item in ($errors | Select-Object -First 5)) {
+                  Write-Host ("  line {0}: {1}" -f $item.Extent.StartLineNumber, $item.Message)
+                }
+              } else {
+                Write-Host "ok  $($_.Name)"
+              }
+            }
+          if ($failed -gt 0) { exit 1 }
+
+      - name: The launcher must point at a file that exists
+        shell: pwsh
+        run: |
+          $vbs = Get-Content -LiteralPath .\androiddc.vbs -Raw
+          if ($vbs -notmatch 'androiddc\.ps1') {
+            Write-Host '::error::androiddc.vbs does not launch androiddc.ps1'
+            exit 1
+          }
+          if (-not (Test-Path .\androiddc.ps1)) {
+            Write-Host '::error::androiddc.ps1 is missing'
+            exit 1
+          }
+          Write-Host 'ok  androiddc.vbs -> androiddc.ps1'
+
+      - name: No absolute developer paths in shipped files
+        shell: pwsh
+        run: |
+          $hits = Select-String -Path .\*.ps1, .\*.vbs, .\*.bat, .\docs\*.md, .\README.md `
+            -Pattern '[A-Za-z]:\\(Users\\|scrcpy-win64)' -ErrorAction SilentlyContinue
+          if ($hits) {
+            foreach ($hit in $hits) {
+              Write-Host "::error file=$($hit.Filename),line=$($hit.LineNumber)::absolute path: $($hit.Line.Trim())"
+            }
+            exit 1
+          }
+          Write-Host 'ok  nothing hardcoded'

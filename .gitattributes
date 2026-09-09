@@ -1,0 +1,23 @@
+# Windows scripts must keep CRLF: cmd.exe and wscript.exe mis-parse LF endings.
+* text=auto eol=lf
+
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.vbs  text eol=crlf
+
+*.md   text eol=lf
+*.yml  text eol=lf
+*.svg  text eol=lf
+
+*.png binary
+*.ico binary
+*.apk binary
+*.exe binary
+*.dll binary
+*.zip binary
+
+# so GitHub counts the project as PowerShell, not as VBScript
+*.ps1 linguist-language=PowerShell

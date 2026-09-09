@@ -1,0 +1,125 @@
+# What it runs on your phone
+
+[← back to the README](../README.md)
+
+AndroidDC installs no agent and grants itself nothing. Every action is an ordinary `adb`
+command, the same ones you could type yourself. This page lists them so you can audit the tool
+instead of trusting it.
+
+Nothing here happens on its own: each command runs because you pressed the button next to it.
+The only things that repeat by themselves are the device list refresh and, if you switch it
+on, the screen capture.
+
+## Reading the device
+
+| Purpose | Command |
+|---|---|
+| Which devices are attached | `adb devices -l` |
+| Model, Android version, properties | `adb shell getprop` |
+| Battery | `adb shell dumpsys battery` |
+| Signal | `adb shell dumpsys telephony.registry` |
+| Screen picture | `adb exec-out screencap -p` (streamed, no file on either side) |
+| Lock state | `adb shell dumpsys trust` |
+| Active network and resolvers | `adb shell dumpsys connectivity` |
+| Hardware present | `adb shell pm list features` |
+
+## Touching the screen
+
+| Purpose | Command |
+|---|---|
+| Tap | `adb shell input tap <x> <y>` |
+| Swipe, long press | `adb shell input swipe <x1> <y1> <x2> <y2> <ms>` |
+| Keys: back, home, recents, power, volume, end call | `adb shell input keyevent <code>` |
+| Typing text | `adb shell input text` (Unicode goes through the clipboard route) |
+| Finding a quick-settings tile (torch) | `adb shell uiautomator dump` then a tap at the tile's bounds |
+
+## Settings and toggles
+
+| Purpose | Command |
+|---|---|
+| Auto-rotate, haptics, show taps, stay awake, developer options | `adb shell settings put system\|global\|secure <key> <value>` |
+| Location | `adb shell settings put secure location_mode` |
+| Wi-Fi | `adb shell svc wifi enable\|disable` or `cmd wifi set-wifi-enabled` |
+| Bluetooth | `adb shell cmd bluetooth_manager enable\|disable` |
+| NFC | `adb shell svc nfc enable\|disable` |
+| Battery saver | `adb shell cmd power set-mode` / `settings put global low_power` |
+| Vibrate once | `adb shell cmd vibrator vibrate` |
+| Private DNS | `adb shell settings put global private_dns_mode\|private_dns_specifier` |
+| Keyboards | `adb shell ime list\|enable\|disable\|set\|reset` |
+| Hotspot | the settings screen driven through `uiautomator`, verified with `dumpsys tethering` |
+| USB tethering | `adb shell svc usb setFunctions rndis` |
+
+## Apps
+
+| Purpose | Command |
+|---|---|
+| List | `adb shell pm list packages -f` and `dumpsys package` |
+| Launch | `adb shell am start -n <component>` |
+| On its own display | `scrcpy --new-display=<size> --start-app=+<package>` |
+| Force stop | `adb shell am force-stop <package>` |
+| Install | `adb install <apk>` |
+| Uninstall | `adb uninstall <package>` |
+| App info screen | `adb shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS` |
+
+## Processes
+
+`adb shell dumpsys activity processes` and `adb shell top -b -n 2 -d 1` to read them,
+`am force-stop` or `am kill` to stop one, `am kill-all` for every background process.
+
+## Files
+
+| Purpose | Command |
+|---|---|
+| List a folder | `adb shell ls -la <path>/` |
+| Search | `adb shell find -L <path> -iname <pattern>` |
+| Recent files | `adb shell find -L /sdcard -newermt <date>` |
+| Free space | `adb shell df -h <path>` |
+| Volumes | `adb shell sm list-volumes` |
+| Download | `adb pull` |
+| Upload | `adb push` |
+| Rename, delete, new folder | `adb shell mv` / `rm` / `mkdir -p` |
+| Compress | `adb shell tar -czf <archive> -C <folder> <names>` |
+| Extract | `adb shell unzip -o` or `tar -xzf` or `gzip -dc` |
+| Preview | `adb exec-out cat <path>` into memory, nothing written to disk |
+| Open on the phone | `adb shell am start -a android.intent.action.VIEW -d file://…` |
+| Make the gallery notice a change | `adb shell content call --uri content://media --method scan_file` |
+
+## Phone, contacts, messages
+
+| Purpose | Command |
+|---|---|
+| Call | `adb shell am start -a android.intent.action.CALL -d tel:<number>` |
+| Dialer only | `… -a android.intent.action.DIAL` |
+| Hang up | `adb shell input keyevent 6` |
+| USSD | the CALL intent with `#` written as `%23` |
+| Contacts | `adb shell content query|insert|update|delete --uri content://com.android.contacts/…` |
+| SMS list | `adb shell content query --uri content://sms` |
+| Send SMS | `adb shell am start -a android.intent.action.SENDTO -d sms:<number> --es sms_body <text>`, then the phone's own app sends it |
+
+## Radios and users
+
+| Purpose | Command |
+|---|---|
+| Wi-Fi scan and networks | `adb shell cmd wifi start-scan|list-scan-results|list-networks` |
+| Join / forget | `adb shell cmd wifi connect-network <ssid> <type> [<password>]`, `forget-network <id>` |
+| Bluetooth paired list | `adb shell dumpsys bluetooth_manager` |
+| NFC state | `adb shell dumpsys nfc` |
+| Users | `adb shell pm list users`, `am get-current-user`, `am switch-user`, `pm create-user`, `pm remove-user`, `pm get-max-users` |
+| Multi-user switch | `adb shell settings put global user_switcher_enabled 0|1` |
+
+## Connection plumbing
+
+`adb tcpip 5555`, `adb connect|disconnect`, `adb kill-server|start-server`,
+`adb reverse --list`, and gnirehtet's own `run|start|stop|tunnel|autorun`.
+
+## What is written on your PC
+
+| What | Where | Removed |
+|---|---|---|
+| Settings | `%APPDATA%\AndroidDC\settings.json` | Kept on purpose |
+| scrcpy and app output | `%TEMP%\androiddc-<pid>.*` | When the program closes |
+| Media previews | `%TEMP%\androiddc-<pid>.preview.*` | When the program closes |
+| Downloads you asked for | The PC folder you chose | Kept, they are yours |
+
+Passwords typed into the Wi-Fi box are passed to `cmd wifi connect-network` and are not saved
+anywhere by AndroidDC.
