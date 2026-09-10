@@ -989,11 +989,11 @@ $btnBrowseRecord.Location = New-Object System.Drawing.Point(606, 117)
 $btnBrowseRecord.Size = New-Object System.Drawing.Size(90, 26)
 $tabScrcpy.Controls.Add($btnBrowseRecord)
 
-$chkExtraArgs = New-Object System.Windows.Forms.Label
-$chkExtraArgs.Text = 'Extra args'
-$chkExtraArgs.Location = New-Object System.Drawing.Point(18, 155)
-$chkExtraArgs.Size = New-Object System.Drawing.Size(70, 20)
-$tabScrcpy.Controls.Add($chkExtraArgs)
+$lblExtraArgs = New-Object System.Windows.Forms.Label
+$lblExtraArgs.Text = 'Extra args'
+$lblExtraArgs.Location = New-Object System.Drawing.Point(18, 155)
+$lblExtraArgs.Size = New-Object System.Drawing.Size(70, 20)
+$tabScrcpy.Controls.Add($lblExtraArgs)
 
 $txtExtraArgs = New-Object System.Windows.Forms.TextBox
 $txtExtraArgs.Location = New-Object System.Drawing.Point(90, 152)
@@ -1172,7 +1172,7 @@ foreach ($entry in @(
         @($grpWindowOpts, @($chkFullscreen, $chkBorderless, $chkOnTop, $chkNoScreensaver), @()),
         @($grpPhoneOpts, @($chkScreenOff, $chkStayAwake, $chkNoAudio, $chkViewOnly, $chkPowerOff), @()),
         @($grpTarget, @($cmbDisplay, $btnListDisplays, $chkNewDisplay, $txtNewDisplay, $txtStartApp,
-            $chkRecord, $txtRecord, $btnBrowseRecord, $chkExtraArgs, $txtExtraArgs),
+            $chkRecord, $txtRecord, $btnBrowseRecord, $lblExtraArgs, $txtExtraArgs),
             @('Display', 'Start app')),
         @($grpControl, @($chkOtg, $cmbKeyboard, $cmbMouse, $cmbGamepad, $btnKeyboardLayout),
             @('Keyboard', 'Mouse', 'Gamepad')))) {
@@ -8042,7 +8042,7 @@ function Update-MirrorLayout {
     $txtRecord.SetBounds(96, 52, [Math]::Max(120, ($inner - 96 - $btnBrowseRecord.Width - 24)), 24)
     $btnBrowseRecord.SetBounds(($txtRecord.Bounds.Right + 8), 51, $btnBrowseRecord.Width, 26)
 
-    $chkExtraArgs.SetBounds(12, 86, 96, 20)
+    $lblExtraArgs.SetBounds(12, 86, 96, 20)
     $txtExtraArgs.SetBounds(112, 84, [Math]::Max(140, ($inner - 130)), 24)
 
     $grpControl.SetBounds(12, 276, $inner, 56)
@@ -9466,13 +9466,10 @@ function Update-LogcatView {
 
     if ($batch.Length -gt 0) {
         # Painting is the expensive part, so the control is frozen for the
-        # append and thawed once. Trimming copies a very large string, so it
-        # happens rarely: at 900k, back to 450k, instead of on every tick.
+        # append and thawed once.
         $null = [AndroidDcNative]::SendMessage($txtLogcat.Handle, 0x000B, [IntPtr]::Zero, [IntPtr]::Zero)
         try {
-            if ($txtLogcat.TextLength -gt 900000) {
-                $txtLogcat.Text = $txtLogcat.Text.Substring($txtLogcat.TextLength - 450000)
-            }
+            Remove-LogcatHead
             $txtLogcat.AppendText($batch.ToString())
             if ($chkLogcatFollow.Checked) {
                 $txtLogcat.SelectionStart = $txtLogcat.TextLength
@@ -9495,17 +9492,69 @@ function Update-LogcatView {
 }
 
 
+
+function Remove-LogcatHead {
+    <#
+        Drops the oldest text once the box gets long.
+
+        Measured on this control, half a megabyte down to a quarter:
+
+            assign Text with the second half      1,722 ms
+            Select(0, boundary) + SelectedText='' 55 ms
+
+        Assigning Text rebuilds the whole buffer and is worse than quadratic:
+        250k took 2.5 s, 500k took 7.2 s and 960k took 22.6 s. That single
+        assignment was the freeze behind a live log.
+
+        The box is ReadOnly, and a read only TextBox ignores an assignment to
+        SelectedText without raising anything - the delete simply does not
+        happen. ReadOnly comes off for the edit and goes straight back.
+    #>
+    if ($txtLogcat.TextLength -le 400000) { return }
+
+    $cut = $txtLogcat.TextLength - 200000
+
+    # cut on a line boundary, and find it through the control rather than by
+    # reading .Text, which would copy the whole buffer and undo the saving
+    $line = $txtLogcat.GetLineFromCharIndex($cut)
+    $boundary = $txtLogcat.GetFirstCharIndexFromLine($line + 1)
+    if ($boundary -le 0) { $boundary = $cut }
+
+    $wasReadOnly = $txtLogcat.ReadOnly
+    $txtLogcat.ReadOnly = $false
+    try {
+        $txtLogcat.Select(0, $boundary)
+        $txtLogcat.SelectedText = ''
+        $txtLogcat.Select($txtLogcat.TextLength, 0)
+    } finally {
+        $txtLogcat.ReadOnly = $wasReadOnly
+    }
+}
+
 function Show-LogcatFiltered {
     # redraw the window from the lines kept in memory, so typing a filter hides
     # what is already on screen too
     if (-not $script:logcatRaw) { return }
 
     $filter = $txtLogcatFilter.Text.Trim()
-    $batch = New-Object System.Text.StringBuilder
+
+    $matching = New-Object System.Collections.Generic.List[string]
     foreach ($line in $script:logcatRaw) {
         if ($filter -and $line -notlike "*$filter*") { continue }
-        $null = $batch.AppendLine($line)
+        $null = $matching.Add($line)
     }
+
+    # rebuilding the box is the costly operation, and it grows worse than
+    # linearly, so only the newest lines are drawn; the rest stay in the list
+    $shown = $matching
+    $trimmed = $false
+    if ($matching.Count -gt 1200) {
+        $shown = $matching.GetRange(($matching.Count - 1200), 1200)
+        $trimmed = $true
+    }
+
+    $batch = New-Object System.Text.StringBuilder
+    foreach ($line in $shown) { $null = $batch.AppendLine($line) }
 
     $null = [AndroidDcNative]::SendMessage($txtLogcat.Handle, 0x000B, [IntPtr]::Zero, [IntPtr]::Zero)
     try {
@@ -9519,9 +9568,9 @@ function Show-LogcatFiltered {
         $txtLogcat.Invalidate()
     }
 
-    $shown = @($batch.ToString() -split "`r?`n" | Where-Object { $_ }).Count
     if ($filter) {
-        $lblLogcatState.Text = "$shown of $($script:logcatRaw.Count) kept lines match '$filter'"
+        $lblLogcatState.Text = "$($matching.Count) of $($script:logcatRaw.Count) kept lines match '$filter'" +
+            $(if ($trimmed) { " - showing the newest 1200" } else { '' })
     }
 }
 
