@@ -476,10 +476,10 @@ $tabUsers.Text = 'Users'
 $tabUsers.BackColor = [System.Drawing.SystemColors]::Control
 $tabs.TabPages.Add($tabUsers)
 
-$tabShell = New-Object System.Windows.Forms.TabPage
-$tabShell.Text = 'Shell'
-$tabShell.BackColor = [System.Drawing.SystemColors]::Control
-$tabs.TabPages.Add($tabShell)
+$tabShellHost = New-Object System.Windows.Forms.TabPage
+$tabShellHost.Text = 'Shell'
+$tabShellHost.BackColor = [System.Drawing.SystemColors]::Control
+$tabs.TabPages.Add($tabShellHost)
 
 # --- tab 0: device details ---------------------------------------------------
 $btnDeviceRefresh = New-Object System.Windows.Forms.Button
@@ -775,6 +775,39 @@ $lblProxyHint.ForeColor = [System.Drawing.Color]::DimGray
 $lblProxyHint.Location = New-Object System.Drawing.Point(18, 240)
 $lblProxyHint.Size = New-Object System.Drawing.Size(840, 20)
 $tabTether.Controls.Add($lblProxyHint)
+
+
+# Both tethering pages were flat rows. The settings you change now sit in one
+# box and the buttons that act on them in another.
+$grpTunnel = New-Object System.Windows.Forms.GroupBox
+$grpTunnel.Text = 'Tunnel settings'
+$tabShare.Controls.Add($grpTunnel)
+
+foreach ($control in @($lblDns, $cmbDns, $lblPort, $numPort, $lblRoutes, $txtRoutes,
+        $chkWifi, $chkReinstall, $chkAutoTest, $chkScrcpyAfter)) {
+    $tabShare.Controls.Remove($control)
+    $grpTunnel.Controls.Add($control)
+}
+
+$grpUsbTether = New-Object System.Windows.Forms.GroupBox
+$grpUsbTether.Text = 'USB tethering  (the phone shares its data over the cable)'
+$tabTether.Controls.Add($grpUsbTether)
+
+foreach ($control in @($btnTetherOn, $btnTetherOff, $btnTetherSettings, $btnAdapters,
+        $chkTetherMetered, $lblTetherStatus, $lblTetherHint, $lblTetherHint2)) {
+    $tabTether.Controls.Remove($control)
+    $grpUsbTether.Controls.Add($control)
+}
+
+$grpProxy = New-Object System.Windows.Forms.GroupBox
+$grpProxy.Text = 'Proxy over ADB  (when the cable route is blocked)'
+$tabTether.Controls.Add($grpProxy)
+
+foreach ($control in @($lblProxyPort, $numProxyPort, $btnProxyOn, $btnProxyOff, $btnProxyTest,
+        $lblProxyHint, $lblProxyTitle)) {
+    $tabTether.Controls.Remove($control)
+    $grpProxy.Controls.Add($control)
+}
 
 # --- tab 3: scrcpy -----------------------------------------------------------
 $script:scrcpyLabels = @{}
@@ -1440,6 +1473,8 @@ $tabTools.Controls.Add($btnRepairTunnel)
 $toolTip.SetToolTip($btnRepairTunnel, 'Re-create the adb reverse tunnel after an adb restart or an unplug/replug')
 
 # builds "<label>  [On] [Off]" and returns the two buttons
+$script:togglePairs = @()
+
 function New-TogglePair {
     param([string]$Text, [int]$X, [int]$Y, [int]$LabelWidth = 86, $Parent = $null)
 
@@ -1463,28 +1498,29 @@ function New-TogglePair {
     $off.Size = New-Object System.Drawing.Size(52, 26)
     $Parent.Controls.Add($off)
 
+    $script:togglePairs += , @($label, $on, $off)
     return @($on, $off)
 }
 
-$pair = New-TogglePair -Text 'Auto-rotate' -X 12 -Y 22
+$pair = New-TogglePair -Text 'Auto-rotate' -X 12 -Y 22 -LabelWidth 100
 $btnRotationOn = $pair[0]; $btnRotationOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Location' -X 224 -Y 22
+$pair = New-TogglePair -Text 'Location' -X 196 -Y 22 -LabelWidth 100
 $btnLocationOn = $pair[0]; $btnLocationOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Bluetooth' -X 12 -Y 52
+$pair = New-TogglePair -Text 'Bluetooth' -X 12 -Y 52 -LabelWidth 100
 $btnBtOn = $pair[0]; $btnBtOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Wi-Fi' -X 224 -Y 52
+$pair = New-TogglePair -Text 'Wi-Fi' -X 196 -Y 52 -LabelWidth 100
 $btnWifiOn = $pair[0]; $btnWifiOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Battery saver' -X 12 -Y 82
+$pair = New-TogglePair -Text 'Battery saver' -X 12 -Y 82 -LabelWidth 100
 $btnSaverOn = $pair[0]; $btnSaverOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Vibrate on ring' -X 224 -Y 82
+$pair = New-TogglePair -Text 'Vibrate on ring' -X 196 -Y 82 -LabelWidth 100
 $btnRingVibeOn = $pair[0]; $btnRingVibeOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Touch haptics' -X 12 -Y 112
+$pair = New-TogglePair -Text 'Touch haptics' -X 12 -Y 112 -LabelWidth 100
 $btnHapticsOn = $pair[0]; $btnHapticsOff = $pair[1]
 
 $btnTorch = New-Object System.Windows.Forms.Button
@@ -1507,13 +1543,13 @@ $btnReadToggles.Location = New-Object System.Drawing.Point(194, 172)
 $btnReadToggles.Size = New-Object System.Drawing.Size(102, 26)
 $grpToggles.Controls.Add($btnReadToggles)
 
-$pair = New-TogglePair -Text 'Show taps' -X 224 -Y 112 -LabelWidth 86
+$pair = New-TogglePair -Text 'Show taps' -X 196 -Y 112 -LabelWidth 100
 $btnTapsOn = $pair[0]; $btnTapsOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Stay awake' -X 12 -Y 142 -LabelWidth 86
+$pair = New-TogglePair -Text 'Stay awake' -X 12 -Y 142 -LabelWidth 100
 $btnAwakeOn = $pair[0]; $btnAwakeOff = $pair[1]
 
-$pair = New-TogglePair -Text 'Developer opts' -X 224 -Y 142 -LabelWidth 86
+$pair = New-TogglePair -Text 'Developer opts' -X 196 -Y 142 -LabelWidth 100
 $btnDevOn = $pair[0]; $btnDevOff = $pair[1]
 
 $btnDevOpen = New-Object System.Windows.Forms.Button
@@ -2192,26 +2228,6 @@ $btnCameraBrowse.Size = New-Object System.Drawing.Size(90, 26)
 $tabCamera.Controls.Add($btnCameraBrowse)
 
 
-# The camera settings and the microphone are two different jobs that happen to
-# share a tab, so each gets its own box.
-$grpCamera = New-Object System.Windows.Forms.GroupBox
-$grpCamera.Text = 'Camera  (phone camera as a video source, Android 12+)'
-$tabCamera.Controls.Add($grpCamera)
-
-foreach ($control in @($cmbCamera, $btnCameraList, $cmbCameraFacing, $cmbCameraSize, $cmbCameraFps,
-        $cmbCameraAr, $chkCameraHighSpeed, $chkCameraTorch, $chkCameraMic, $chkCameraRecord,
-        $txtCameraRecord, $btnCameraBrowse, $lblCameraHint)) {
-    $tabCamera.Controls.Remove($control)
-    $grpCamera.Controls.Add($control)
-}
-foreach ($name in @('Camera', 'Facing', 'Size', 'FPS', 'Aspect')) {
-    $label = $script:cameraLabels[$name]
-    if ($label) {
-        $tabCamera.Controls.Remove($label)
-        $grpCamera.Controls.Add($label)
-    }
-}
-
 $btnCameraStart = New-Object System.Windows.Forms.Button
 $btnCameraStart.Text = 'Start camera'
 $btnCameraStart.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
@@ -2249,6 +2265,26 @@ $lblCameraHint.ForeColor = [System.Drawing.Color]::DimGray
 $lblCameraHint.Location = New-Object System.Drawing.Point(18, 170)
 $lblCameraHint.Size = New-Object System.Drawing.Size(700, 20)
 $tabCamera.Controls.Add($lblCameraHint)
+
+# The camera settings and the microphone are two different jobs that happen to
+# share a tab, so each gets its own box.
+$grpCamera = New-Object System.Windows.Forms.GroupBox
+$grpCamera.Text = 'Camera  (phone camera as a video source, Android 12+)'
+$tabCamera.Controls.Add($grpCamera)
+
+foreach ($control in @($cmbCamera, $btnCameraList, $cmbCameraFacing, $cmbCameraSize, $cmbCameraFps,
+        $cmbCameraAr, $chkCameraHighSpeed, $chkCameraTorch, $chkCameraMic, $chkCameraRecord,
+        $txtCameraRecord, $btnCameraBrowse, $lblCameraHint)) {
+    $tabCamera.Controls.Remove($control)
+    $grpCamera.Controls.Add($control)
+}
+foreach ($name in @('Camera', 'Facing', 'Size', 'FPS', 'Aspect')) {
+    $label = $script:cameraLabels[$name]
+    if ($label) {
+        $tabCamera.Controls.Remove($label)
+        $grpCamera.Controls.Add($label)
+    }
+}
 
 # --- tab: file browser / transfer --------------------------------------------
 $btnFileUp = New-Object System.Windows.Forms.Button
@@ -2876,7 +2912,103 @@ $btnRunningExport.Location = New-Object System.Drawing.Point(642, 294)
 $btnRunningExport.Size = New-Object System.Drawing.Size(100, 28)
 $tabRunning.Controls.Add($btnRunningExport)
 
-# --- tab 6: live shell -------------------------------------------------------
+# --- tab 6: live shell + logcat ----------------------------------------------
+# The tab holds two pages now. Everything below that says $tabShell still means
+# the shell page, so the existing layout code needs no changes.
+$tabsShell = New-Object System.Windows.Forms.TabControl
+$tabsShell.Dock = 'Fill'
+$tabShellHost.Controls.Add($tabsShell)
+
+$tabShell = New-Object System.Windows.Forms.TabPage
+$tabShell.Text = 'Shell'
+$tabShell.BackColor = [System.Drawing.SystemColors]::Control
+$tabsShell.TabPages.Add($tabShell)
+
+$tabLogcat = New-Object System.Windows.Forms.TabPage
+$tabLogcat.Text = 'Logcat'
+$tabLogcat.BackColor = [System.Drawing.SystemColors]::Control
+$tabsShell.TabPages.Add($tabLogcat)
+
+$btnLogcatStart = New-Object System.Windows.Forms.Button
+$btnLogcatStart.Text = 'Start'
+$btnLogcatStart.Location = New-Object System.Drawing.Point(14, 10)
+$btnLogcatStart.Size = New-Object System.Drawing.Size(80, 28)
+$tabLogcat.Controls.Add($btnLogcatStart)
+$toolTip.SetToolTip($btnLogcatStart, 'Stream adb logcat from the selected device')
+
+$btnLogcatStop = New-Object System.Windows.Forms.Button
+$btnLogcatStop.Text = 'Stop'
+$btnLogcatStop.Location = New-Object System.Drawing.Point(100, 10)
+$btnLogcatStop.Size = New-Object System.Drawing.Size(70, 28)
+$btnLogcatStop.Enabled = $false
+$tabLogcat.Controls.Add($btnLogcatStop)
+
+$btnLogcatClear = New-Object System.Windows.Forms.Button
+$btnLogcatClear.Text = 'Clear'
+$btnLogcatClear.Location = New-Object System.Drawing.Point(176, 10)
+$btnLogcatClear.Size = New-Object System.Drawing.Size(70, 28)
+$tabLogcat.Controls.Add($btnLogcatClear)
+$toolTip.SetToolTip($btnLogcatClear, 'Clear the window; hold Shift to also clear the buffer on the phone')
+
+$lblLogcatLevel = New-Object System.Windows.Forms.Label
+$lblLogcatLevel.Text = 'Level'
+$lblLogcatLevel.Location = New-Object System.Drawing.Point(258, 16)
+$lblLogcatLevel.Size = New-Object System.Drawing.Size(40, 20)
+$tabLogcat.Controls.Add($lblLogcatLevel)
+
+$cmbLogcatLevel = New-Object System.Windows.Forms.ComboBox
+$cmbLogcatLevel.DropDownStyle = 'DropDownList'
+$cmbLogcatLevel.Location = New-Object System.Drawing.Point(300, 12)
+$cmbLogcatLevel.Size = New-Object System.Drawing.Size(150, 24)
+$null = $cmbLogcatLevel.Items.AddRange(@('V  everything', 'D  debug and up', 'I  info and up',
+    'W  warnings and up', 'E  errors and up', 'F  fatal only'))
+$cmbLogcatLevel.SelectedIndex = 2
+$tabLogcat.Controls.Add($cmbLogcatLevel)
+$toolTip.SetToolTip($cmbLogcatLevel, 'The lowest priority the phone will send')
+
+$lblLogcatFilter = New-Object System.Windows.Forms.Label
+$lblLogcatFilter.Text = 'Contains'
+$lblLogcatFilter.Location = New-Object System.Drawing.Point(462, 16)
+$lblLogcatFilter.Size = New-Object System.Drawing.Size(58, 20)
+$tabLogcat.Controls.Add($lblLogcatFilter)
+
+$txtLogcatFilter = New-Object System.Windows.Forms.TextBox
+$txtLogcatFilter.Location = New-Object System.Drawing.Point(524, 12)
+$txtLogcatFilter.Size = New-Object System.Drawing.Size(180, 24)
+$tabLogcat.Controls.Add($txtLogcatFilter)
+$toolTip.SetToolTip($txtLogcatFilter, 'Only lines holding this text are shown; it filters here, the phone still sends everything')
+
+$chkLogcatFollow = New-Object System.Windows.Forms.CheckBox
+$chkLogcatFollow.Text = 'follow'
+$chkLogcatFollow.Checked = $true
+$chkLogcatFollow.Location = New-Object System.Drawing.Point(714, 14)
+$chkLogcatFollow.Size = New-Object System.Drawing.Size(70, 22)
+$tabLogcat.Controls.Add($chkLogcatFollow)
+$toolTip.SetToolTip($chkLogcatFollow, 'Keep scrolling to the newest line')
+
+$btnLogcatSave = New-Object System.Windows.Forms.Button
+$btnLogcatSave.Text = 'Save...'
+$btnLogcatSave.Location = New-Object System.Drawing.Point(790, 10)
+$btnLogcatSave.Size = New-Object System.Drawing.Size(80, 28)
+$tabLogcat.Controls.Add($btnLogcatSave)
+
+$txtLogcat = New-Object System.Windows.Forms.RichTextBox
+$txtLogcat.ReadOnly = $true
+$txtLogcat.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 18)
+$txtLogcat.ForeColor = [System.Drawing.Color]::Gainsboro
+$txtLogcat.Font = New-Object System.Drawing.Font('Consolas', 9)
+$txtLogcat.WordWrap = $false
+$txtLogcat.Location = New-Object System.Drawing.Point(14, 46)
+$txtLogcat.Size = New-Object System.Drawing.Size(854, 250)
+$tabLogcat.Controls.Add($txtLogcat)
+
+$lblLogcatState = New-Object System.Windows.Forms.Label
+$lblLogcatState.Text = 'stopped'
+$lblLogcatState.ForeColor = [System.Drawing.Color]::DimGray
+$lblLogcatState.Location = New-Object System.Drawing.Point(14, 302)
+$lblLogcatState.Size = New-Object System.Drawing.Size(500, 20)
+$tabLogcat.Controls.Add($lblLogcatState)
+
 $btnShellStart = New-Object System.Windows.Forms.Button
 $btnShellStart.Text = 'Start shell'
 $btnShellStart.Location = New-Object System.Drawing.Point(14, 10)
@@ -3986,18 +4118,91 @@ function Restart-AdbServer {
 }
 
 function Install-Apk {
+    <#
+        Handles the three shapes an Android package arrives in:
+          one .apk                     -> adb install -r
+          several .apk chosen together -> adb install-multiple (a split app)
+          .xapk / .apks / .apkm        -> a zip of splits, unpacked first
+        A plain "adb install" fails on the last two, which is what most
+        downloads look like today.
+    #>
     $serials = @(Get-SelectedSerials)
     if ($serials.Count -eq 0) { Write-Log 'Select at least one ready device.' $colorWarn; return }
 
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Filter = 'Android package (*.apk)|*.apk|All files (*.*)|*.*'
-    $dialog.InitialDirectory = $scriptRoot
+    $dialog.Filter = 'Any Android package (*.apk;*.apks;*.xapk;*.apkm)|*.apk;*.apks;*.xapk;*.apkm|' +
+        'Single APK (*.apk)|*.apk|Split bundle (*.apks;*.xapk;*.apkm)|*.apks;*.xapk;*.apkm|All files (*.*)|*.*'
+    $dialog.Multiselect = $true
+    $dialog.Title = 'Install - pick one package, or several splits of the same app'
+    $dialog.InitialDirectory = $txtFileLocal.Text
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
 
-    foreach ($serial in $serials) {
-        Write-Log "Installing $($dialog.FileName) on $serial ..." $colorStep
-        $result = Invoke-Adb -CommandArguments @('-s', $serial, 'install', '-r', $dialog.FileName)
-        Write-Log $result.Text $(if ($result.Text -match 'Success') { $colorGood } else { $colorBad })
+    $chosen = @($dialog.FileNames)
+    $unpacked = $null
+
+    try {
+        # a bundle is a zip; take every apk out of it
+        if ($chosen.Count -eq 1 -and $chosen[0] -match '\.(xapk|apks|apkm)$') {
+            $bundle = $chosen[0]
+            Write-Log "Unpacking $([System.IO.Path]::GetFileName($bundle)) ..." $colorStep
+            $unpacked = Join-Path $env:TEMP ("androiddc-$PID.bundle-" + [Guid]::NewGuid().ToString('N').Substring(0, 6))
+            $null = New-Item -ItemType Directory -Path $unpacked -Force
+            try {
+                if (-not ('System.IO.Compression.ZipFile' -as [type])) {
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                }
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($bundle, $unpacked)
+            } catch {
+                Write-Log "That file is not a readable bundle: $($_.Exception.Message)" $colorBad
+                return
+            }
+
+            $chosen = @(Get-ChildItem -LiteralPath $unpacked -Recurse -Filter *.apk |
+                Sort-Object { $_.Name -notlike 'base*' }, Name | ForEach-Object { $_.FullName })
+            if ($chosen.Count -eq 0) {
+                Write-Log 'The bundle holds no .apk at all - nothing to install.' $colorBad
+                return
+            }
+            Write-Log ("  found $($chosen.Count) apk(s): " + (($chosen | ForEach-Object {
+                [System.IO.Path]::GetFileName($_) }) -join ', ')) $colorInfo
+        }
+
+        $split = $chosen.Count -gt 1
+        foreach ($serial in $serials) {
+            if ($split) {
+                Write-Log "Installing $($chosen.Count) splits on $serial ..." $colorStep
+                $arguments = @('-s', $serial, 'install-multiple', '-r') + $chosen
+            } else {
+                Write-Log "Installing $([System.IO.Path]::GetFileName($chosen[0])) on $serial ..." $colorStep
+                $arguments = @('-s', $serial, 'install', '-r', $chosen[0])
+            }
+
+            $result = Invoke-Adb -CommandArguments $arguments
+            $text = $result.Text.Trim()
+            if ($text -match 'Success') {
+                Write-Log "  installed on $serial." $colorGood
+            } else {
+                Write-Log ("  " + $text) $colorBad
+                if ($text -match 'INSTALL_FAILED_INVALID_APK|Split.*required|INSTALL_FAILED_MISSING_SPLIT') {
+                    Write-Log '  this app is split: pick every apk of the set together, or its .xapk.' $colorInfo
+                } elseif ($text -match 'INSTALL_FAILED_USER_RESTRICTED') {
+                    Write-Log '  the phone refused, not the file. Turn on "Install via USB" in developer options' $colorInfo
+                    Write-Log '  (MIUI and ColorOS keep it off, and MIUI asks for a signed in account first).' $colorInfo
+                } elseif ($text -match 'INSTALL_FAILED_VERSION_DOWNGRADE') {
+                    Write-Log '  an older version than the one installed; uninstall it first.' $colorInfo
+                } elseif ($text -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match') {
+                    Write-Log '  a different signing key than the installed copy; uninstall it first.' $colorInfo
+                } elseif ($text -match 'INSTALL_FAILED_INSUFFICIENT_STORAGE') {
+                    Write-Log '  the phone is out of space.' $colorInfo
+                } elseif ($text -match 'INSTALL_FAILED_NO_MATCHING_ABIS') {
+                    Write-Log '  these splits are built for another CPU than this phone.' $colorInfo
+                }
+            }
+        }
+    } finally {
+        if ($unpacked -and (Test-Path -LiteralPath $unpacked)) {
+            Remove-Item -LiteralPath $unpacked -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
     Update-DeviceList
 }
@@ -7442,7 +7647,7 @@ function Update-CamMicLayout {
     if ($width -lt 300 -or $height -lt 200) { return }
     $inner = $width - 24
 
-    $grpCamera.SetBounds(12, 6, $inner, 128)
+    $grpCamera.SetBounds(12, 6, $inner, 142)
     $script:cameraLabels['Camera'].SetBounds(12, 26, 52, 20)
     $cmbCamera.SetBounds(68, 22, [Math]::Max(160, ($inner - 420)), 24)
     $btnCameraList.SetBounds(($cmbCamera.Bounds.Right + 8), 21, $btnCameraList.Width, 26)
@@ -7459,19 +7664,61 @@ function Update-CamMicLayout {
     }
     $null = Set-CheckRow -Left $x -Top 56 -Boxes @($chkCameraHighSpeed, $chkCameraTorch, $chkCameraMic)
 
-    $chkCameraRecord.SetBounds(12, 90, 90, 22)
-    $txtCameraRecord.SetBounds(106, 88, [Math]::Max(120, ($inner - 106 - $btnCameraBrowse.Width - 24)), 24)
-    $btnCameraBrowse.SetBounds(($txtCameraRecord.Bounds.Right + 8), 87, $btnCameraBrowse.Width, 26)
-    $lblCameraHint.SetBounds(12, 112, [Math]::Max(200, $inner - 24), 18)
+    $chkCameraRecord.SetBounds(12, 88, 90, 22)
+    $txtCameraRecord.SetBounds(106, 86, [Math]::Max(120, ($inner - 106 - $btnCameraBrowse.Width - 24)), 24)
+    $btnCameraBrowse.SetBounds(($txtCameraRecord.Bounds.Right + 8), 85, $btnCameraBrowse.Width, 26)
+    $lblCameraHint.SetBounds(12, 116, [Math]::Max(200, $inner - 24), 18)
 
-    $null = Set-ButtonRowLeft -Left 12 -Top 142 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
+    $null = Set-ButtonRowLeft -Left 12 -Top 156 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
         $btnCameraStop, $btnCameraCommand)
 
-    $grpAudio.SetBounds(12, 182, $inner, 92)
+    $grpAudio.SetBounds(12, 196, $inner, 92)
     $lblAudioSource.SetBounds(12, 30, 50, 20)
     $cmbAudioSource.SetBounds(66, 26, 200, 24)
     $null = Set-ButtonRowLeft -Left 274 -Top 25 -Buttons @($btnListen, $btnListenStop, $btnRecordAudio)
     $lblAudioHint.SetBounds(12, 62, [Math]::Max(200, $inner - 24), 20)
+}
+
+
+function Update-TetherLayout {
+    $width = $tabShare.ClientSize.Width
+    if ($width -gt 300) {
+        $inner = $width - 24
+
+        $grpTunnel.SetBounds(12, 6, $inner, 96)
+        $lblDns.SetBounds(12, 28, 34, 20)
+        $cmbDns.SetBounds(50, 24, 150, 24)
+        $lblPort.SetBounds(214, 28, 34, 20)
+        $numPort.SetBounds(252, 24, 80, 24)
+        $lblRoutes.SetBounds(346, 28, 50, 20)
+        $txtRoutes.SetBounds(400, 24, [Math]::Max(120, ($inner - 412)), 24)
+        $null = Set-CheckRow -Left 12 -Top 58 -Limit ($inner - 12) -Boxes @($chkWifi, $chkReinstall,
+            $chkAutoTest, $chkScrcpyAfter)
+
+        $null = Set-ButtonRowLeft -Left 12 -Top 112 -Buttons @($btnStart, $btnStop, $btnTest)
+        $null = Set-ButtonRowLeft -Left 12 -Top 150 -Buttons @($btnInstallClient, $btnUninstallClient)
+        $lblShareHint.SetBounds(12, 188, [Math]::Max(200, $inner), 34)
+    }
+
+    $width = $tabTether.ClientSize.Width
+    if ($width -gt 300) {
+        $inner = $width - 24
+
+        $grpUsbTether.SetBounds(12, 6, $inner, 146)
+        $null = Set-ButtonRowLeft -Left 12 -Top 22 -Buttons @($btnTetherOn, $btnTetherOff,
+            $btnTetherSettings, $btnAdapters)
+        $chkTetherMetered.SetBounds(12, 56, [Math]::Max(200, $inner - 24), 22)
+        $lblTetherStatus.SetBounds(12, 80, [Math]::Max(200, $inner - 24), 20)
+        $lblTetherHint.SetBounds(12, 100, [Math]::Max(200, $inner - 24), 18)
+        $lblTetherHint2.SetBounds(12, 118, [Math]::Max(200, $inner - 24), 18)
+
+        $grpProxy.SetBounds(12, 160, $inner, 104)
+        $lblProxyTitle.SetBounds(12, 22, [Math]::Max(200, $inner - 24), 20)
+        $lblProxyPort.SetBounds(12, 50, 70, 20)
+        $numProxyPort.SetBounds(86, 46, 80, 24)
+        $null = Set-ButtonRowLeft -Left 178 -Top 45 -Buttons @($btnProxyOn, $btnProxyOff, $btnProxyTest)
+        $lblProxyHint.SetBounds(12, 78, [Math]::Max(200, $inner - 24), 18)
+    }
 }
 
 function Update-ToolsLayout {
@@ -7585,12 +7832,42 @@ function Update-DeviceTabLayout {
 
     $rightWidth = [Math]::Max(360, [Math]::Min(460, [int]($width * 0.46)))
     $leftWidth = [Math]::Max(200, $width - $rightWidth - 38)
-    $lblDeviceHint.SetBounds(458, 16, [Math]::Max(60, $leftWidth - 452), 20)
+    # a cut off sentence helps nobody: it shows only when it fits, and the
+    # tooltip carries it the rest of the time
+    $room = $leftWidth - 452
+    $lblDeviceHint.Visible = ($room -ge 150)
+    if ($lblDeviceHint.Visible) { $lblDeviceHint.SetBounds(458, 16, $room, 20) }
+    $toolTip.SetToolTip($btnDeviceRefresh, $lblDeviceHint.Text)
     $txtDeviceInfo.SetBounds(14, 46, $leftWidth, ($height - 58))
 
     $x = 14 + $leftWidth + 12
     $grpToggles.SetBounds($x, 46, $rightWidth, 214)
     $grpDial.SetBounds($x, 268, $rightWidth, 84)
+
+    # two columns, sized from what the buttons actually are now
+    if ($script:togglePairs.Count -gt 0) {
+        $labelWidth = 100
+        $buttonWidth = $script:togglePairs[0][1].Width
+        $pairWidth = $labelWidth + 8 + (2 * $buttonWidth) + 4
+        $column = [Math]::Max($pairWidth + 8, [int](($grpToggles.ClientSize.Width - 24) / 2))
+
+        for ($i = 0; $i -lt $script:togglePairs.Count; $i++) {
+            $entry = $script:togglePairs[$i]
+            # Floor, not [int]: PowerShell rounds .5 to the even number, so
+            # [int](3/2) and [int](5/2) are both 2 and two rows land on each other
+            $row = [Math]::Floor($i / 2)
+            $left = 12 + (($i % 2) * $column)
+            $top = 22 + ($row * 28)
+            $entry[0].SetBounds($left, ($top + 5), $labelWidth, 20)
+            $entry[1].SetBounds(($left + $labelWidth + 4), $top, $buttonWidth, 26)
+            $entry[2].SetBounds(($left + $labelWidth + 8 + $buttonWidth), $top, $buttonWidth, 26)
+        }
+
+        $rows = [Math]::Ceiling($script:togglePairs.Count / 2)
+        $bottom = 22 + ($rows * 28) + 6
+        $null = Set-ButtonRowLeft -Left 12 -Top $bottom -Gap 6 -Buttons @($btnTorch, $btnBuzz,
+            $btnReadToggles, $btnDevOpen)
+    }
 }
 
 function Update-RadioLayout {
@@ -7757,6 +8034,19 @@ function Update-RightLayout {
     Update-DeviceTabLayout
     Update-MirrorLayout
     Update-CamMicLayout
+    Update-TetherLayout
+}
+
+function Update-LogcatLayout {
+    $width = $tabLogcat.ClientSize.Width
+    $height = $tabLogcat.ClientSize.Height
+    if ($width -lt 300 -or $height -lt 160) { return }
+
+    $btnLogcatSave.SetBounds(($width - 94), 10, 80, 28)
+    $chkLogcatFollow.SetBounds(($width - 172), 14, 70, 22)
+    $txtLogcatFilter.SetBounds(524, 12, [Math]::Max(90, ($width - 704)), 24)
+    $txtLogcat.SetBounds(14, 46, ($width - 28), ($height - 82))
+    $lblLogcatState.SetBounds(14, ($height - 30), ($width - 28), 20)
 }
 
 function Update-ShellLayout {
@@ -8024,6 +8314,18 @@ function Convert-WindowToIcons {
         @($btnHotspotSettings, 'E713', 'Open the hotspot screen on the phone'),
         @($btnDevOpen, 'E713', 'Open developer options on the phone')
     )
+
+    # On and Off are the most repeated words in the window; a tick and a cross
+    # say the same thing in a third of the space
+    foreach ($pair in @(
+            @($btnRotationOn, $btnRotationOff), @($btnLocationOn, $btnLocationOff),
+            @($btnBtOn, $btnBtOff), @($btnWifiOn, $btnWifiOff),
+            @($btnSaverOn, $btnSaverOff), @($btnRingVibeOn, $btnRingVibeOff),
+            @($btnHapticsOn, $btnHapticsOff), @($btnTapsOn, $btnTapsOff),
+            @($btnAwakeOn, $btnAwakeOff), @($btnDevOn, $btnDevOff))) {
+        $null = Set-IconButton -Button $pair[0] -Code @('E73E', 'E10B', 'E8FB') -Width 34 -Hint 'Turn it on'
+        $null = Set-IconButton -Button $pair[1] -Code @('E711', 'E10A') -Width 34 -Hint 'Turn it off'
+    }
 
     # the word buttons that sit in a shared row size themselves to their words
     foreach ($button in @($btnAppNewDisplay, $btnAppStop, $btnAppUninstall, $btnAppInstall, $btnAppExport,
@@ -8597,6 +8899,184 @@ function Write-Shell {
     $txtShellOut.ScrollToCaret()
 }
 
+
+# --- logcat -------------------------------------------------------------------
+# adb logcat never ends by itself, so it runs as a real process and its output
+# is drained on a timer. Nothing blocks the window, and Stop kills the process.
+
+# WM_SETREDRAW, so a burst of lines is painted once instead of line by line
+if (-not ('AndroidDcNative' -as [type])) {
+    Add-Type -Namespace '' -Name 'AndroidDcNative' -MemberDefinition @'
+[DllImport("user32.dll", CharSet = CharSet.Auto)]
+public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+'@
+}
+
+$script:logcatProcess = $null
+$script:logcatQueue = $null
+$script:logcatTimer = $null
+$script:logcatDropped = 0
+$script:logcatSubs = @()
+
+function Start-Logcat {
+    if ($script:logcatProcess -and -not $script:logcatProcess.HasExited) {
+        Write-Log 'logcat is already running.' $colorWarn
+        return
+    }
+
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $level = "$($cmbLogcatLevel.SelectedItem)".Substring(0, 1)
+
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = $script:adbPath
+    # -v time gives a readable stamp; *:LEVEL is the priority filter
+    $info.Arguments = "-s $serial logcat -v time *:$level"
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+
+    $script:logcatQueue = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
+    $queue = $script:logcatQueue
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $info
+    $process.EnableRaisingEvents = $true
+
+    # the reader runs on the process's own thread, so the UI never waits on it
+    $script:logcatSubs = @(
+        (Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -MessageData $queue -Action {
+            if ($null -ne $EventArgs.Data) { $Event.MessageData.Enqueue($EventArgs.Data) }
+        }),
+        (Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -MessageData $queue -Action {
+            if ($null -ne $EventArgs.Data) { $Event.MessageData.Enqueue('! ' + $EventArgs.Data) }
+        })
+    )
+
+    if (-not $process.Start()) { Write-Log 'adb logcat did not start.' $colorBad; return }
+    $process.BeginOutputReadLine()
+    $process.BeginErrorReadLine()
+    $script:logcatProcess = $process
+    $script:logcatDropped = 0
+
+    if (-not $script:logcatTimer) {
+        $script:logcatTimer = New-Object System.Windows.Forms.Timer
+        $script:logcatTimer.Interval = 250
+        $script:logcatTimer.Add_Tick({ Update-LogcatView })
+    }
+    $script:logcatTimer.Start()
+
+    $btnLogcatStart.Enabled = $false
+    $btnLogcatStop.Enabled = $true
+    $lblLogcatState.Text = "running on $serial at level $level"
+    Write-Log "logcat started on $serial (level $level)." $colorGood
+}
+
+function Update-LogcatView {
+    if (-not $script:logcatQueue) { return }
+
+    $filter = $txtLogcatFilter.Text.Trim()
+    $batch = New-Object System.Text.StringBuilder
+    $line = ''
+    $taken = 0
+
+    # a busy phone can outrun the window; take a slice per tick and say when
+    # lines had to be dropped rather than freezing to keep up
+    while ($taken -lt 800 -and $script:logcatQueue.TryDequeue([ref]$line)) {
+        $taken++
+        if ($filter -and $line -notlike "*$filter*") { continue }
+        $null = $batch.AppendLine($line)
+    }
+    # 1500 lines every 250 ms is 6000 a second, past anything but a log storm.
+    # If even that is outrun, the oldest lines go rather than the window.
+    if ($script:logcatQueue.Count -gt 20000) {
+        $spare = ''
+        while ($script:logcatQueue.Count -gt 10000 -and $script:logcatQueue.TryDequeue([ref]$spare)) {
+            $script:logcatDropped++
+        }
+    }
+
+    if ($batch.Length -gt 0) {
+        # Painting is the expensive part, so the control is frozen for the
+        # append and thawed once. Trimming copies a very large string, so it
+        # happens rarely: at 900k, back to 450k, instead of on every tick.
+        $null = [AndroidDcNative]::SendMessage($txtLogcat.Handle, 0x000B, [IntPtr]::Zero, [IntPtr]::Zero)
+        try {
+            if ($txtLogcat.TextLength -gt 900000) {
+                $txtLogcat.Text = $txtLogcat.Text.Substring($txtLogcat.TextLength - 450000)
+            }
+            $txtLogcat.AppendText($batch.ToString())
+            if ($chkLogcatFollow.Checked) {
+                $txtLogcat.SelectionStart = $txtLogcat.TextLength
+                $txtLogcat.ScrollToCaret()
+            }
+        } finally {
+            $null = [AndroidDcNative]::SendMessage($txtLogcat.Handle, 0x000B, [IntPtr]1, [IntPtr]::Zero)
+            $txtLogcat.Invalidate()
+        }
+    }
+
+    if ($script:logcatProcess -and $script:logcatProcess.HasExited) {
+        Stop-Logcat -Quiet
+        $lblLogcatState.Text = 'stopped: adb ended the stream'
+        return
+    }
+    if ($script:logcatDropped -gt 0) {
+        $lblLogcatState.Text = "running   |   $($script:logcatDropped) line(s) dropped, the phone is louder than the window"
+    }
+}
+
+function Stop-Logcat {
+    param([switch]$Quiet)
+
+    if ($script:logcatTimer) { $script:logcatTimer.Stop() }
+    if ($script:logcatProcess) {
+        try { if (-not $script:logcatProcess.HasExited) { $script:logcatProcess.Kill() } } catch { }
+        try { $script:logcatProcess.Dispose() } catch { }
+        $script:logcatProcess = $null
+    }
+    # only our own subscriptions, never anyone else's
+    foreach ($subscription in @($script:logcatSubs)) {
+        if ($subscription) { Unregister-Event -SubscriptionId $subscription.Id -ErrorAction SilentlyContinue }
+    }
+    $script:logcatSubs = @()
+
+    $btnLogcatStart.Enabled = $true
+    $btnLogcatStop.Enabled = $false
+    if (-not $Quiet) {
+        $lblLogcatState.Text = 'stopped'
+        Write-Log 'logcat stopped.' $colorInfo
+    }
+}
+
+function Clear-Logcat {
+    $txtLogcat.Clear()
+    $script:logcatDropped = 0
+
+    # holding Shift also empties the ring buffer on the phone
+    if ([System.Windows.Forms.Control]::ModifierKeys -band [System.Windows.Forms.Keys]::Shift) {
+        $serial = Get-TargetSerial
+        if ($serial) {
+            $null = Invoke-Adb -CommandArguments @('-s', $serial, 'logcat', '-c')
+            Write-Log 'The log buffer on the phone was cleared as well.' $colorInfo
+        }
+    }
+}
+
+function Save-Logcat {
+    if (-not $txtLogcat.TextLength) { Write-Log 'Nothing to save yet.' $colorWarn; return }
+
+    $dialog = New-Object System.Windows.Forms.SaveFileDialog
+    $dialog.Filter = 'Log file (*.log)|*.log|Text (*.txt)|*.txt'
+    $dialog.FileName = 'logcat-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log'
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    Set-Content -LiteralPath $dialog.FileName -Value $txtLogcat.Text -Encoding UTF8
+    Write-Log "Saved $($dialog.FileName)." $colorGood
+}
+
 function Start-LiveShell {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -9126,7 +9606,10 @@ $txtPhoneNumber.Add_KeyDown({
 })
 
 # the inner tab strips need the same layout pass as the outer one
-$tabsTethering.Add_SelectedIndexChanged({ Update-RightLayout })
+$tabsTethering.Add_SelectedIndexChanged({
+    Update-TetherLayout
+    Update-RightLayout
+})
 $tabsAdvanced.Add_SelectedIndexChanged({
     Update-ToolsLayout
     Update-MirrorLayout
@@ -9259,8 +9742,12 @@ $splitMain.Add_SplitterMoved({
 })
 $tabShell.Add_Resize({ Update-ShellLayout })
 $tabs.Add_SelectedIndexChanged({
+    # a page that was never on screen reports its design size, so its layout
+    # function bailed out at startup: run the whole pass now that it is real
+    Update-RightLayout
     Update-ScreenLayout
     Update-ShellLayout
+    Update-LogcatLayout
     Update-ToolsLayout
 
     # opening the tools tab shows the DNS of the selected phone right away
@@ -9399,6 +9886,17 @@ $btnImeEnable.Add_Click({ Set-ImeState -Action 'enable' })
 $btnImeDefault.Add_Click({ Set-ImeDefault })
 $btnImeReset.Add_Click({ Reset-ImeList })
 
+$btnLogcatStart.Add_Click({ Start-Logcat })
+$btnLogcatStop.Add_Click({ Stop-Logcat })
+$btnLogcatClear.Add_Click({ Clear-Logcat })
+$btnLogcatSave.Add_Click({ Save-Logcat })
+$cmbLogcatLevel.Add_SelectedIndexChanged({
+    # the level is a start-up argument, so restart the stream to apply it
+    if ($script:logcatProcess -and -not $script:logcatProcess.HasExited) {
+        Stop-Logcat -Quiet
+        Start-Logcat
+    }
+})
 $btnShellStart.Add_Click({ Start-LiveShell })
 $btnShellStop.Add_Click({ Stop-LiveShell })
 $btnShellClear.Add_Click({ $txtShellOut.Clear() })
@@ -9452,6 +9950,7 @@ $form.Add_FormClosing({
     $runningTimer.Stop()
     Stop-AudioListen
     Stop-LiveShell -Quiet
+    Stop-Logcat -Quiet
     # Never leave the machine pointing at a proxy that dies with this window.
     Stop-PhoneProxy -Quiet
     if ($script:relayProcess) { Stop-Sharing -Quiet }
@@ -9467,6 +9966,7 @@ $form.Add_Shown({
     Update-RightLayout
     Update-ScreenLayout
     Update-ShellLayout
+    Update-LogcatLayout
     Update-ToolsLayout
     Update-DeviceList
 })
