@@ -58,6 +58,7 @@ checks scrcpy's own output, a move checks the copy arrived before deleting the o
 | `@('a', '--flag=' + $x)` | The comma binds tighter than `+`, giving four elements | `"--flag=$x"` |
 | `@(@($a, $b), @($c, $d))` | Flattened into four elements, so a list of groups stops being groups | `@( ,@($a, $b), ,@($c, $d) )` |
 | `-Parent $x, (New-Thing)` | The comma binds first, so `-Parent` receives an array | Parenthesise each call |
+| `$rich.SelectedText = ''` on a **read-only RichTextBox** | Ignored in silence: no exception, no change, and a benchmark of it looks wonderfully fast | Clear `ReadOnly`, edit, set it back. A plain `TextBox` does honour it — the two controls differ |
 | `Test-MessageBox (a, b, c)` in command syntax | Same precedence trap: one string, not three arguments | Use a method call, or pass named parameters |
 | `$null` to a P/Invoke `string` | Marshalled as `""`, so `FindWindow(null, title)` finds nothing | `[NullString]::Value` |
 | `$home`, `$input`, `$args` | Reserved; assignment fails | Any other name |
@@ -169,3 +170,31 @@ changes.
 `PerformClick()` does nothing on a control whose tab is not selected, so a test that drives a
 button on another tab must select that tab first, or raise `OnClick` the way the context menus
 do.
+
+### Measure the effect, not the call
+
+A timing number is only worth having if the operation actually happened. Trimming the logcat
+box was first measured at 5 ms against 1722 ms for rebuilding it — a 344x win that was not
+real. The box is a `RichTextBox` with `ReadOnly = $true`, and such a control **discards an
+assignment to `SelectedText` without raising anything**, so the benchmark was timing a
+no-op. The give-away was in the same output all along: the length after the "delete" was
+unchanged.
+
+With `ReadOnly` lifted for the edit, the honest figures are:
+
+| What | Cost |
+|---|---|
+| Trim 744k characters down to 200k by deleting the selection | 43–55 ms |
+| The same trim by rebuilding: `$box.Text = $box.Text.Substring(...)` | 1722 ms |
+| `$box.Text =` with 250k / 500k / 960k characters | 2541 / 7169 / 22576 ms |
+
+So the win is roughly 31x, not 344x — still the difference between a window that answers and
+one that does not: under a heavy log stream the UI heartbeat went from **13/40 to 36/40**, and
+the box stopped growing without bound (8,416,985 characters after eleven seconds became a
+capped 454,119).
+
+Two habits follow from that:
+
+* after timing an operation, assert that it changed what it claims to change;
+* find a cut point with `GetFirstCharIndexFromLine`, never by reading `.Text` and searching it
+  — reading `.Text` copies the whole box and throws away the saving you came for.
