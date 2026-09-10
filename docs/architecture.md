@@ -56,6 +56,8 @@ checks scrcpy's own output, a move checks the copy arrived before deleting the o
 | `$x = if (...) { $list }` | An `ArrayList` is unrolled into a fixed-size array, and `RemoveAt` throws | Assign in both branches: `if (...) { $x = $list } else { ... }` |
 | `return $bytes` | A `byte[]` is unrolled into single bytes | `return ,$bytes` |
 | `@('a', '--flag=' + $x)` | The comma binds tighter than `+`, giving four elements | `"--flag=$x"` |
+| `@(@($a, $b), @($c, $d))` | Flattened into four elements, so a list of groups stops being groups | `@( ,@($a, $b), ,@($c, $d) )` |
+| `-Parent $x, (New-Thing)` | The comma binds first, so `-Parent` receives an array | Parenthesise each call |
 | `Test-MessageBox (a, b, c)` in command syntax | Same precedence trap: one string, not three arguments | Use a method call, or pass named parameters |
 | `$null` to a P/Invoke `string` | Marshalled as `""`, so `FindWindow(null, title)` finds nothing | `[NullString]::Value` |
 | `$home`, `$input`, `$args` | Reserved; assignment fails | Any other name |
@@ -121,9 +123,9 @@ Two checks worth repeating after any edit:
   A patch that deletes code can silently take handlers with it; buttons then do nothing and
   the log stays empty.
 
-### Two ways a layout audit lies to you
+### Three ways a layout audit lies to you
 
-Both of these have already hidden a real defect in this project, so they are worth knowing:
+All three have already hidden a real defect in this project, so they are worth knowing:
 
 **Do not filter on `Visible`.** A control on a tab that has never been shown reports
 `Visible = $false`, so an audit that skips invisible controls silently skips most of the
@@ -135,9 +137,34 @@ not the control has been painted.
 group box are all still within the page, so a page-level check finds nothing wrong. The camera
 overlap was three controls stacked at the same point, entirely inside one group.
 
+**A deliberate shared slot looks exactly like a bug.** Some controls are *meant* to sit on
+the same spot, with one visible at a time — the file tab's space line and the transfer row
+(`$lblFileSpace` against `$prgFile`, `$lblFileProgress`, `$btnFileCancel`) are one row that
+swaps contents while a transfer runs. An audit cannot tell that from a mistake, and it must
+not try to guess from `Visible`: that guess is the first lie on this list. Name them instead:
+
+```powershell
+$sharedSlots = @(
+    ,@($lblFileSpace, $prgFile, $lblFileProgress, $btnFileCancel)
+)
+```
+
+The leading comma is not a typo. `@(@($a, $b, $c))` is flattened by PowerShell into four
+separate elements, and the exception then silently stops matching anything; `,@(...)` keeps
+the inner array whole.
+
 The pattern that does work: select every tab and inner tab once so each layout function has
-run, then recurse the whole form for `GroupBox` controls and compare every child against every
-sibling.
+run, then recurse the whole form for containers — `TabPage`, `GroupBox`, `Panel`,
+`SplitterPanel` — and compare every child against every sibling. Skip children with
+`Dock -ne 'None'`, since filling the parent is legitimate, and let a page with `AutoScroll`
+be taller than its viewport. Roughly fifty containers, and a named list of the slots that are
+shared on purpose.
+
+**Place a control even while it is hidden.** A control that is positioned only in the branch
+that shows it keeps its creation coordinates the rest of the time, which may be on top of
+something else. It is invisible, so nobody sees it — but the bounds are real and the next
+audit trips over them. Set the bounds every pass; let `Visible` be the only thing that
+changes.
 
 `PerformClick()` does nothing on a control whose tab is not selected, so a test that drives a
 button on another tab must select that tab first, or raise `OnClick` the way the context menus
