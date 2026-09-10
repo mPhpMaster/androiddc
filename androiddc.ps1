@@ -8084,7 +8084,7 @@ function Update-CamMicLayout {
     if ($width -lt 300 -or $height -lt 200) { return }
     $inner = $width - 24
 
-    $grpCamera.SetBounds(12, 6, $inner, 142)
+    $grpCamera.SetBounds(12, 6, $inner, 172)
     $btnListCameraSizes.SetBounds([Math]::Max(300, ($inner - 92)), 52, 70, 26)
     $script:cameraLabels['Camera'].SetBounds(12, 26, 52, 20)
     $cmbCamera.SetBounds(68, 22, [Math]::Max(160, ($inner - 420)), 24)
@@ -8100,17 +8100,23 @@ function Update-CamMicLayout {
         $pair[1].SetBounds($x, 54, $pair[3], 24)
         $x += $pair[3] + 16
     }
-    $null = Set-CheckRow -Left $x -Top 56 -Boxes @($chkCameraHighSpeed, $chkCameraTorch, $chkCameraMic)
+    # zoom sits with the other picture settings; the switches get their own row
+    # rather than being squeezed against the "Sizes" button
+    $lblCameraZoom.SetBounds($x, 58, 40, 20)
+    $cmbCameraZoom.SetBounds(($x + 44), 54, 60, 24)
 
-    $chkCameraRecord.SetBounds(12, 88, 90, 22)
-    $txtCameraRecord.SetBounds(106, 86, [Math]::Max(120, ($inner - 106 - $btnCameraBrowse.Width - 24)), 24)
-    $btnCameraBrowse.SetBounds(($txtCameraRecord.Bounds.Right + 8), 85, $btnCameraBrowse.Width, 26)
-    $lblCameraHint.SetBounds(12, 116, [Math]::Max(200, $inner - 24), 18)
+    $null = Set-CheckRow -Left 12 -Top 86 -Limit ($inner - 24) -Boxes @($chkCameraHighSpeed,
+        $chkCameraTorch, $chkCameraMic)
 
-    $null = Set-ButtonRowLeft -Left 12 -Top 156 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
+    $chkCameraRecord.SetBounds(12, 116, 90, 22)
+    $txtCameraRecord.SetBounds(106, 114, [Math]::Max(120, ($inner - 106 - $btnCameraBrowse.Width - 24)), 24)
+    $btnCameraBrowse.SetBounds(($txtCameraRecord.Bounds.Right + 8), 113, $btnCameraBrowse.Width, 26)
+    $lblCameraHint.SetBounds(12, 146, [Math]::Max(200, $inner - 24), 18)
+
+    $null = Set-ButtonRowLeft -Left 12 -Top 186 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
         $btnCameraStop, $btnCameraCommand)
 
-    $grpAudio.SetBounds(12, 196, $inner, 126)
+    $grpAudio.SetBounds(12, 226, $inner, 126)
     $lblAudioSource.SetBounds(12, 30, 50, 20)
     $cmbAudioSource.SetBounds(66, 26, 200, 24)
     $null = Set-ButtonRowLeft -Left 274 -Top 25 -Buttons @($btnListen, $btnListenStop, $btnRecordAudio)
