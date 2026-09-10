@@ -8144,7 +8144,9 @@ function Update-TetherLayout {
             $chkAutoTest, $chkScrcpyAfter)
 
         $null = Set-ButtonRowLeft -Left 12 -Top 112 -Buttons @($btnStart, $btnStop, $btnTest)
-        $null = Set-ButtonRowLeft -Left 12 -Top 150 -Buttons @($btnInstallClient, $btnUninstallClient)
+        $null = Set-ButtonRowLeft -Left 12 -Top 150 -Buttons @($btnInstallClient, $btnUninstallClient,
+            $btnShareRestart)
+        $chkShareAutostart.SetBounds(($btnShareRestart.Bounds.Right + 12), 154, 320, 22)
         $lblShareHint.SetBounds(12, 188, [Math]::Max(200, $inner), 34)
     }
 

@@ -106,6 +106,28 @@ There is no supported API for it.
 *Instead:* the *Tethering* tab offers to open `ms-settings:network-ethernet` so you can set
 it yourself, rather than claiming to have done it.
 
+## Root, remount and recovery need a build you do not have
+
+`adb root`, `unroot`, `remount`, `disable-verity` and `enable-verity` only work on a
+`userdebug` or `eng` build. A retail phone answers `adbd cannot run as root in production
+builds`. `sideload` needs the phone in recovery, and `emu` needs an emulator.
+
+*Instead:* the *Advanced → Root / recovery* page lists them all, reads `ro.build.type`,
+`ro.debuggable`, `ro.secure` and the shell uid from the phone in front of you, and marks each
+one ✔ or ⛔ for that device. Nothing is hidden and nothing is pretended: a checkbox will let
+you press them anyway, and the phone's refusal is printed as it came.
+
+## Installing can be refused by the phone, not the file
+
+A split bundle installs correctly and the phone can still say no:
+
+* `INSTALL_FAILED_USER_RESTRICTED` — MIUI and ColorOS keep *Install via USB* switched off,
+  and MIUI wants an account signed in before it can be turned on.
+* `INSTALL_FAILED_NO_MATCHING_ABIS` — the splits are built for another CPU.
+* `INSTALL_FAILED_UPDATE_INCOMPATIBLE` — a different signing key than the copy installed.
+
+*Instead:* each of those is translated into a sentence in the log rather than left as a code.
+
 ## A locked phone limits what works
 
 Taps, swipes and app launches on a new display are refused while the lock screen is up, and

@@ -57,7 +57,8 @@ on, the screen capture.
 | Launch | `adb shell am start -n <component>` |
 | On its own display | `scrcpy --new-display=<size> --start-app=+<package>` |
 | Force stop | `adb shell am force-stop <package>` |
-| Install | `adb install <apk>` |
+| Install | `adb install -r <apk>` |
+| Install a split set or a bundle | `adb install-multiple -r <base.apk> <split...>` |
 | Uninstall | `adb uninstall <package>` |
 | App info screen | `adb shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS` |
 
@@ -107,10 +108,29 @@ on, the screen capture.
 | Users | `adb shell pm list users`, `am get-current-user`, `am switch-user`, `pm create-user`, `pm remove-user`, `pm get-max-users` |
 | Multi-user switch | `adb shell settings put global user_switcher_enabled 0|1` |
 
+## The device log
+
+`adb logcat -v time *:<LEVEL>` runs as a long-lived process while the Logcat page is on, and
+`adb logcat -c` empties the buffer if you hold Shift on Clear.
+
+## Asking the phone what it supports
+
+`scrcpy --list-encoders`, `scrcpy --list-camera-sizes`, `scrcpy --list-cameras` and
+`scrcpy --list-displays` fill the dropdowns from the device instead of a fixed list.
+
+## Root and recovery
+
+Only from the *Root / recovery* page, only after it is unlocked there, and each one is
+refused by an ordinary phone: `adb root`, `unroot`, `remount`, `disable-verity`,
+`enable-verity`, `sideload <zip>`, `emu <command>`, `jdwp`, `keygen <file>`, `get-devpath`,
+`wait-for-device`. The page first reads `getprop ro.build.type`, `ro.debuggable`, `ro.secure`
+and `id -u` to say which of them this device would allow.
+
 ## Connection plumbing
 
-`adb tcpip 5555`, `adb connect|disconnect`, `adb kill-server|start-server`,
-`adb reverse --list`, and gnirehtet's own `run|start|stop|tunnel|autorun`.
+`adb tcpip 5555`, `adb connect|disconnect`, `adb kill-server|start-server`, `adb reconnect`,
+`adb reverse --list`, `adb pair <host:port> <code>`, `adb mdns check|services`,
+`adb bugreport <file>`, and gnirehtet's own `run|start|stop|restart|tunnel|autorun|autostart`.
 
 ## What is written on your PC
 

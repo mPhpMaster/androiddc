@@ -22,15 +22,15 @@ Bridge, so the phone only ever does what USB debugging already allows.
 |---|---|
 | **Device** | Details of the selected phone, live screenshot with click-to-tap, quick toggles (Wi-Fi, Bluetooth, location, rotation, torch, battery saver, haptics, show taps, stay awake, developer options), call / SMS / USSD, and one-click mirroring |
 | **Tethering** | PC → phone with [gnirehtet](https://github.com/Genymobile/gnirehtet) (reverse tethering), and phone → PC over USB or a proxy |
-| **Advanced** | Every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, keyboard/mouse/gamepad modes, recording) and the adb tools: TCP/IP pairing, APK install, private DNS, IME switching, Wi-Fi and USB hotspot |
-| **Apps** | What is installed, launch, force stop, uninstall, open in its own scrcpy window |
+| **Advanced** | Four pages: every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, input modes), more of them (recording format and time limit, orientation, window placement, shortcut keys), the adb tools (wireless pairing, mDNS discovery, bug report, private DNS, IME, hotspot), and a Root / recovery page that shows what your device cannot do and says why |
+| **Apps** | What is installed, launch, force stop, uninstall, open in its own scrcpy window, and install `.apk` or a split `.xapk` / `.apks` / `.apkm` |
 | **Contacts / SMS** | Read, add, edit, delete, call, send |
-| **Cam / Mic** | Front and rear camera as a video source, and the phone microphone streamed to the PC |
+| **Cam / Mic** | Front and rear camera as a video source with zoom, and the phone microphone or output streamed to the PC with a choice of codec and bit rate |
 | **Files** | Browse, search, sort, rename, upload, download, move, compress, extract, preview pictures and text without saving them, free space of the current volume |
 | **Running** | Live process list with memory and state, stop anything |
 | **Wi-Fi / Bluetooth / NFC** | Radios on and off, scan, join or forget a network, paired devices |
 | **Users** | Multi-user: list, switch, add, remove, turn the user switcher on or off |
-| **Shell** | A live adb shell |
+| **Shell** | A live adb shell, and a logcat viewer with a level, a filter and save |
 
 Several devices can be connected at once; most actions apply to everything selected in the
 device list. Every list also carries its own actions on the right mouse button.
@@ -94,6 +94,8 @@ These are Android's rules, not bugs:
 * There is no adb command that sends an SMS; the message is composed in the phone's own
   SMS app and sent from there.
 * The phone has `tar`, `gzip` and `unzip` but no `zip`, so archives are made as `.tar.gz`.
+* `adb root`, `remount`, `sideload` and their neighbours need a userdebug build or recovery.
+  They are listed on their own page, marked against your device, rather than hidden.
 * A screen capture costs roughly 1.4 s. For anything live, use the scrcpy mirror.
 
 ## Contributing

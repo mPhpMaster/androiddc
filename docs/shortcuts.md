@@ -35,6 +35,32 @@ see it whatever the window size.
 
 The history keeps the last 100 folders of the session.
 
+## The icons
+
+Buttons whose meaning is carried by a symbol everybody already reads show that symbol instead
+of a word, and the tooltip carries the full sentence. Anything without an obvious symbol keeps
+its words, and so does every destructive action that is not a plain delete.
+
+| Icon | Means | Icon | Means |
+|---|---|---|---|
+| ⟳ | refresh this list | 🗑 | delete |
+| 🔍 | search here and below | ✎ | rename or edit |
+| ⬇ | download to the PC | ⬆ | upload to the phone |
+| ▶ | launch | ⚙ | open that screen on the phone |
+| 📷 | screenshot | 💾 | save |
+| 📁 | new folder | ⧉ | copy |
+| 👁 | preview without saving | ✕ | clear or cancel |
+| ＋ | add | − | remove |
+| ☎ | call the number in the box | ⏻ | power |
+| ↑ | up one folder | ← | back |
+| ⌂ | home | ⧉ | recent apps |
+| 🔊 / 🔉 | volume up and down | 🗜 | compress |
+| 📤 | extract | 🖥 / 📱 | move to the PC, move to the phone |
+| ⛔ | this device cannot do it | ✔ | this device can |
+
+The icon font is the one Windows already ships (Segoe Fluent Icons, or Segoe MDL2 Assets on
+Windows 10). If a glyph cannot be drawn, that button quietly keeps its words.
+
 ## Every list
 
 Right-clicking any list — devices, apps, contacts, SMS, files, running processes, Wi-Fi,

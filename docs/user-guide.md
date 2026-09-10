@@ -100,7 +100,7 @@ The opposite direction, for when the PC has no internet.
 
 ## Advanced
 
-Two inner pages holding everything you do not need every day.
+Four inner pages holding everything you do not need every day.
 
 ### Mirroring (scrcpy)
 
@@ -115,17 +115,48 @@ awake, no audio, view only, power off on close, no screensaver, keyboard/mouse/g
   server, which drops an active tunnel — AndroidDC warns first and rebuilds it afterwards.
 * **Show command** prints the exact `scrcpy` command line to the log, so you can reuse it.
 
+### More scrcpy options
+
+| Group | What it sets |
+|---|---|
+| Recording | format (mp4 / mkv / m4a / opus / flac / wav), rotation, and a time limit that stops it by itself |
+| Orientation | turn the window, or turn what the phone sends (`@` locks it) |
+| New display | where the keyboard goes on a virtual display, system bars, and whether the apps keep running when the window closes |
+| Window on this PC | x, y, width, height, the frame rate in the log, and a screen-off timeout that applies while mirroring |
+| Keyboard and mouse | the shortcut key, mouse bindings, text-instead-of-keycodes, raw keys, key repeat, legacy paste, and what happens to adb and the phone when the window closes |
+
 ### Device tools (adb)
 
 | Group | Controls |
 |---|---|
-| Connection | `adb tcpip 5555`, connect box, disconnect, restart server, list reverse tunnels, kill stray relays, repair tunnel |
+| Connection | **Pair over Wi-Fi**, **Find devices** (mDNS), **Reconnect**, **Bug report**, `adb tcpip 5555`, connect box, disconnect, restart server, list reverse tunnels, kill stray relays, repair tunnel |
 | Device | install APK, screenshot, screen on/off, reboot, battery |
 | Private DNS | mode (automatic / off / custom hostname), hostname box, **Read DNS**, **AD** (fills in AdGuard), **Apply**, and a line showing the resolvers actually in use |
 | Keyboard (IME) | list, enable, disable, set default, reset |
 | Hotspot | Wi-Fi hotspot on/off, read its state, open the settings screen, USB tether on/off |
 
 The DNS line refreshes by itself when you open the tab or pick another device.
+
+**Pair over Wi-Fi** is the cable-free route on Android 11 and newer. On the phone open
+*Developer options → Wireless debugging → Pair device with pairing code*, type the address and
+the six digits it shows, and AndroidDC pairs and then offers to connect. The pairing port and
+the debugging port are different numbers on that same screen; it asks for both.
+
+### Root / recovery
+
+Eleven adb commands that cannot run on an ordinary retail phone: `root`, `unroot`, `remount`,
+`disable-verity`, `enable-verity`, `sideload`, `emu`, `jdwp`, `keygen`, `get-devpath` and
+`wait-for-device`. They are shown rather than hidden, each switched off and marked, with a
+tooltip saying what it would need.
+
+**Check this device** reads `ro.build.type`, `ro.debuggable`, `ro.secure` and the shell uid
+from the phone that is selected, and marks each row ✔ or ⛔ from that. A retail phone answers
+`build=user`, and only the harmless three stay on. *I understand — let me try anyway* unlocks
+the rest for a rooted or userdebug build; the phone still refuses what it refuses, and the log
+says so plainly.
+
+scrcpy's `--v4l2-sink` is Linux only and is not in the Windows build at all, so it has a note
+there instead of a dead button.
 
 ---
 
@@ -135,6 +166,12 @@ Everything installed, with package name, label and paths.
 
 *Launch*, *Own scrcpy window* (opens the app on its own virtual display), *Force stop*,
 *App info*, *Uninstall*, *Install APK...*, *Export list...*
+
+**Install** takes `.apk`, and also the split bundles most downloads are today: `.apks`,
+`.xapk` and `.apkm`. A bundle is unpacked, `base.apk` goes first and the set is installed with
+`install-multiple`. Several `.apk` files can also be picked together as one split set. When a
+phone refuses — MIUI's *Install via USB* being off, a signature clash, the wrong CPU — the log
+names the reason instead of printing the raw code.
 
 ## Contacts
 
@@ -158,8 +195,16 @@ or torch. The phone screen is untouched. Needs Android 12 or newer.
 
 **Microphone / audio** — pick a source (`mic`, `mic-voice-communication`, `output`,
 `playback`, `voice-call`, …), then **Listen** to hear it on the PC speakers, **Stop audio**,
-or **Record audio...** to write it to a file. This direction only: Android gives no way to
-push PC audio into the phone's speaker.
+or **Record audio...** to write it to a file. Below that: the audio codec, bit rate, buffer
+size, and **keep playing on the phone too** (`--audio-dup`), which needs the `output` source
+and cannot be combined with recording — scrcpy refuses that pairing, so AndroidDC says so
+instead of failing.
+
+**Sizes** and **Codecs** ask the phone what it really supports and fill the dropdowns with the
+answer, rather than offering a fixed list. On the test phone that turned five guessed camera
+sizes into the 36 it actually has.
+
+This direction only: Android gives no way to push PC audio into the phone's speaker.
 
 ## Files
 
@@ -170,7 +215,7 @@ A file manager for the phone.
 | Path | Up, path box, Go, jump list (including every mounted volume), *hidden*, *folders first*, item count |
 | Search | filter box, **Search here** (recursive, uses `find -L`), Clear, **Recent files** with a window of today / 2 days / week / 30 days |
 | Under the list | **Select all**, **None**, **Invert**, the PC folder, Browse, Open folder |
-| Actions | Download, Move to PC, Upload..., Move to phone, New folder, Rename, Delete, Open on phone, Copy path, **Compress**, **Extract**, **Preview** |
+| Actions | Four groups, separated by a rule: moving files (download, move to PC, upload, move to phone), organising them (new folder, rename, delete), archiving them (compress, extract), and opening them (preview, open on phone, copy path) |
 
 A line under the list always shows the space of the volume you are in, for example
 `space here: 110G used of 222G | 112G free | 50% full | volume /storage/emulated`.
@@ -230,5 +275,16 @@ The header line reads `2 user(s) of at most 4 | current user: 0 | user switcher:
 
 ## Shell
 
-A live `adb shell` with history. *Start shell*, *Stop*, *Clear*, a command box and *Send*.
-Output streams into the window as it arrives.
+Two pages.
+
+**Shell** — a live `adb shell` with history. *Start shell*, *Stop*, *Clear*, a command box and
+*Send*. Output streams into the window as it arrives.
+
+**Logcat** — the device log as it happens. *Start* and *Stop*, a priority level (V/D/I/W/E/F),
+a **Contains** filter applied here rather than on the phone, **follow** to stay at the newest
+line, **Clear** (hold Shift to empty the buffer on the phone as well) and **Save...**.
+
+The stream is drained on a timer, so a chatty phone never freezes the window; on a device
+emitting roughly 740 lines a second it kept every line. If a log storm ever does outrun it,
+the oldest lines are dropped and the status line says how many, rather than the window
+stalling to keep up.

@@ -5,6 +5,20 @@
 Five phases. Each one ends with the window running and audited, so work can stop between
 phases without leaving the tool half rebuilt.
 
+**All five are done.** What each turned into is recorded below, and the code, the screenshots
+in the commit history and the documentation are the result. Kept here because it says *why*
+things are shaped the way they are, and because the two decisions at the bottom still apply to
+anything added next.
+
+| Phase | State |
+|---|---|
+| 0 — right-click fix | done: menus fire from any tab |
+| 1 — icons and menus | done: Segoe Fluent Icons, famous symbols only, words everywhere else |
+| 2 — features worth having | done: pairing, mDNS, bug report, logcat, split APK, audio options, device-filled lists, recording and orientation, virtual display policy |
+| 3 — smaller wins | done: window placement, input tuning, lifecycle, camera zoom, reconnect, gnirehtet restart and autostart |
+| 4 — shown but blocked | done: Advanced ▸ Root / recovery, eleven commands marked against the real device |
+| 5 — docs and checks | done: user guide, shortcuts, command reference, limits, README, and CI |
+
 ---
 
 ## Phase 0 — the right-click bug

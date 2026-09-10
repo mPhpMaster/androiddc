@@ -1,6 +1,6 @@
 # AndroidDC - file index
 
-27 files at the top level, plus docs\ and assets\. `backups\` is deliberately left out of this index and is
+28 files at the top level, plus docs\ and assets\. `backups\` is deliberately left out of this index and is
 ignored by git (see `.gitignore`).
 
 The upstream half of this folder (scrcpy 4.1 and gnirehtet 2.5.1) can be fetched
@@ -13,7 +13,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 
 | File | Size | Modified | What it is |
 |---|---:|---|---|
-| `androiddc.ps1` | 341 KB, 8281 lines | 2026-09-09 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device (details, quick toggles, call/SMS/USSD, one-click scrcpy), Tethering (both directions), Advanced (mirroring + device tools), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell. Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
+| `androiddc.ps1` | 443 KB, 10508 lines | 2026-09-09 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
 | `androiddc.vbs` | 344 B | 2026-09-10 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`. **This is the file to double-click.** |
 | `README.md` | 6 KB | 2026-09-10 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
 | `docs\` | 8 pages | 2026-09-10 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture. |
@@ -68,27 +68,28 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 ## SHA256 (first 16 hex characters)
 
 ```
+6200d93ed0d32087  .gitattributes
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-a12b9c1974f57c49  androiddc.ps1
+fc0c15d309a23985  androiddc.ps1
 ea4e1ed6ff774533  androiddc.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
 3d6170dd68549c6f  avutil-60.dll
 e394873cd3e2cc3a  disconnected.png
 b5e5354ae222bd71  get-upstream.bat
-49a0c73a835a4aba  get-upstream.ps1
+a4bd7ea9b2fc5a76  get-upstream.ps1
 d6f5fa61274fae5a  gnirehtet-run.cmd
 88b3267ed8e61378  gnirehtet-share.bat
-1858563e7a5db35d  gnirehtet-share.ps1
+4a6dd587342e9ae0  gnirehtet-share.ps1
 c1ac2b869a48e3c8  gnirehtet.apk
 d5daefbb48143fbc  gnirehtet.exe
 8ec130918a476b0d  libusb-1.0.dll
 9f125960b915c243  LICENSE
 01c12035bf35af37  LICENSE.txt
 843758795a84d0d0  open_a_terminal_here.bat
-c167e6078b9eed7b  README.md
+850cd0283d1ca1c5  README.md
 3ccda94c161f18ce  scrcpy-noconsole.vbs
 deacb991ed250971  scrcpy-server
 575ca1284345c7b3  scrcpy.exe
