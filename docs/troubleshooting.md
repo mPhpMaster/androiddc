@@ -99,6 +99,37 @@ Settings live in `%APPDATA%\AndroidDC\settings.json`. Delete that file to start 
 next run recreates it with defaults. A file left by an older name is copied over once, so
 nothing is lost when upgrading.
 
+## The live shell shows nothing after Logcat has run
+
+Update to the current version. In earlier versions, once the *Logcat* page had been started the
+live shell on the *Shell* page stopped answering: it said it was connected, took commands, and
+printed nothing — while logcat ran and after it was stopped, until AndroidDC was restarted.
+Commands run from other pages were not affected, and neither was adb itself.
+
+The cause was how logcat's output was read: through a PowerShell event subscription. Once that
+subscription had carried a live adb logcat stream, no asynchronous read completed on any adb
+process started afterwards, and the live shell is one. Logcat is now read by a small C# class,
+the way the live shell already was.
+
+## Arabic text shows as odd characters, or a shell command with Arabic does something else
+
+Update to the current version. Earlier versions decoded what adb and scrcpy print with the
+Windows console code page, and wrote what you type into the live shell in that page too. On a
+PC whose console is still on an OEM page (437, 720 …) that meant:
+
+* app names, contact names, log lines and file names in Arabic arrived as box-drawing
+  characters;
+* Arabic typed into the live shell reached the phone as `?` marks, which the phone's shell
+  reads as a file pattern — `echo` followed by four Arabic letters printed four-letter file
+  names instead. A command that deletes or moves files could have touched other files.
+
+The current version reads and writes adb's UTF-8 directly and no longer depends on the code
+page. None of this showed on a PC with *Use Unicode UTF-8 for worldwide language support*
+switched on, which is why it went unnoticed.
+
+To see which page your console uses: `[Console]::OutputEncoding.CodePage` in Windows
+PowerShell. `65001` is UTF-8.
+
 ## Reporting a bug
 
 Please include:

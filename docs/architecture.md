@@ -64,6 +64,8 @@ checks scrcpy's own output, a move checks the copy arrived before deleting the o
 | `$home`, `$input`, `$args` | Reserved; assignment fails | Any other name |
 | `adb exec-out cat '<path>'` | `exec-out` passes arguments through verbatim, so the quotes stay in the name | Quote for the Windows parser instead: `"<path>"` |
 | `adb shell` with several arguments | Rebuilt and re-parsed by the device shell | `Quote-DevicePath` each path; for redirection send one whole string |
+| `Register-ObjectEvent` on a live adb stream (logcat) | Afterwards no asynchronous read completes on any adb process started later — the live shell went silent until restart. Not the volume: the same subscription on 20000 lines from `cmd` leaves reads working | Read the stream in a C# class on .NET's own threads: `LineReader`, like `LiveShell` |
+| `$process.StandardInput.WriteLine($text)` | Encoded in the console's input code page; .NET Framework has no `StandardInputEncoding`. On an OEM page Arabic becomes `?`, which the phone's shell expands as a file pattern | Write `[Text.Encoding]::UTF8.GetBytes($text + "`n")` to `StandardInput.BaseStream` |
 
 ## Event handlers
 
@@ -206,15 +208,21 @@ confuse. This project was caught by both on the same day:
 | Code page | What it decides | What it broke | Where |
 |---|---|---|---|
 | the **ANSI** page | how a `.ps1` **without a BOM** is read | the Arabic word for *Send*, typed into `Find-SendButton` | on a 1252 or 1256 PC the letters became other characters, so an Arabic-UI phone's Send button was never found |
-| the **console** page | how the output of adb, scrcpy and gnirehtet is decoded | every Arabic app or contact name | on an OEM page (437, 720 …) the names arrived as box-drawing characters |
+| the **console** output page | how a native program's output is decoded — through `& exe`, and through a .NET `Process` whose stream has no encoding set | every Arabic app or contact name, log line and file name | on an OEM page (437, 720 …) they arrived as box-drawing characters |
+| the **console** input page | how text written to a `Process`'s stdin is encoded | what is typed into the live shell | every Arabic letter became `?`, and the phone's shell expanded `????` as a file pattern |
 
-Neither showed on the development PC, because its Windows is set to *Use Unicode UTF-8 for
-worldwide language support*, which makes both pages 65001. With the console forced to 437, an
-app name came back as `┘å┘ü╪º╪░`; with the fix, exactly as scrcpy wrote it.
+None of it showed on the development PC, because its Windows is set to *Use Unicode UTF-8 for
+worldwide language support*, which makes every page 65001. With the pages forced to 437, an
+app name came back as `┘å┘ü╪º╪░`, and `echo` plus four Arabic letters sent to `adb shell`
+printed `acct apex cust data init proc` — the four-letter names in `/`.
 
 The fixes: `androiddc.ps1` is plain ASCII, and a non-ASCII letter is built from its code
 points — `-join [char[]](0x0625, …)`. `Invoke-OffThread` decodes as UTF-8 for the call and
-then puts the console page back; every program that goes through it writes UTF-8.
+then puts the console page back; every program that goes through it writes UTF-8. Every
+`ProcessStartInfo` that reads adb as text sets `StandardOutputEncoding` and
+`StandardErrorEncoding` to UTF-8. Stdin cannot be set that way — .NET Framework, which Windows
+PowerShell runs on, has no `StandardInputEncoding` — so `LiveShell.Send` writes UTF-8 bytes to
+the underlying stream itself.
 
 ### What CI checks, and how a check passes on nothing
 

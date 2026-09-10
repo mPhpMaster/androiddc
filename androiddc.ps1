@@ -6995,6 +6995,11 @@ function Invoke-FileTransfer {
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
     $info.RedirectStandardError = $true
+    # adb writes UTF-8. Left unset, .NET decodes a redirected stream with the
+    # console code page, and on a PC still on an OEM page (437, 720, ...) an
+    # Arabic file name in adb's messages came back garbled - measured.
+    $info.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $info.StandardErrorEncoding = New-Object System.Text.UTF8Encoding($false)
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $info
@@ -7412,6 +7417,7 @@ function Get-JdwpProcesses {
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
     $info.RedirectStandardError = $true
+    $info.StandardErrorEncoding = New-Object System.Text.UTF8Encoding($false)
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $info
@@ -9658,6 +9664,41 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 
+public class LineReader {
+    // Reads a program's output into a queue on .NET's own threads. Logcat used
+    // Register-ObjectEvent for this instead, and once that subscription had
+    // carried a live adb logcat stream, no asynchronous read completed on any
+    // adb process started afterwards: the live shell showed nothing, before
+    // or after logcat was stopped. The same logcat read by this class leaves
+    // them working, and so does the same subscription on 20000 lines from cmd.
+    private readonly ConcurrentQueue<string> queue = new ConcurrentQueue<string>();
+    private Process proc;
+
+    public ConcurrentQueue<string> Queue { get { return queue; } }
+    public Process Process { get { return proc; } }
+
+    public bool Start(string exe, string arguments) {
+        var info = new ProcessStartInfo(exe, arguments);
+        info.UseShellExecute = false;
+        info.CreateNoWindow = true;
+        info.RedirectStandardOutput = true;
+        info.RedirectStandardError = true;
+        // adb writes UTF-8; unset, a line is decoded with the console page
+        info.StandardOutputEncoding = new System.Text.UTF8Encoding(false);
+        info.StandardErrorEncoding = new System.Text.UTF8Encoding(false);
+
+        proc = new Process();
+        proc.StartInfo = info;
+        proc.OutputDataReceived += (sender, e) => { if (e.Data != null) queue.Enqueue(e.Data); };
+        proc.ErrorDataReceived += (sender, e) => { if (e.Data != null) queue.Enqueue("! " + e.Data); };
+
+        if (!proc.Start()) { return false; }
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+        return true;
+    }
+}
+
 public class LiveShell {
     private Process proc;
     private readonly ConcurrentQueue<string> lines = new ConcurrentQueue<string>();
@@ -9669,6 +9710,9 @@ public class LiveShell {
         info.RedirectStandardInput = true;
         info.RedirectStandardOutput = true;
         info.RedirectStandardError = true;
+        // adb writes UTF-8; unset, a reply is decoded with the console page
+        info.StandardOutputEncoding = new System.Text.UTF8Encoding(false);
+        info.StandardErrorEncoding = new System.Text.UTF8Encoding(false);
 
         proc = new Process();
         proc.StartInfo = info;
@@ -9683,8 +9727,15 @@ public class LiveShell {
 
     public void Send(string line) {
         if (proc != null && !proc.HasExited) {
-            proc.StandardInput.WriteLine(line);
-            proc.StandardInput.Flush();
+            // .NET Framework writes stdin in the console's input code page, and
+            // has no StandardInputEncoding to change that. On an OEM page every
+            // Arabic letter became '?', and the phone's shell then expanded
+            // "????" as a file pattern: measured, "echo" and four Arabic letters
+            // printed four-letter file names instead. adb reads UTF-8, so the
+            // bytes go out as UTF-8, with the same line ending as before.
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(line + proc.StandardInput.NewLine);
+            proc.StandardInput.BaseStream.Write(bytes, 0, bytes.Length);
+            proc.StandardInput.BaseStream.Flush();
         }
     }
 
@@ -9754,37 +9805,20 @@ function Start-Logcat {
 
     $level = "$($cmbLogcatLevel.SelectedItem)".Substring(0, 1)
 
-    $info = New-Object System.Diagnostics.ProcessStartInfo
-    $info.FileName = $script:adbPath
-    # -v time gives a readable stamp; *:LEVEL is the priority filter
-    $info.Arguments = "-s $serial logcat -v time *:$level"
-    $info.UseShellExecute = $false
-    $info.CreateNoWindow = $true
-    $info.RedirectStandardOutput = $true
-    $info.RedirectStandardError = $true
-
-    $script:logcatQueue = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
     $script:logcatRaw = New-Object System.Collections.Generic.List[string]
-    $queue = $script:logcatQueue
 
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $info
-    $process.EnableRaisingEvents = $true
-
-    # the reader runs on the process's own thread, so the UI never waits on it
-    $script:logcatSubs = @(
-        (Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -MessageData $queue -Action {
-            if ($null -ne $EventArgs.Data) { $Event.MessageData.Enqueue($EventArgs.Data) }
-        }),
-        (Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -MessageData $queue -Action {
-            if ($null -ne $EventArgs.Data) { $Event.MessageData.Enqueue('! ' + $EventArgs.Data) }
-        })
-    )
-
-    if (-not $process.Start()) { Write-Log 'adb logcat did not start.' $colorBad; return }
-    $process.BeginOutputReadLine()
-    $process.BeginErrorReadLine()
-    $script:logcatProcess = $process
+    # LineReader (a C# class, beside LiveShell) reads the stream on .NET's own
+    # threads, in UTF-8. It replaced Register-ObjectEvent, which broke every
+    # interactive adb process started after it - see the class.
+    $reader = New-Object LineReader
+    # -v time gives a readable stamp; *:LEVEL is the priority filter
+    if (-not $reader.Start($script:adbPath, "-s $serial logcat -v time *:$level")) {
+        Write-Log 'adb logcat did not start.' $colorBad
+        return
+    }
+    # the rest of the page reads the queue and the process, as before
+    $script:logcatQueue = $reader.Queue
+    $script:logcatProcess = $reader.Process
     $script:logcatDropped = 0
 
     if (-not $script:logcatTimer) {
