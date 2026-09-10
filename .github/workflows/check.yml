@@ -35,6 +35,10 @@ jobs:
             }
           if ($failed -gt 0) { exit 1 }
 
+      - name: No variable is read before it is assigned
+        shell: pwsh
+        run: .\.github\audit-variables.ps1
+
       - name: The launcher must point at a file that exists
         shell: pwsh
         run: |
@@ -52,8 +56,22 @@ jobs:
       - name: No absolute developer paths in shipped files
         shell: pwsh
         run: |
-          $hits = Select-String -Path .\*.ps1, .\*.vbs, .\*.bat, .\docs\*.md, .\README.md `
-            -Pattern '[A-Za-z]:\\(Users\\|scrcpy-win64)' -ErrorAction SilentlyContinue
+          $targets = @('.\*.ps1', '.\.github\*.ps1', '.\*.vbs', '.\*.bat', '.\docs\*.md', '.\README.md')
+
+          # A check that reads no files passes exactly as quietly as a clean
+          # tree, and SilentlyContinue hides a bad pattern the same way. So
+          # prove every group matched something before believing the result.
+          foreach ($target in $targets) {
+            if (-not (Get-ChildItem -Path $target -File -ErrorAction SilentlyContinue)) {
+              Write-Host "::error::nothing matched $target - this check would pass without reading anything"
+              exit 1
+            }
+          }
+
+          $files = @(Get-ChildItem -Path $targets -File)
+          Write-Host "read $($files.Count) files"
+
+          $hits = @($files | Select-String -Pattern '[A-Za-z]:\\(Users\\|scrcpy-win64)' -ErrorAction Stop)
           if ($hits) {
             foreach ($hit in $hits) {
               Write-Host "::error file=$($hit.Filename),line=$($hit.LineNumber)::absolute path: $($hit.Line.Trim())"
