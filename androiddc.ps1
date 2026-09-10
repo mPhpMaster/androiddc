@@ -8293,7 +8293,9 @@ function Update-DeviceTabLayout {
     # tooltip carries it the rest of the time
     $room = $leftWidth - 452
     $lblDeviceHint.Visible = ($room -ge 150)
-    if ($lblDeviceHint.Visible) { $lblDeviceHint.SetBounds(458, 16, $room, 20) }
+    # always placed, even when hidden: a control left at its creation spot still
+    # has bounds, and those bounds sat on top of the Mirror button
+    $lblDeviceHint.SetBounds(458, 16, [Math]::Max(1, $room), 20)
     $toolTip.SetToolTip($btnDeviceRefresh, $lblDeviceHint.Text)
     $txtDeviceInfo.SetBounds(14, 46, $leftWidth, ($height - 58))
 
