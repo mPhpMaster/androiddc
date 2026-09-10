@@ -7767,6 +7767,7 @@ $script:cameraProcesses = @()
 $script:deviceFeatures = @{}
 $script:panelWidth = 440
 $script:previewFiles = @()
+$script:logcatRaw = $null
 $script:transferCancelled = $false
 $script:widthBeforeHide = 0
 $script:filePath = '/sdcard'
@@ -9395,6 +9396,7 @@ function Start-Logcat {
     $info.RedirectStandardError = $true
 
     $script:logcatQueue = [System.Collections.Concurrent.ConcurrentQueue[string]]::new()
+    $script:logcatRaw = New-Object System.Collections.Generic.List[string]
     $queue = $script:logcatQueue
 
     $process = New-Object System.Diagnostics.Process
@@ -9442,6 +9444,12 @@ function Update-LogcatView {
     # lines had to be dropped rather than freezing to keep up
     while ($taken -lt 800 -and $script:logcatQueue.TryDequeue([ref]$line)) {
         $taken++
+
+        # every line is kept unfiltered, capped, so the filter can be changed
+        # afterwards and still apply to what is already here
+        $null = $script:logcatRaw.Add($line)
+        if ($script:logcatRaw.Count -gt 6000) { $script:logcatRaw.RemoveRange(0, 2000) }
+
         if ($filter -and $line -notlike "*$filter*") { continue }
         $null = $batch.AppendLine($line)
     }
@@ -9484,6 +9492,37 @@ function Update-LogcatView {
     }
 }
 
+
+function Show-LogcatFiltered {
+    # redraw the window from the lines kept in memory, so typing a filter hides
+    # what is already on screen too
+    if (-not $script:logcatRaw) { return }
+
+    $filter = $txtLogcatFilter.Text.Trim()
+    $batch = New-Object System.Text.StringBuilder
+    foreach ($line in $script:logcatRaw) {
+        if ($filter -and $line -notlike "*$filter*") { continue }
+        $null = $batch.AppendLine($line)
+    }
+
+    $null = [AndroidDcNative]::SendMessage($txtLogcat.Handle, 0x000B, [IntPtr]::Zero, [IntPtr]::Zero)
+    try {
+        $txtLogcat.Text = $batch.ToString()
+        if ($chkLogcatFollow.Checked) {
+            $txtLogcat.SelectionStart = $txtLogcat.TextLength
+            $txtLogcat.ScrollToCaret()
+        }
+    } finally {
+        $null = [AndroidDcNative]::SendMessage($txtLogcat.Handle, 0x000B, [IntPtr]1, [IntPtr]::Zero)
+        $txtLogcat.Invalidate()
+    }
+
+    $shown = @($batch.ToString() -split "`r?`n" | Where-Object { $_ }).Count
+    if ($filter) {
+        $lblLogcatState.Text = "$shown of $($script:logcatRaw.Count) kept lines match '$filter'"
+    }
+}
+
 function Stop-Logcat {
     param([switch]$Quiet)
 
@@ -9509,6 +9548,7 @@ function Stop-Logcat {
 
 function Clear-Logcat {
     $txtLogcat.Clear()
+    if ($script:logcatRaw) { $script:logcatRaw.Clear() }
     $script:logcatDropped = 0
 
     # holding Shift also empties the ring buffer on the phone
@@ -10370,6 +10410,19 @@ $btnLogcatStart.Add_Click({ Start-Logcat })
 $btnLogcatStop.Add_Click({ Stop-Logcat })
 $btnLogcatClear.Add_Click({ Clear-Logcat })
 $btnLogcatSave.Add_Click({ Save-Logcat })
+$script:logcatFilterTimer = New-Object System.Windows.Forms.Timer
+$script:logcatFilterTimer.Interval = 350
+$script:logcatFilterTimer.Add_Tick({
+    $script:logcatFilterTimer.Stop()
+    Show-LogcatFiltered
+})
+
+$txtLogcatFilter.Add_TextChanged({
+    # wait for the typing to settle rather than redrawing on every key
+    $script:logcatFilterTimer.Stop()
+    $script:logcatFilterTimer.Start()
+})
+
 $cmbLogcatLevel.Add_SelectedIndexChanged({
     # the level is a start-up argument, so restart the stream to apply it
     if ($script:logcatProcess -and -not $script:logcatProcess.HasExited) {
