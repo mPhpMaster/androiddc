@@ -9506,9 +9506,15 @@ function Remove-LogcatHead {
         250k took 2.5 s, 500k took 7.2 s and 960k took 22.6 s. That single
         assignment was the freeze behind a live log.
 
-        The box is ReadOnly, and a read only TextBox ignores an assignment to
-        SelectedText without raising anything - the delete simply does not
-        happen. ReadOnly comes off for the edit and goes straight back.
+        This box is a RichTextBox, and a read only RichTextBox ignores an
+        assignment to SelectedText without raising anything - the delete
+        simply does not happen. A plain TextBox does obey it even when read
+        only, which is what made the first measurement look like a win:
+
+            TextBox      ReadOnly=True   1000 -> 600   deleted
+            RichTextBox  ReadOnly=True   1000 -> 1000  ignored in silence
+
+        So ReadOnly comes off for the edit and goes straight back.
     #>
     if ($txtLogcat.TextLength -le 400000) { return }
 
