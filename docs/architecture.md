@@ -174,8 +174,9 @@ do.
 ### What CI checks, and how a check passes on nothing
 
 `.github/workflows/check.yml` runs on every push: every `.ps1` must parse, no variable may be
-read before it is assigned, the launcher must point at a file that exists, and no absolute
-developer path may appear in a shipped file.
+read before it is assigned, every control must reach the screen and every button must have a
+handler, the launcher must point at a file that exists, and no absolute developer path may
+appear in a shipped file.
 
 The path check was itself the best example of the rule above. It was written as
 
@@ -203,6 +204,48 @@ Counting those last two as assignments makes a typo define itself, and `$btnFile
 passes in silence. The way that was caught was not by reading the code but by planting a
 deliberate typo and checking the audit failed — the same discipline as asserting an operation
 had an effect before trusting its timing.
+
+`.github/audit-wiring.ps1` checks that every control is added to a container and every button
+has a handler. It exists because of the sharpest version of this whole family:
+
+> **A layout audit counts a button that is not on the screen as a perfect button.**
+
+A control that was never added to a parent is invisible, yet the `Update-*Layout` functions go
+on positioning it, and the overlap audit dutifully reports that it collides with nothing —
+which is true, and meaningless. The tool built to find placement defects issues the orphan a
+clean bill of health. The `Visible` filter that hid the camera overlap was not a slip; it was
+this same shape.
+
+Two more things that the wiring audit taught, both worth keeping:
+
+**A noisy audit is worse than none.** Its first version raised 23 false alarms on a healthy
+tree — it counted helper-function locals like `$button` and `$ok` as window controls, and
+flagged every `TabPage` because a tab is added with `TabPages.Add`, not `Controls.Add`. A
+report like that trains you to ignore the report.
+
+**A green result proves nothing until the check has been seen to fail.** Two defects were
+planted — a button built but never added, and a button added but never wired — and the audit
+was required to catch both, at their own lines, and nothing else.
+
+### A step can report the error and still go green
+
+Worth its own paragraph because it is the most deceptive form. A `pwsh` step in GitHub Actions
+is run roughly as
+
+```powershell
+. 'step.ps1'; if ((Test-Path variable:/LASTEXITCODE)) { exit $LASTEXITCODE }
+```
+
+so a script whose success path never sets `$LASTEXITCODE` exits 0. Measured here:
+
+| The step | Result |
+|---|---|
+| writes `::error` and falls off the end | **exit 0 — green, with the error printed underneath** |
+| writes `::error` then `exit 1` | exit 1, red |
+
+Every failing branch must `exit 1` explicitly. A check that finds the defect, announces it,
+and then fails to stop anything is worse than no check, because the badge says the tree is
+fine.
 
 ### Working in a checkout someone else is also using
 

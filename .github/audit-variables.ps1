@@ -30,6 +30,15 @@
     worked out from this file's own location - nothing here knows where the
     project lives on any particular machine.
 
+.NOTES
+    This reads one file at a time and assumes it stands on its own, which the
+    shipped scripts do. Point it at a fragment meant to run inside something
+    else - a snippet spliced into a running window, a dot-sourced piece - and
+    every name the host provides is reported, because from this file's point
+    of view they really are read and never assigned. Dozens of findings on
+    such a file mean the file was the wrong thing to check, not that the code
+    is broken.
+
 .EXAMPLE
     powershell -File .github\audit-variables.ps1
 #>
