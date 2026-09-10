@@ -78,8 +78,21 @@ $lstFiles.Add_KeyDown({
 ## Context menus
 
 `Add-ListContextMenu -List $lst -Buttons @($btnA, $btnB, $null, $btnC)` builds a menu whose
-entries call `PerformClick()` on those buttons, so a menu can never drift from the buttons it
-mirrors. `$null` inserts a separator, and `Opening` copies each button's `Enabled` state.
+entries fire those buttons, so a menu can never drift from the buttons it mirrors. `$null`
+inserts a separator, and `Opening` copies each button's `Enabled` state.
+
+The entries raise `Click` directly through reflection rather than calling `PerformClick()`:
+
+```powershell
+$method = [System.Windows.Forms.Control].GetMethod('OnClick', 'Instance,NonPublic')
+$box = [object[]]::new(1)
+$box[0] = [System.EventArgs]::Empty
+$null = $method.Invoke($button, $box)
+```
+
+`PerformClick()` checks `CanSelect` first, and a control on a tab that is not on screen has
+not been created, so the call is dropped in silence. That is why right-clicking a device and
+choosing *Mirror with scrcpy* used to do nothing unless the Device tab happened to be open.
 
 ## Settings
 
@@ -101,10 +114,31 @@ during development:
 
 Two checks worth repeating after any edit:
 
-* **Layout:** for every page, compare `Bounds.IntersectsWith` between children and against
-  `ClientSize`. The target is zero overlaps and zero controls off the page.
+* **Layout:** walk **every group box**, not only every page, and compare `Bounds.IntersectsWith`
+  between children and against `ClientSize`. The target is zero overlaps and zero controls
+  outside their box.
 * **Wiring:** compare the set of `$x.Add_Click(` handlers against the set of created controls.
   A patch that deletes code can silently take handlers with it; buttons then do nothing and
   the log stays empty.
 
-`PerformClick()` does nothing on a control whose tab is not selected — select the tab first.
+### Two ways a layout audit lies to you
+
+Both of these have already hidden a real defect in this project, so they are worth knowing:
+
+**Do not filter on `Visible`.** A control on a tab that has never been shown reports
+`Visible = $false`, so an audit that skips invisible controls silently skips most of the
+window and reports a confident zero. A three-way overlap in the camera group survived several
+"zero overlaps" runs that way. Measure `Bounds` on every child; bounds are correct whether or
+not the control has been painted.
+
+**Check inside the boxes, not just the pages.** Controls that overlap each other *inside* a
+group box are all still within the page, so a page-level check finds nothing wrong. The camera
+overlap was three controls stacked at the same point, entirely inside one group.
+
+The pattern that does work: select every tab and inner tab once so each layout function has
+run, then recurse the whole form for `GroupBox` controls and compare every child against every
+sibling.
+
+`PerformClick()` does nothing on a control whose tab is not selected, so a test that drives a
+button on another tab must select that tab first, or raise `OnClick` the way the context menus
+do.

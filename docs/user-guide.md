@@ -281,8 +281,14 @@ Two pages.
 *Send*. Output streams into the window as it arrives.
 
 **Logcat** — the device log as it happens. *Start* and *Stop*, a priority level (V/D/I/W/E/F),
-a **Contains** filter applied here rather than on the phone, **follow** to stay at the newest
-line, **Clear** (hold Shift to empty the buffer on the phone as well) and **Save...**.
+a **Contains** filter, **follow** to stay at the newest line, **Clear** (hold Shift to empty
+the buffer on the phone as well) and **Save...**.
+
+The filter applies to what is already on screen, not only to lines that arrive next: type into
+it and the window is redrawn from the lines held in memory, so everything showing matches.
+Clear it and they all come back. The status line says how many of the kept lines match, for
+example `465 of 6000 kept lines match 'ActivityManager'`. Filtering happens on this side; the
+phone keeps sending everything, so nothing is lost by narrowing the view.
 
 The stream is drained on a timer, so a chatty phone never freezes the window; on a device
 emitting roughly 740 lines a second it kept every line. If a log storm ever does outrun it,
