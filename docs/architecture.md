@@ -171,6 +171,32 @@ changes.
 button on another tab must select that tab first, or raise `OnClick` the way the context menus
 do.
 
+### Working in a checkout someone else is also using
+
+Two people — or two assistants — editing one 10,000-line script in the same folder will
+overwrite each other, because the usual edit is *read the whole file, write the whole file*.
+Everything below was learned the hard way in this repository.
+
+**Commit early, and push what is finished.** A commit is the only thing that survives someone
+else's full-file write. Work that existed only on disk was nearly lost twice here; work that
+was committed never was.
+
+**`--amend` and `reset` assume you own `HEAD`.** They do not ask. An `--amend` meant for your
+own last commit will happily rewrite somebody else's if they committed while you were working:
+the content stays, but it is filed under your message and their commit falls out of the
+history. Check `git log -1` first, and if the tip is not yours, **add a correcting commit
+instead of rewriting**. `git reflog` finds the original if you have already done it —
+`git reset --soft <their-commit>` puts it back untouched.
+
+**The author field will not tell you whose commit it is.** Both sessions here commit as the
+same configured git user, so `%an` is identical on every commit. Judge by the subject and the
+files touched, not by the name.
+
+**Prefer a branch per worker.** One shared branch turns every concurrent edit into a silent
+race; separate branches turn the same disagreement into a merge conflict you can see and
+resolve. Falling back to comparing file sizes and timestamps is a sign the coordination has
+already failed.
+
 ### Measure the effect, not the call
 
 A timing number is only worth having if the operation actually happened. Trimming the logcat
