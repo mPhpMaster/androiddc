@@ -420,11 +420,17 @@ $tabMore.Text = 'More scrcpy options'
 $tabMore.BackColor = [System.Drawing.SystemColors]::Control
 $tabsAdvanced.TabPages.Add($tabMore)
 
+$tabRoot = New-Object System.Windows.Forms.TabPage
+$tabRoot.Text = 'Root / recovery'
+$tabRoot.BackColor = [System.Drawing.SystemColors]::Control
+$tabRoot.AutoScroll = $true
+
 $tabTools = New-Object System.Windows.Forms.TabPage
 $tabTools.Text = 'Device tools (adb)'
 $tabTools.BackColor = [System.Drawing.SystemColors]::Control
 $tabTools.AutoScroll = $true
 $tabsAdvanced.TabPages.Add($tabTools)
+$tabsAdvanced.TabPages.Add($tabRoot)
 
 $tabApps = New-Object System.Windows.Forms.TabPage
 $tabApps.Text = 'Apps'
@@ -657,6 +663,20 @@ $btnTest.Text = 'Test connection'
 $btnTest.Location = New-Object System.Drawing.Point(274, 94)
 $btnTest.Size = New-Object System.Drawing.Size(130, 34)
 $tabShare.Controls.Add($btnTest)
+
+$btnShareRestart = New-Object System.Windows.Forms.Button
+$btnShareRestart.Text = 'Restart'
+$btnShareRestart.Location = New-Object System.Drawing.Point(12, 200)
+$btnShareRestart.Size = New-Object System.Drawing.Size(100, 28)
+$tabShare.Controls.Add($btnShareRestart)
+$toolTip.SetToolTip($btnShareRestart, 'gnirehtet restart: stop and start again without touching the client')
+
+$chkShareAutostart = New-Object System.Windows.Forms.CheckBox
+$chkShareAutostart.Text = 'keep serving devices as they are plugged in'
+$chkShareAutostart.Location = New-Object System.Drawing.Point(120, 202)
+$chkShareAutostart.Size = New-Object System.Drawing.Size(320, 22)
+$tabShare.Controls.Add($chkShareAutostart)
+$toolTip.SetToolTip($chkShareAutostart, 'gnirehtet autostart instead of start: every device that appears is served')
 
 $btnInstallClient = New-Object System.Windows.Forms.Button
 $btnInstallClient.Text = 'Install client'
@@ -1807,6 +1827,120 @@ foreach ($entry in @(
     }
 }
 
+
+# --- tab: root / recovery -----------------------------------------------------
+# These exist in adb but cannot run on an ordinary retail phone. They are shown
+# rather than hidden, marked with a sign, explained by their tooltip, and
+# checked against the device that is actually selected. One checkbox unlocks
+# them for somebody on a rooted or userdebug build.
+
+$script:rootButtons = @()
+
+$lblRootWarn = New-Object System.Windows.Forms.Label
+$lblRootWarn.Text = 'Everything on this page needs root, a userdebug build, or the phone in recovery. ' +
+    'On a normal retail phone none of it can work, so it is switched off.'
+$lblRootWarn.ForeColor = [System.Drawing.Color]::FromArgb(150, 80, 0)
+$lblRootWarn.Location = New-Object System.Drawing.Point(14, 10)
+$lblRootWarn.Size = New-Object System.Drawing.Size(860, 36)
+$tabRoot.Controls.Add($lblRootWarn)
+
+$chkRootUnlock = New-Object System.Windows.Forms.CheckBox
+$chkRootUnlock.Text = 'I understand - let me try anyway'
+$chkRootUnlock.Location = New-Object System.Drawing.Point(14, 50)
+$chkRootUnlock.Size = New-Object System.Drawing.Size(300, 22)
+$tabRoot.Controls.Add($chkRootUnlock)
+
+$btnRootCheck = New-Object System.Windows.Forms.Button
+$btnRootCheck.Text = 'Check this device'
+$btnRootCheck.Location = New-Object System.Drawing.Point(330, 46)
+$btnRootCheck.Size = New-Object System.Drawing.Size(150, 28)
+$tabRoot.Controls.Add($btnRootCheck)
+$toolTip.SetToolTip($btnRootCheck, 'Read ro.build.type and friends, and mark what this phone would allow')
+
+$lblRootState = New-Object System.Windows.Forms.Label
+$lblRootState.Text = 'not checked yet'
+$lblRootState.ForeColor = [System.Drawing.Color]::DimGray
+$lblRootState.Location = New-Object System.Drawing.Point(496, 52)
+$lblRootState.Size = New-Object System.Drawing.Size(380, 20)
+$tabRoot.Controls.Add($lblRootState)
+
+function New-RootAction {
+    param([string]$Caption, [string]$Why, [string]$Needs, [int]$X, [int]$Y, [int]$Width = 150)
+
+    $button = New-Object System.Windows.Forms.Button
+    $button.Text = [string][char]0x26D4 + ' ' + $Caption
+    $button.Location = New-Object System.Drawing.Point($X, $Y)
+    $button.Size = New-Object System.Drawing.Size($Width, 28)
+    $button.Enabled = $false
+    $button.Tag = [PSCustomObject]@{ Caption = $Caption; Needs = $Needs }
+    $tabRoot.Controls.Add($button)
+    $toolTip.SetToolTip($button, "$Why  Needs: $Needs")
+    $script:rootButtons += $button
+    return $button
+}
+
+$grpRootAdb = New-Object System.Windows.Forms.GroupBox
+$grpRootAdb.Text = 'adb as root'
+$grpRootAdb.Location = New-Object System.Drawing.Point(12, 82)
+$grpRootAdb.Size = New-Object System.Drawing.Size(864, 68)
+$tabRoot.Controls.Add($grpRootAdb)
+
+$grpRootImage = New-Object System.Windows.Forms.GroupBox
+$grpRootImage.Text = 'System image'
+$grpRootImage.Location = New-Object System.Drawing.Point(12, 156)
+$grpRootImage.Size = New-Object System.Drawing.Size(864, 68)
+$tabRoot.Controls.Add($grpRootImage)
+
+$grpRootOther = New-Object System.Windows.Forms.GroupBox
+$grpRootOther.Text = 'Recovery, emulator and developer plumbing'
+$grpRootOther.Location = New-Object System.Drawing.Point(12, 230)
+$grpRootOther.Size = New-Object System.Drawing.Size(864, 100)
+$tabRoot.Controls.Add($grpRootOther)
+
+$btnRootOn = New-RootAction -Caption 'adb root' -X 12 -Y 26 -Width 130 `
+    -Why 'Restarts adbd with root rights.' -Needs 'userdebug or eng build'
+$btnRootOff = New-RootAction -Caption 'adb unroot' -X 150 -Y 26 -Width 130 `
+    -Why 'Puts adbd back to the ordinary shell user.' -Needs 'a rooted adbd'
+$btnRootRemount = New-RootAction -Caption 'remount' -X 288 -Y 26 -Width 130 `
+    -Why 'Makes /system writable.' -Needs 'root, and verity off'
+$btnRootWaitDevice = New-RootAction -Caption 'wait-for-device' -X 426 -Y 26 -Width 150 `
+    -Why 'Blocks until a device answers. Harmless, and useful after a reboot.' -Needs 'nothing'
+
+$btnRootVerityOff = New-RootAction -Caption 'disable-verity' -X 12 -Y 26 -Width 150 `
+    -Why 'Turns off verified boot checking on the system image.' -Needs 'root, changes verified boot'
+$btnRootVerityOn = New-RootAction -Caption 'enable-verity' -X 170 -Y 26 -Width 150 `
+    -Why 'Turns verified boot checking back on.' -Needs 'root'
+
+$btnRootSideload = New-RootAction -Caption 'sideload a zip...' -X 12 -Y 26 -Width 160 `
+    -Why 'Flashes an OTA package.' -Needs 'the phone in recovery, not in Android'
+$btnRootEmu = New-RootAction -Caption 'emu console...' -X 180 -Y 26 -Width 150 `
+    -Why 'Talks to the emulator console.' -Needs 'an emulator, not a phone'
+$btnRootJdwp = New-RootAction -Caption 'jdwp' -X 338 -Y 26 -Width 110 `
+    -Why 'Lists debuggable process ids.' -Needs 'a debuggable app running'
+$btnRootKeygen = New-RootAction -Caption 'keygen...' -X 456 -Y 26 -Width 120 `
+    -Why 'Writes a new adb key pair to a file.' -Needs 'nothing, though it re-pairs nothing by itself'
+$btnRootDevPath = New-RootAction -Caption 'get-devpath' -X 584 -Y 26 -Width 130 `
+    -Why 'Prints the USB device path.' -Needs 'nothing'
+
+# each group owns its own buttons
+foreach ($entry in @(
+        @($grpRootAdb, @($btnRootOn, $btnRootOff, $btnRootRemount, $btnRootWaitDevice)),
+        @($grpRootImage, @($btnRootVerityOff, $btnRootVerityOn)),
+        @($grpRootOther, @($btnRootSideload, $btnRootEmu, $btnRootJdwp, $btnRootKeygen, $btnRootDevPath)))) {
+    foreach ($control in $entry[1]) {
+        $tabRoot.Controls.Remove($control)
+        $entry[0].Controls.Add($control)
+    }
+}
+
+$lblRootNote = New-Object System.Windows.Forms.Label
+$lblRootNote.Text = 'scrcpy --v4l2-sink and --v4l2-buffer are Linux only and are not built into the Windows scrcpy at all, ' +
+    'so they have no button here.'
+$lblRootNote.ForeColor = [System.Drawing.Color]::DimGray
+$lblRootNote.Location = New-Object System.Drawing.Point(14, 338)
+$lblRootNote.Size = New-Object System.Drawing.Size(860, 20)
+$tabRoot.Controls.Add($lblRootNote)
+
 # --- tab 5: screen (screenshot + touch forwarding) ---------------------------
 $btnCapture = New-Object System.Windows.Forms.Button
 $btnCapture.Text = 'Capture'
@@ -2342,6 +2476,21 @@ $btnListEncoders.Location = New-Object System.Drawing.Point(700, 22)
 $btnListEncoders.Size = New-Object System.Drawing.Size(80, 26)
 $grpVideo.Controls.Add($btnListEncoders)
 $toolTip.SetToolTip($btnListEncoders, 'Ask the phone which codecs it really has, and fill the lists with them')
+
+$lblCameraZoom = New-Object System.Windows.Forms.Label
+$lblCameraZoom.Text = 'Zoom'
+$lblCameraZoom.Location = New-Object System.Drawing.Point(12, 88)
+$lblCameraZoom.Size = New-Object System.Drawing.Size(40, 20)
+$grpCamera.Controls.Add($lblCameraZoom)
+
+$cmbCameraZoom = New-Object System.Windows.Forms.ComboBox
+$cmbCameraZoom.DropDownStyle = 'DropDown'
+$cmbCameraZoom.Location = New-Object System.Drawing.Point(56, 84)
+$cmbCameraZoom.Size = New-Object System.Drawing.Size(70, 24)
+$null = $cmbCameraZoom.Items.AddRange(@('1', '2', '3', '5', '10'))
+$cmbCameraZoom.Text = '1'
+$grpCamera.Controls.Add($cmbCameraZoom)
+$toolTip.SetToolTip($cmbCameraZoom, 'scrcpy --camera-zoom, 1 is no zoom. The camera must support it')
 
 $btnListCameraSizes = New-Object System.Windows.Forms.Button
 $btnListCameraSizes.Text = 'Sizes'
@@ -3390,7 +3539,7 @@ function Start-Sharing {
     #   n devices -> 'relay'  then one 'start' per device
     #   all       -> 'autorun'
     if ($useAll) {
-        $arguments = @('autorun') + (Get-ExtraArguments)
+        $arguments = @($(if ($chkShareAutostart.Checked) { 'autostart' } else { 'autorun' })) + (Get-ExtraArguments)
     } elseif ($serials.Count -gt 1) {
         $arguments = @('relay', '-p', "$port")
     } else {
@@ -5889,6 +6038,9 @@ function Get-CameraArguments {
     if ($fps) { $arguments += "--camera-fps=$fps" }
 
     if ($chkCameraHighSpeed.Checked) { $arguments += '--camera-high-speed' }
+
+    $zoom = $cmbCameraZoom.Text.Trim()
+    if ($zoom -and $zoom -ne '1' -and $zoom -match '^[\d.]+$') { $arguments += "--camera-zoom=$zoom" }
     if ($chkCameraTorch.Checked) { $arguments += '--camera-torch' }
 
     if ($chkCameraMic.Checked) {
@@ -6973,6 +7125,124 @@ function Open-FileOnPhone {
     Write-Log 'Android blocks file:// URIs for most apps; the phone may refuse to open it.' $colorWarn
 }
 
+
+
+# --- root and recovery --------------------------------------------------------
+
+function Update-RootAvailability {
+    <#
+        Marks each action against the device that is selected, rather than
+        guessing. A retail phone answers "user" and everything stays off.
+    #>
+    $serial = Get-TargetSerial
+    if (-not $serial) { $lblRootState.Text = 'select a device first'; return }
+
+    $buildType = (Invoke-DeviceShell -Serial $serial -CommandArguments @('getprop', 'ro.build.type')).Text.Trim()
+    $debuggable = (Invoke-DeviceShell -Serial $serial -CommandArguments @('getprop', 'ro.debuggable')).Text.Trim()
+    $secure = (Invoke-DeviceShell -Serial $serial -CommandArguments @('getprop', 'ro.secure')).Text.Trim()
+    $uid = (Invoke-DeviceShell -Serial $serial -CommandArguments @('id', '-u')).Text.Trim()
+
+    $rootable = ($buildType -eq 'userdebug') -or ($buildType -eq 'eng') -or ($debuggable -eq '1')
+    $alreadyRoot = ($uid -eq '0')
+
+    $lblRootState.Text = "build=$buildType  debuggable=$debuggable  secure=$secure  shell uid=$uid"
+    if ($alreadyRoot) {
+        $lblRootState.ForeColor = [System.Drawing.Color]::FromArgb(0, 110, 40)
+        $lblRootState.Text += '   -> adb is already root'
+    } elseif ($rootable) {
+        $lblRootState.ForeColor = [System.Drawing.Color]::FromArgb(0, 110, 40)
+        $lblRootState.Text += '   -> this build allows adb root'
+    } else {
+        $lblRootState.ForeColor = [System.Drawing.Color]::FromArgb(150, 80, 0)
+        $lblRootState.Text += '   -> a retail build: none of this can work here'
+    }
+
+    foreach ($button in $script:rootButtons) {
+        $needs = $button.Tag.Needs
+        $possible = $false
+        if ($needs -like 'nothing*') { $possible = $true }
+        elseif ($needs -like '*rooted adbd*') { $possible = $alreadyRoot }
+        elseif ($needs -like '*userdebug*') { $possible = $rootable }
+        elseif ($needs -like '*root*') { $possible = ($rootable -or $alreadyRoot) }
+
+        $mark = if ($possible) { [string][char]0x2714 } else { [string][char]0x26D4 }
+        $button.Text = $mark + ' ' + $button.Tag.Caption
+        $button.Enabled = $possible -or $chkRootUnlock.Checked
+    }
+
+    Write-Log "$serial : build=$buildType debuggable=$debuggable, shell uid=$uid" $colorInfo
+}
+
+function Set-RootUnlock {
+    foreach ($button in $script:rootButtons) {
+        $allowed = $button.Text.StartsWith([string][char]0x2714)
+        $button.Enabled = $chkRootUnlock.Checked -or $allowed
+    }
+    if ($chkRootUnlock.Checked) {
+        Write-Log 'Root actions unlocked. A retail phone still refuses them, and that refusal is the phone talking.' $colorWarn
+    }
+}
+
+function Invoke-RootAction {
+    param([string[]]$Arguments)
+
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Write-Log ("adb -s $serial " + ($Arguments -join ' ')) $colorStep
+    $result = Invoke-Adb -CommandArguments (@('-s', $serial) + $Arguments)
+    $text = (($result.Lines | Where-Object { $_.Trim() }) -join ' ').Trim()
+    if (-not $text) { $text = "(no output, exit $($result.ExitCode))" }
+
+    $bad = ($result.ExitCode -ne 0) -or ($text -match 'cannot run as root|not permitted|closed|error')
+    Write-Log ("  " + $text) $(if ($bad) { $colorBad } else { $colorGood })
+    if ($bad -and $text -match 'production builds') {
+        Write-Log '  that is the phone refusing, exactly as this page warned.' $colorInfo
+    }
+    Wait-Pumped -Milliseconds 800
+    Update-DeviceList
+}
+
+function Save-AdbKeygen {
+    $dialog = New-Object System.Windows.Forms.SaveFileDialog
+    $dialog.Filter = 'adb key (*.key)|*.key|All files (*.*)|*.*'
+    $dialog.FileName = 'adbkey'
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    $result = Invoke-Adb -CommandArguments @('keygen', $dialog.FileName)
+    Write-Log ("keygen: " + ((($result.Lines | Where-Object { $_.Trim() }) -join ' ').Trim())) $colorInfo
+    if (Test-Path -LiteralPath $dialog.FileName) {
+        Write-Log "Wrote $($dialog.FileName). Nothing was installed; adb still uses its own key." $colorWarn
+    }
+}
+
+function Send-Sideload {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Filter = 'Update package (*.zip)|*.zip'
+    $dialog.Title = 'Sideload - the phone must already be in recovery'
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "Sideload this package to $serial ?" + [Environment]::NewLine + [Environment]::NewLine +
+        'This writes a system update. A phone that is not in recovery simply refuses; one that is ' +
+        'must not be unplugged until it finishes.',
+        'Sideload', 'YesNo', 'Warning')
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+    Invoke-RootAction -Arguments @('sideload', $dialog.FileName)
+}
+
+function Restart-Sharing {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Write-Log "gnirehtet restart $serial ..." $colorStep
+    $result = Invoke-Gnirehtet -CommandArguments (@('restart', $serial) + (Get-ExtraArguments))
+    Write-Log ((($result.Lines | Where-Object { $_.Trim() }) -join ' ').Trim()) $colorInfo
+}
 
 # --- Wi-Fi, Bluetooth, NFC and users -----------------------------------------
 
@@ -9894,6 +10164,25 @@ $btnSmsDelete.Add_Click({ Remove-Sms })
 $btnSmsEdit.Add_Click({ Edit-Sms })
 $btnSmsExport.Add_Click({ Export-Sms })
 
+$btnRootCheck.Add_Click({ Update-RootAvailability })
+$chkRootUnlock.Add_CheckedChanged({ Set-RootUnlock })
+$btnRootOn.Add_Click({ Invoke-RootAction -Arguments @('root') })
+$btnRootOff.Add_Click({ Invoke-RootAction -Arguments @('unroot') })
+$btnRootRemount.Add_Click({ Invoke-RootAction -Arguments @('remount') })
+$btnRootWaitDevice.Add_Click({ Invoke-RootAction -Arguments @('wait-for-device') })
+$btnRootVerityOff.Add_Click({ Invoke-RootAction -Arguments @('disable-verity') })
+$btnRootVerityOn.Add_Click({ Invoke-RootAction -Arguments @('enable-verity') })
+$btnRootSideload.Add_Click({ Send-Sideload })
+$btnRootEmu.Add_Click({
+    $command = [Microsoft.VisualBasic.Interaction]::InputBox(
+        'Emulator console command (an emulator only; a phone refuses):', 'emu', 'help')
+    if ("$command".Trim()) { Invoke-RootAction -Arguments @('emu', $command.Trim()) }
+})
+$btnRootJdwp.Add_Click({ Invoke-RootAction -Arguments @('jdwp') })
+$btnRootKeygen.Add_Click({ Save-AdbKeygen })
+$btnRootDevPath.Add_Click({ Invoke-RootAction -Arguments @('get-devpath') })
+$btnShareRestart.Add_Click({ Restart-Sharing })
+
 $btnPair.Add_Click({ Start-WirelessPairing })
 $btnMdns.Add_Click({ Show-MdnsDevices })
 $btnReconnect.Add_Click({ Invoke-Reconnect })
@@ -9942,6 +10231,9 @@ $tabs.Add_SelectedIndexChanged({
         elseif ($tabs.SelectedTab -eq $tabBt -and $lstBt.Items.Count -eq 0) { Update-BluetoothList }
         elseif ($tabs.SelectedTab -eq $tabNfc) { Update-NfcState }
         elseif ($tabs.SelectedTab -eq $tabUsers -and $lstUsers.Items.Count -eq 0) { Update-UserList }
+        elseif ($tabs.SelectedTab -eq $tabAdvanced -and $tabsAdvanced.SelectedTab -eq $tabRoot) {
+            Update-RootAvailability
+        }
     }
 })
 
