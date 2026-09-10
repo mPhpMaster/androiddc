@@ -1025,7 +1025,7 @@ $toolTip.SetToolTip($btnKeyboardLayout, 'Open the physical-keyboard layout setti
 $grpAudio = New-Object System.Windows.Forms.GroupBox
 $grpAudio.Text = 'Microphone / audio  (phone -> PC)'
 $grpAudio.Location = New-Object System.Drawing.Point(18, 200)
-$grpAudio.Size = New-Object System.Drawing.Size(820, 96)
+$grpAudio.Size = New-Object System.Drawing.Size(820, 128)
 $tabCamera.Controls.Add($grpAudio)
 
 $lblAudioSource = New-Object System.Windows.Forms.Label
@@ -1052,10 +1052,60 @@ $btnListen.Size = New-Object System.Drawing.Size(96, 26)
 $grpAudio.Controls.Add($btnListen)
 $toolTip.SetToolTip($btnListen, 'Stream that audio source from the phone to the PC speakers (no video)')
 
+
+$lblAudioCodec = New-Object System.Windows.Forms.Label
+$lblAudioCodec.Text = 'Codec'
+$lblAudioCodec.Location = New-Object System.Drawing.Point(14, 62)
+$lblAudioCodec.Size = New-Object System.Drawing.Size(48, 20)
+$grpAudio.Controls.Add($lblAudioCodec)
+
+$cmbAudioCodec = New-Object System.Windows.Forms.ComboBox
+$cmbAudioCodec.DropDownStyle = 'DropDownList'
+$cmbAudioCodec.Location = New-Object System.Drawing.Point(68, 58)
+$cmbAudioCodec.Size = New-Object System.Drawing.Size(120, 24)
+$null = $cmbAudioCodec.Items.AddRange(@('default', 'opus', 'aac', 'flac', 'raw'))
+$cmbAudioCodec.SelectedIndex = 0
+$grpAudio.Controls.Add($cmbAudioCodec)
+$toolTip.SetToolTip($cmbAudioCodec, 'scrcpy --audio-codec. raw is uncompressed and needs a fast link')
+
+$lblAudioBitrate = New-Object System.Windows.Forms.Label
+$lblAudioBitrate.Text = 'Bit rate'
+$lblAudioBitrate.Location = New-Object System.Drawing.Point(200, 62)
+$lblAudioBitrate.Size = New-Object System.Drawing.Size(54, 20)
+$grpAudio.Controls.Add($lblAudioBitrate)
+
+$cmbAudioBitrate = New-Object System.Windows.Forms.ComboBox
+$cmbAudioBitrate.DropDownStyle = 'DropDown'
+$cmbAudioBitrate.Location = New-Object System.Drawing.Point(258, 58)
+$cmbAudioBitrate.Size = New-Object System.Drawing.Size(100, 24)
+$null = $cmbAudioBitrate.Items.AddRange(@('default', '64K', '128K', '196K', '256K'))
+$cmbAudioBitrate.SelectedIndex = 0
+$grpAudio.Controls.Add($cmbAudioBitrate)
+$toolTip.SetToolTip($cmbAudioBitrate, 'scrcpy --audio-bit-rate')
+
+$chkAudioDup = New-Object System.Windows.Forms.CheckBox
+$chkAudioDup.Text = 'keep playing on the phone too'
+$chkAudioDup.Location = New-Object System.Drawing.Point(374, 60)
+$chkAudioDup.Size = New-Object System.Drawing.Size(230, 22)
+$grpAudio.Controls.Add($chkAudioDup)
+$toolTip.SetToolTip($chkAudioDup, 'scrcpy --audio-dup: sound comes out of both, instead of only the PC. Android 13 and newer, output source only')
+
+$lblAudioBuffer = New-Object System.Windows.Forms.Label
+$lblAudioBuffer.Text = 'Buffer ms'
+$lblAudioBuffer.Location = New-Object System.Drawing.Point(614, 62)
+$lblAudioBuffer.Size = New-Object System.Drawing.Size(66, 20)
+$grpAudio.Controls.Add($lblAudioBuffer)
+
+$txtAudioBuffer = New-Object System.Windows.Forms.TextBox
+$txtAudioBuffer.Location = New-Object System.Drawing.Point(684, 58)
+$txtAudioBuffer.Size = New-Object System.Drawing.Size(60, 24)
+$grpAudio.Controls.Add($txtAudioBuffer)
+$toolTip.SetToolTip($txtAudioBuffer, 'scrcpy --audio-buffer: lower is snappier, higher survives a busy link. Blank leaves the default')
+
 $lblAudioHint = New-Object System.Windows.Forms.Label
 $lblAudioHint.Text = 'Phone -> PC only. Android gives no way to push PC audio to the phone speaker.'
 $lblAudioHint.ForeColor = [System.Drawing.Color]::DimGray
-$lblAudioHint.Location = New-Object System.Drawing.Point(14, 62)
+$lblAudioHint.Location = New-Object System.Drawing.Point(14, 96)
 $lblAudioHint.Size = New-Object System.Drawing.Size(700, 20)
 $grpAudio.Controls.Add($lblAudioHint)
 
@@ -2285,6 +2335,20 @@ foreach ($name in @('Camera', 'Facing', 'Size', 'FPS', 'Aspect')) {
         $grpCamera.Controls.Add($label)
     }
 }
+
+$btnListEncoders = New-Object System.Windows.Forms.Button
+$btnListEncoders.Text = 'Codecs'
+$btnListEncoders.Location = New-Object System.Drawing.Point(700, 22)
+$btnListEncoders.Size = New-Object System.Drawing.Size(80, 26)
+$grpVideo.Controls.Add($btnListEncoders)
+$toolTip.SetToolTip($btnListEncoders, 'Ask the phone which codecs it really has, and fill the lists with them')
+
+$btnListCameraSizes = New-Object System.Windows.Forms.Button
+$btnListCameraSizes.Text = 'Sizes'
+$btnListCameraSizes.Location = New-Object System.Drawing.Point(348, 52)
+$btnListCameraSizes.Size = New-Object System.Drawing.Size(70, 26)
+$grpCamera.Controls.Add($btnListCameraSizes)
+$toolTip.SetToolTip($btnListCameraSizes, 'Ask the phone which camera sizes it supports')
 
 # --- tab: file browser / transfer --------------------------------------------
 $btnFileUp = New-Object System.Windows.Forms.Button
@@ -4326,6 +4390,87 @@ function Show-Notifications {
     Update-Capture -Quiet
 }
 
+
+function Get-DeviceCapabilityList {
+    <#
+        Asks scrcpy what this phone actually supports and returns the lines it
+        printed. scrcpy writes these lists to stderr and exits, so a plain call
+        is enough - there is no session to keep.
+    #>
+    param([string]$Serial, [string]$Switch)
+
+    if (-not $script:scrcpyPath) { Write-Log 'scrcpy.exe not found.' $colorBad; return @() }
+
+    Write-Log "scrcpy $Switch ..." $colorStep
+    $result = Invoke-OffThread -FilePath $script:scrcpyPath -ArgumentList @('-s', $Serial, $Switch) -TimeoutMs 60000
+    return @($result.Lines | Where-Object { $_ -and $_.Trim() })
+}
+
+function Update-EncoderList {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $lines = Get-DeviceCapabilityList -Serial $serial -Switch '--list-encoders'
+    # scrcpy prints one line per encoder, in the shape
+    #     --video-codec=h264 --video-encoder=c2.mtk.avc.encoder   (hw) [vendor]
+    $video = @()
+    $audio = @()
+    foreach ($line in $lines) {
+        if ($line -match '--video-codec=(\S+)') { $video += $Matches[1] }
+        elseif ($line -match '--audio-codec=(\S+)') { $audio += $Matches[1] }
+    }
+    $video = @($video | Sort-Object -Unique)
+    $audio = @($audio | Sort-Object -Unique)
+
+    if ($video.Count -gt 0) {
+        $keep = "$($cmbCodec.SelectedItem)"
+        $cmbCodec.Items.Clear()
+        $null = $cmbCodec.Items.Add('default')
+        $null = $cmbCodec.Items.AddRange($video)
+        $cmbCodec.SelectedIndex = [Math]::Max(0, $cmbCodec.Items.IndexOf($keep))
+        Write-Log ("video codecs on this phone: " + ($video -join ', ')) $colorGood
+    }
+    if ($audio.Count -gt 0) {
+        $keep = "$($cmbAudioCodec.SelectedItem)"
+        $cmbAudioCodec.Items.Clear()
+        $null = $cmbAudioCodec.Items.Add('default')
+        $null = $cmbAudioCodec.Items.AddRange($audio)
+        $cmbAudioCodec.SelectedIndex = [Math]::Max(0, $cmbAudioCodec.Items.IndexOf($keep))
+        Write-Log ("audio codecs on this phone: " + ($audio -join ', ')) $colorGood
+    }
+    if ($video.Count -eq 0 -and $audio.Count -eq 0) {
+        Write-Log 'scrcpy listed no encoders; the fixed choices are still there.' $colorWarn
+        foreach ($line in ($lines | Select-Object -Last 3)) { Write-Log ("  " + $line) $colorInfo }
+    }
+}
+
+function Update-CameraSizeList {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $lines = Get-DeviceCapabilityList -Serial $serial -Switch '--list-camera-sizes'
+    $sizes = @()
+    foreach ($line in $lines) {
+        foreach ($match in [regex]::Matches($line, '\b(\d{3,5}x\d{3,5})\b')) { $sizes += $match.Groups[1].Value }
+    }
+    # widest first, so the useful ones are at the top
+    $sizes = @($sizes | Sort-Object -Unique | Sort-Object -Property @{
+        Expression = { [int](($_ -split 'x')[0]) } } -Descending)
+
+    if ($sizes.Count -eq 0) {
+        Write-Log 'scrcpy listed no camera sizes; the fixed choices are still there.' $colorWarn
+        foreach ($line in ($lines | Select-Object -Last 3)) { Write-Log ("  " + $line) $colorInfo }
+        return
+    }
+
+    $keep = $cmbCameraSize.Text
+    $cmbCameraSize.Items.Clear()
+    $null = $cmbCameraSize.Items.AddRange($sizes)
+    $null = $cmbCameraSize.Items.Add('sensor max')
+    $cmbCameraSize.Text = $keep
+    Write-Log ("$($sizes.Count) camera size(s) reported by $serial.") $colorGood
+}
+
 function Start-AudioListen {
     param([switch]$ToFile)
 
@@ -4336,6 +4481,27 @@ function Start-AudioListen {
 
     $source = "$($cmbAudioSource.SelectedItem)"
     $arguments = @('-s', $serial, '--no-video', "--audio-source=$source")
+
+    if ("$($cmbAudioCodec.SelectedItem)" -ne 'default') {
+        $arguments += "--audio-codec=$($cmbAudioCodec.SelectedItem)"
+    }
+    $rate = $cmbAudioBitrate.Text.Trim()
+    if ($rate -and $rate -ne 'default') { $arguments += "--audio-bit-rate=$rate" }
+
+    $buffer = $txtAudioBuffer.Text.Trim()
+    if ($buffer -match '^\d+$') { $arguments += "--audio-buffer=$buffer" }
+
+    if ($chkAudioDup.Checked) {
+        # --audio-dup needs the output source, and needs playback left on:
+        # scrcpy refuses it outright while recording, which turns playback off
+        if ($ToFile) {
+            Write-Log "'keep playing on the phone' cannot be used while recording; recording without it." $colorWarn
+        } elseif ($source -ne 'output') {
+            Write-Log "'keep playing on the phone' works with the output source only, not '$source'." $colorWarn
+        } else {
+            $arguments += '--audio-dup'
+        }
+    }
 
     if ($ToFile) {
         $dialog = New-Object System.Windows.Forms.SaveFileDialog
@@ -7581,6 +7747,7 @@ function Update-MirrorLayout {
         $pair[1].SetBounds($x, 22, $pair[3], 24)
         $x += $pair[3] + 16
     }
+    $btnListEncoders.SetBounds($x, 21, $btnListEncoders.Width, 26)
 
     $grpWindowOpts.SetBounds(12, 68, $half, 80)
     $null = Set-CheckRow -Left 12 -Top 24 -Limit ($half - 16) -Boxes @($chkFullscreen, $chkBorderless,
@@ -7648,6 +7815,7 @@ function Update-CamMicLayout {
     $inner = $width - 24
 
     $grpCamera.SetBounds(12, 6, $inner, 142)
+    $btnListCameraSizes.SetBounds([Math]::Max(300, ($inner - 92)), 52, 70, 26)
     $script:cameraLabels['Camera'].SetBounds(12, 26, 52, 20)
     $cmbCamera.SetBounds(68, 22, [Math]::Max(160, ($inner - 420)), 24)
     $btnCameraList.SetBounds(($cmbCamera.Bounds.Right + 8), 21, $btnCameraList.Width, 26)
@@ -7672,11 +7840,21 @@ function Update-CamMicLayout {
     $null = Set-ButtonRowLeft -Left 12 -Top 156 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
         $btnCameraStop, $btnCameraCommand)
 
-    $grpAudio.SetBounds(12, 196, $inner, 92)
+    $grpAudio.SetBounds(12, 196, $inner, 126)
     $lblAudioSource.SetBounds(12, 30, 50, 20)
     $cmbAudioSource.SetBounds(66, 26, 200, 24)
     $null = Set-ButtonRowLeft -Left 274 -Top 25 -Buttons @($btnListen, $btnListenStop, $btnRecordAudio)
-    $lblAudioHint.SetBounds(12, 62, [Math]::Max(200, $inner - 24), 20)
+
+    # quality and routing on their own row
+    $lblAudioCodec.SetBounds(12, 62, 48, 20)
+    $cmbAudioCodec.SetBounds(66, 58, 120, 24)
+    $lblAudioBitrate.SetBounds(198, 62, 54, 20)
+    $cmbAudioBitrate.SetBounds(256, 58, 100, 24)
+    $chkAudioDup.SetBounds(372, 60, 230, 22)
+    $lblAudioBuffer.SetBounds(612, 62, 66, 20)
+    $txtAudioBuffer.SetBounds(682, 58, 60, 24)
+
+    $lblAudioHint.SetBounds(12, 96, [Math]::Max(200, $inner - 24), 20)
 }
 
 
@@ -9435,6 +9613,8 @@ $btnHotspotSettings.Add_Click({
 })
 
 $btnCameraList.Add_Click({ Update-CameraList })
+$btnListEncoders.Add_Click({ Update-EncoderList })
+$btnListCameraSizes.Add_Click({ Update-CameraSizeList })
 $btnCameraStart.Add_Click({ Start-Camera })
 $btnCameraFront.Add_Click({ Start-Camera -Facing 'front' })
 $btnCameraBack.Add_Click({ Start-Camera -Facing 'back' })
