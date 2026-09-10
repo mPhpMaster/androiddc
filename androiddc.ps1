@@ -49,6 +49,7 @@ $script:outFile = $null
 $script:audioEncoders = @()   # filled from scrcpy --list-encoders
 $script:appLabels = @{}       # serial -> @{ package = app name }, from scrcpy --list-apps
 $script:appLabelsSeen = @{}   # serial -> the user-installed packages when the names were read
+$script:rootCheckedSerial = $null   # the phone the Root page's marks were read from
 $script:errFile = $null
 $script:outOffset = 0
 $script:errOffset = 0
@@ -1964,7 +1965,7 @@ $btnRootSideload = New-RootAction -Caption 'sideload a zip...' -X 12 -Y 26 -Widt
 $btnRootEmu = New-RootAction -Caption 'emu console...' -X 180 -Y 26 -Width 150 `
     -Why 'Talks to the emulator console.' -Needs 'an emulator, not a phone'
 $btnRootJdwp = New-RootAction -Caption 'jdwp' -X 338 -Y 26 -Width 110 `
-    -Why 'Lists debuggable process ids.' -Needs 'a debuggable app running'
+    -Why 'Lists the processes that accept a Java debugger. adb jdwp never stops by itself, so it is given three seconds.' -Needs 'a debuggable app running'
 $btnRootKeygen = New-RootAction -Caption 'keygen...' -X 456 -Y 26 -Width 120 `
     -Why 'Writes a new adb key pair to a file.' -Needs 'nothing, though it re-pairs nothing by itself'
 $btnRootDevPath = New-RootAction -Caption 'get-devpath' -X 584 -Y 26 -Width 130 `
@@ -7345,6 +7346,137 @@ function Open-FileOnPhone {
 
 # --- root and recovery --------------------------------------------------------
 
+function Update-RootLayout {
+    <#
+        The page was laid out once, at 864 px, and scrolled sideways in any
+        narrower window. Every row now takes the page's own width, and a group
+        whose buttons do not fit on one line wraps them onto a second.
+    #>
+    $width = $tabRoot.ClientSize.Width
+    if ($width -lt 300) { return }
+    $inner = $width - 24
+
+    $lblRootWarn.SetBounds(14, 10, ($inner - 4), 36)
+    $chkRootUnlock.SetBounds(14, 50, 300, 22)
+    $btnRootCheck.SetBounds(330, 46, 150, 28)
+    # the verdict is long - build, debuggable, secure, uid, then the conclusion -
+    # so it has a line of its own instead of being cut off beside the button
+    $lblRootState.SetBounds(14, 80, ($inner - 4), 20)
+
+    $y = 106
+    foreach ($entry in @(
+            @($grpRootAdb, @($btnRootOn, $btnRootOff, $btnRootRemount, $btnRootWaitDevice)),
+            @($grpRootImage, @($btnRootVerityOff, $btnRootVerityOn)),
+            @($grpRootOther, @($btnRootSideload, $btnRootEmu, $btnRootJdwp, $btnRootKeygen, $btnRootDevPath)))) {
+        $x = 12
+        $row = 26
+        foreach ($button in $entry[1]) {
+            if ($x -gt 12 -and ($x + $button.Width) -gt ($inner - 12)) { $x = 12; $row += 34 }
+            $button.SetBounds($x, $row, $button.Width, 28)
+            $x += $button.Width + 8
+        }
+        $entry[0].SetBounds(12, $y, $inner, ($row + 40))
+        $y += $row + 46
+    }
+    $lblRootNote.SetBounds(14, $y, ($inner - 4), 36)
+}
+
+function Reset-RootAvailability {
+    # marks read from one phone must not be read later as another phone's answer
+    $script:rootCheckedSerial = $null
+    if ($lblRootState.Text -eq 'not checked yet') { return }
+    $lblRootState.Text = 'not checked yet'
+    $lblRootState.ForeColor = [System.Drawing.Color]::DimGray
+    foreach ($button in $script:rootButtons) {
+        $button.Text = [string][char]0x26D4 + ' ' + $button.Tag.Caption
+        $button.Enabled = $chkRootUnlock.Checked
+    }
+}
+
+function Get-JdwpProcesses {
+    <#
+        adb jdwp prints the ids of processes that accept a Java debugger, and
+        then keeps running, adding ids as apps start, until it is stopped.
+        Measured on the test phone: still running, with nothing printed, when a
+        10 s limit ended it. Through Invoke-Adb the button therefore blocked for
+        three minutes and then threw the output away. It now gets a few seconds
+        and is stopped, and what it printed by then is the answer. The process
+        stopped is the adb client for this one command, never the adb server.
+    #>
+    param([string]$Serial, [int]$Milliseconds = 3000)
+
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = $script:adbPath
+    $info.Arguments = "-s $Serial jdwp"
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $info
+    if (-not $process.Start()) { return $null }
+
+    $buffer = New-Object System.IO.MemoryStream
+    $copy = $process.StandardOutput.BaseStream.CopyToAsync($buffer)
+    $errorText = ''
+    $script:busy++
+    try {
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+        while (-not $process.HasExited -and $watch.ElapsedMilliseconds -lt $Milliseconds) {
+            [System.Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 20
+        }
+        if (-not $process.HasExited) { try { $process.Kill() } catch { } }
+        $null = $process.WaitForExit(2000)
+        try { $null = $copy.Wait(1000) } catch { }
+        try { $errorText = $process.StandardError.ReadToEnd().Trim() } catch { }
+    } finally {
+        $script:busy--
+        if ($script:busy -lt 0) { $script:busy = 0 }
+        $process.Dispose()
+    }
+
+    $text = [System.Text.Encoding]::UTF8.GetString($buffer.ToArray())
+    return [PSCustomObject]@{
+        Pids  = @($text -split "`r?`n" | Where-Object { $_ -match '^\d+$' })
+        Error = $errorText
+    }
+}
+
+function Get-DeviceProcessNames {
+    # pid -> process name, from one ps on the phone; a bare pid tells nobody anything
+    param([string]$Serial)
+
+    $names = @{}
+    $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @('ps', '-A', '-o', 'PID,NAME')
+    foreach ($line in @($result.Lines)) {
+        if ($line -match '^\s*(\d+)\s+(\S+)') { $names[$Matches[1]] = $Matches[2] }
+    }
+    return $names
+}
+
+function Show-JdwpProcesses {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Write-Log "adb -s $serial jdwp  (for 3 s - it never stops by itself)" $colorStep
+    $result = Get-JdwpProcesses -Serial $serial
+    if (-not $result) { Write-Log '  adb did not start.' $colorBad; return }
+    if ($result.Error) { Write-Log ("  " + $result.Error) $colorBad; return }
+    if ($result.Pids.Count -eq 0) {
+        Write-Log ('  no process accepts a debugger. Only apps built as debuggable do, ' +
+            'and a retail phone rarely runs one.') $colorInfo
+        return
+    }
+
+    $names = Get-DeviceProcessNames -Serial $serial
+    foreach ($id in $result.Pids) {
+        $name = if ($names.ContainsKey($id)) { $names[$id] } else { '?' }
+        Write-Log ("  {0,-7} {1}" -f $id, $name) $colorGood
+    }
+}
+
 function Update-RootAvailability {
     <#
         Marks each action against the device that is selected, rather than
@@ -7386,6 +7518,7 @@ function Update-RootAvailability {
         $button.Enabled = $possible -or $chkRootUnlock.Checked
     }
 
+    $script:rootCheckedSerial = $serial
     Write-Log "$serial : build=$buildType debuggable=$debuggable, shell uid=$uid" $colorInfo
 }
 
@@ -7408,7 +7541,11 @@ function Invoke-RootAction {
     Write-Log ("adb -s $serial " + ($Arguments -join ' ')) $colorStep
     $result = Invoke-Adb -CommandArguments (@('-s', $serial) + $Arguments)
     $text = (($result.Lines | Where-Object { $_.Trim() }) -join ' ').Trim()
-    if (-not $text) { $text = "(no output, exit $($result.ExitCode))" }
+    if (-not $text) {
+        $text = "(no output, exit $($result.ExitCode))"
+        # measured: adb emu on a phone fails with exit 1 and prints nothing at all
+        if ($Arguments[0] -eq 'emu' -and $result.ExitCode -ne 0) { $text += ' - a phone has no emulator console' }
+    }
 
     $bad = ($result.ExitCode -ne 0) -or ($text -match 'cannot run as root|not permitted|closed|error')
     Write-Log ("  " + $text) $(if ($bad) { $colorBad } else { $colorGood })
@@ -7417,6 +7554,12 @@ function Invoke-RootAction {
     }
     Wait-Pumped -Milliseconds 800
     Update-DeviceList
+    # root and unroot restart adbd on the same phone: the serial stays, the
+    # answer can change. Wait for adbd to come back, then read it again.
+    if ($Arguments[0] -in 'root', 'unroot') {
+        $null = Invoke-Adb -CommandArguments @('-s', $serial, 'wait-for-device') -TimeoutMs 15000
+        Update-RootAvailability
+    }
 }
 
 function Save-AdbKeygen {
@@ -10069,6 +10212,18 @@ $statusTimer.Add_Tick({
     $statusTimer.Stop()
     # picking another phone refreshes its DNS line too
     if (Test-PageShown -Page $tabTools) { $null = Show-DnsState -Quiet }
+    # and the root page's marks, which belong to one phone: checked again if the
+    # page is on screen, otherwise cleared, so they are never shown later as the
+    # answer of a phone that was not asked.
+    # Only a different phone counts - and "nothing selected" is not one.
+    # Update-DeviceList empties the list, asks adb about every phone, and only
+    # then selects the same one again; this timer keeps firing in between, and
+    # a tick that saw the empty list used to clear the marks, so the same phone
+    # came back as "new" and was read again after every refresh.
+    $selected = Get-SelectedSerial
+    if ($selected -and $selected -ne $script:rootCheckedSerial) {
+        if (Test-PageShown -Page $tabRoot) { Update-RootAvailability } else { Reset-RootAvailability }
+    }
     Update-DeviceStatus
 })
 
@@ -10404,7 +10559,13 @@ $tabsTethering.Add_SelectedIndexChanged({
 $tabsAdvanced.Add_SelectedIndexChanged({
     Update-ToolsLayout
     Update-MirrorLayout
+    Update-RootLayout
     Update-RightLayout
+    # the root page says what this phone allows as soon as it is opened, from
+    # either tab - it used to wait until the outer tab changed
+    if ($tabsAdvanced.SelectedTab -eq $tabRoot -and $script:busy -eq 0 -and (Get-SelectedSerial)) {
+        Update-RootAvailability
+    }
 })
 
 
@@ -10519,7 +10680,7 @@ $btnRootEmu.Add_Click({
         'Emulator console command (an emulator only; a phone refuses):', 'emu', 'help')
     if ("$command".Trim()) { Invoke-RootAction -Arguments @('emu', $command.Trim()) }
 })
-$btnRootJdwp.Add_Click({ Invoke-RootAction -Arguments @('jdwp') })
+$btnRootJdwp.Add_Click({ Show-JdwpProcesses })
 $btnRootKeygen.Add_Click({ Save-AdbKeygen })
 $btnRootDevPath.Add_Click({ Invoke-RootAction -Arguments @('get-devpath') })
 $btnShareRestart.Add_Click({ Restart-Sharing })
@@ -10545,6 +10706,7 @@ $splitMain.Panel1.Add_Resize({ Update-ScreenLayout })
 $splitMain.Panel2.Add_Resize({
     Update-RightLayout
     Update-ShellLayout
+    Update-RootLayout
 })
 $splitMain.Add_SplitterMoved({
     Update-ScreenLayout
@@ -10559,6 +10721,7 @@ $tabs.Add_SelectedIndexChanged({
     Update-ShellLayout
     Update-LogcatLayout
     Update-ToolsLayout
+    Update-RootLayout
 
     # opening the tools tab shows the DNS of the selected phone right away
     if ((Test-PageShown -Page $tabTools) -and $script:busy -eq 0) {

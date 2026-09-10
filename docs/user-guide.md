@@ -145,16 +145,29 @@ the debugging port are different numbers on that same screen; it asks for both.
 
 ### Root / recovery
 
-Eleven adb commands that cannot run on an ordinary retail phone: `root`, `unroot`, `remount`,
-`disable-verity`, `enable-verity`, `sideload`, `emu`, `jdwp`, `keygen`, `get-devpath` and
-`wait-for-device`. They are shown rather than hidden, each switched off and marked, with a
+Eleven adb commands, most of which an ordinary retail phone refuses: `root`, `unroot`,
+`remount`, `disable-verity`, `enable-verity`, `sideload`, `emu`, `jdwp`, `keygen`,
+`get-devpath` and `wait-for-device`. They are shown rather than hidden, each marked, with a
 tooltip saying what it would need.
 
-**Check this device** reads `ro.build.type`, `ro.debuggable`, `ro.secure` and the shell uid
-from the phone that is selected, and marks each row ✔ or ⛔ from that. A retail phone answers
-`build=user`, and only the harmless three stay on. *I understand — let me try anyway* unlocks
-the rest for a rooted or userdebug build; the phone still refuses what it refuses, and the log
-says so plainly.
+The page reads `ro.build.type`, `ro.debuggable`, `ro.secure` and the shell uid as soon as it is
+opened, from either tab, and marks each row ✔ or ⛔ from that; **Check this device** reads
+them again. A retail phone answers `build=user`, and only the harmless three stay on:
+`wait-for-device`, `keygen` and `get-devpath`.
+
+The marks belong to one phone. Pick another while the page is open and it is read again; pick
+another while it is closed and the marks are cleared, so they are never shown as the answer of
+a phone that was not asked. Re-selecting the same phone, or refreshing the list, reads nothing
+again.
+
+*I understand — let me try anyway* unlocks the rest for a rooted or userdebug build; the phone
+still refuses what it refuses, and the log says so plainly. `root` and `unroot` restart adbd,
+so after either one the page waits for the phone to come back and reads it again.
+
+* **jdwp** lists the processes that accept a Java debugger, by name. `adb jdwp` never stops by
+  itself, so it is given three seconds; on a retail phone the answer is usually "none".
+* **emu** on a phone fails without a word from adb; the log adds that a phone has no emulator
+  console.
 
 scrcpy's `--v4l2-sink` is Linux only and is not in the Windows build at all, so it has a note
 there instead of a dead button.

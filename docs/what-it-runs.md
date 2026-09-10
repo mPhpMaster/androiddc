@@ -133,11 +133,13 @@ of a fixed list.
 
 ## Root and recovery
 
-Only from the *Root / recovery* page, only after it is unlocked there, and each one is
-refused by an ordinary phone: `adb root`, `unroot`, `remount`, `disable-verity`,
+Only from the *Root / recovery* page: `adb root`, `unroot`, `remount`, `disable-verity`,
 `enable-verity`, `sideload <zip>`, `emu <command>`, `jdwp`, `keygen <file>`, `get-devpath`,
-`wait-for-device`. The page first reads `getprop ro.build.type`, `ro.debuggable`, `ro.secure`
-and `id -u` to say which of them this device would allow.
+`wait-for-device`. An ordinary phone allows only the last three, so the others stay off until
+the page is unlocked. The page reads `getprop ro.build.type`, `ro.debuggable`, `ro.secure` and
+`id -u` when it is opened, to say which of them this device would allow. `jdwp` runs for three
+seconds and is then stopped, and the ids it printed are named with `adb shell ps -A -o
+PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone is read again.
 
 ## Connection plumbing
 

@@ -19,15 +19,22 @@ anything added next.
 | 4 — shown but blocked | done: Advanced ▸ Root / recovery, eleven commands marked against the real device |
 | 5 — docs and checks | done: user guide, shortcuts, command reference, limits, README, and CI |
 
-> **Corrections, measured on 2026-09-10.** Three of the "done" claims above did not hold when
+> **Corrections, measured on 2026-09-10.** Four of the "done" claims above did not hold when
 > they were checked against the code and the running window.
 >
 > * **The layout audit was never run at the minimum window size.** Phases 1 and 5 say it
 >   passes "at both the default and the minimum window size". Only the default size had been
 >   measured. At the default 1420 × 900 it does pass: 0 overlaps and 0 controls outside their
->   box, over 54 containers. At the minimum 1120 × 700 it does not: 3 overlaps and 30
+>   box, over 54 containers. At the minimum 1120 × 700 it did not: 3 overlaps and 31
 >   controls outside, on most pages, because a page there is only about 711 × 248. Cam / Mic
->   now scrolls instead of cutting its audio controls off; the other pages are not fixed.
+>   now scrolls instead of cutting its audio controls off, and Root / recovery lays itself
+>   out to the page's width, which brings it to 24. The other pages are not fixed.
+> * **"Checked at run time when a device is selected" was half true.** The Root page read the
+>   phone when the outer *Advanced* tab was opened - not from its own tab, and not when
+>   another phone was picked - so one phone's marks could stay on screen for another. It now
+>   reads on opening from either tab, reads again for a different phone, and clears the marks
+>   when the page is closed. `jdwp`, which never ends by itself, blocked for three minutes; it
+>   now stops after three seconds.
 > * **`--audio-encoder` was listed in Phase 2 but did not exist.** It does now: Cam / Mic ▸
 >   Microphone has an encoder list that follows the codec, filled from the phone.
 > * **`--list-apps` was listed in Phase 2 but did not exist.** It does now: the Apps list has

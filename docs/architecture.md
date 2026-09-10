@@ -135,12 +135,17 @@ without anyone noticing:
 
 Count the matches before replacing, and stop if the count is not one.
 
+**Delete the previous report before starting.** A harness that waits for the test's "done"
+line finds the one the last run left behind, at once, and closes the window before the new
+test has begun. It happened twice in one session: one run printed the old report as though it
+were new, the other closed the window halfway through the test.
+
 Two checks worth repeating after any edit:
 
 * **Layout:** walk **every group box**, not only every page, and compare `Bounds.IntersectsWith`
   between children and against `ClientSize` — **at the default size and again at the
   minimum size**. The target is zero overlaps and zero controls outside their box. Measured
-  on 2026-09-10 it is met at 1420 × 900 and not at 1120 × 700 (3 overlaps, 30 outside); see
+  on 2026-09-10 it is met at 1420 × 900 and not at 1120 × 700 (3 overlaps, 24 outside, after the Cam / Mic and Root pages were fixed); see
   the correction in the [roadmap](roadmap.md).
 * **Wiring:** compare the set of `$x.Add_Click(` handlers against the set of created controls.
   A patch that deletes code can silently take handlers with it; buttons then do nothing and
