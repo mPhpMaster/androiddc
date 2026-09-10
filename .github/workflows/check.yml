@@ -39,6 +39,10 @@ jobs:
         shell: pwsh
         run: .\.github\audit-variables.ps1
 
+      - name: Every control is shown and every button is wired
+        shell: pwsh
+        run: .\.github\audit-wiring.ps1
+
       - name: The launcher must point at a file that exists
         shell: pwsh
         run: |
