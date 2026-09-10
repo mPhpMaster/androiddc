@@ -19,6 +19,20 @@ anything added next.
 | 4 — shown but blocked | done: Advanced ▸ Root / recovery, eleven commands marked against the real device |
 | 5 — docs and checks | done: user guide, shortcuts, command reference, limits, README, and CI |
 
+> **Corrections, measured on 2026-09-10.** Three of the "done" claims above did not hold when
+> they were checked against the code and the running window.
+>
+> * **The layout audit was never run at the minimum window size.** Phases 1 and 5 say it
+>   passes "at both the default and the minimum window size". Only the default size had been
+>   measured. At the default 1420 × 900 it does pass: 0 overlaps and 0 controls outside their
+>   box, over 54 containers. At the minimum 1120 × 700 it does not: 3 overlaps and 30
+>   controls outside, on most pages, because a page there is only about 711 × 248. Cam / Mic
+>   now scrolls instead of cutting its audio controls off; the other pages are not fixed.
+> * **`--audio-encoder` was listed in Phase 2 but did not exist.** It does now: Cam / Mic ▸
+>   Microphone has an encoder list that follows the codec, filled from the phone.
+> * **`--list-apps` was listed in Phase 2 but did not exist** — nothing fills the app picker
+>   from the phone yet.
+
 ---
 
 ## Phase 0 — the right-click bug

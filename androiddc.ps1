@@ -46,6 +46,7 @@ $script:relayProcess = $null
 $script:activeSerials = @()
 $script:wifiDisabled = $false
 $script:outFile = $null
+$script:audioEncoders = @()   # filled from scrcpy --list-encoders
 $script:errFile = $null
 $script:outOffset = 0
 $script:errOffset = 0
@@ -450,6 +451,9 @@ $tabs.TabPages.Add($tabSms)
 $tabCamera = New-Object System.Windows.Forms.TabPage
 $tabCamera.Text = 'Cam / Mic'
 $tabCamera.BackColor = [System.Drawing.SystemColors]::Control
+# at the smallest window the page is about 250 px tall and the audio group ends
+# near 380, so it scrolls rather than cutting the audio controls off
+$tabCamera.AutoScroll = $true
 $tabs.TabPages.Add($tabCamera)
 
 $tabFiles = New-Object System.Windows.Forms.TabPage
@@ -1087,6 +1091,30 @@ $null = $cmbAudioCodec.Items.AddRange(@('default', 'opus', 'aac', 'flac', 'raw')
 $cmbAudioCodec.SelectedIndex = 0
 $grpAudio.Controls.Add($cmbAudioCodec)
 $toolTip.SetToolTip($cmbAudioCodec, 'scrcpy --audio-codec. raw is uncompressed and needs a fast link')
+
+$lblAudioEncoder = New-Object System.Windows.Forms.Label
+$lblAudioEncoder.Text = 'Encoder'
+$lblAudioEncoder.Location = New-Object System.Drawing.Point(178, 62)
+$lblAudioEncoder.Size = New-Object System.Drawing.Size(56, 20)
+$grpAudio.Controls.Add($lblAudioEncoder)
+
+$cmbAudioEncoder = New-Object System.Windows.Forms.ComboBox
+$cmbAudioEncoder.DropDownStyle = 'DropDownList'
+$cmbAudioEncoder.Location = New-Object System.Drawing.Point(236, 58)
+$cmbAudioEncoder.Size = New-Object System.Drawing.Size(210, 24)
+$null = $cmbAudioEncoder.Items.Add('default')
+$cmbAudioEncoder.SelectedIndex = 0
+$cmbAudioEncoder.Enabled = $false
+$grpAudio.Controls.Add($cmbAudioEncoder)
+$toolTip.SetToolTip($cmbAudioEncoder, 'scrcpy --audio-encoder. Only the encoders this phone has for the chosen codec ' +
+    'are offered - press Codecs to read them. Not remembered between runs: the names differ from phone to phone')
+
+$btnAudioEncoders = New-Object System.Windows.Forms.Button
+$btnAudioEncoders.Text = 'Codecs'
+$btnAudioEncoders.Location = New-Object System.Drawing.Point(452, 57)
+$btnAudioEncoders.Size = New-Object System.Drawing.Size(80, 26)
+$grpAudio.Controls.Add($btnAudioEncoders)
+$toolTip.SetToolTip($btnAudioEncoders, 'Ask the phone which audio codecs and encoders it really has, and fill the lists with them')
 
 $lblAudioBitrate = New-Object System.Windows.Forms.Label
 $lblAudioBitrate.Text = 'Bit rate'
@@ -4564,8 +4592,18 @@ function Update-EncoderList {
     #     --video-codec=h264 --video-encoder=c2.mtk.avc.encoder   (hw) [vendor]
     $video = @()
     $audio = @()
+    $encoders = @()
     foreach ($line in $lines) {
         if ($line -match '--video-codec=(\S+)') { $video += $Matches[1] }
+        elseif ($line -match '--audio-codec=(\S+)\s+--audio-encoder=(\S+)') {
+            $codec = $Matches[1]
+            $name = $Matches[2]
+            $audio += $codec
+            # an alias is the same encoder under a second name: offer it once
+            if ($line -notmatch 'alias for') {
+                $encoders += [PSCustomObject]@{ Codec = $codec; Name = $name }
+            }
+        }
         elseif ($line -match '--audio-codec=(\S+)') { $audio += $Matches[1] }
     }
     $video = @($video | Sort-Object -Unique)
@@ -4584,13 +4622,41 @@ function Update-EncoderList {
         $cmbAudioCodec.Items.Clear()
         $null = $cmbAudioCodec.Items.Add('default')
         $null = $cmbAudioCodec.Items.AddRange($audio)
+        # raw is not an encoder, so the phone never lists it - yet scrcpy
+        # accepts it, and a refresh must not take a working choice away
+        if (-not $cmbAudioCodec.Items.Contains('raw')) { $null = $cmbAudioCodec.Items.Add('raw') }
+        $script:audioEncoders = $encoders
         $cmbAudioCodec.SelectedIndex = [Math]::Max(0, $cmbAudioCodec.Items.IndexOf($keep))
+        Update-AudioEncoderChoices
         Write-Log ("audio codecs on this phone: " + ($audio -join ', ')) $colorGood
+        Write-Log ("audio encoders: " + (($encoders | ForEach-Object { $_.Name }) -join ', ')) $colorGood
     }
     if ($video.Count -eq 0 -and $audio.Count -eq 0) {
         Write-Log 'scrcpy listed no encoders; the fixed choices are still there.' $colorWarn
         foreach ($line in ($lines | Select-Object -Last 3)) { Write-Log ("  " + $line) $colorInfo }
     }
+}
+
+function Update-AudioEncoderChoices {
+    <#
+        scrcpy refuses an encoder that does not produce the chosen codec, so
+        only the matching ones are offered. "default" leaves the choice to the
+        phone. Before the phone has been asked there is nothing to offer, and
+        the list stays disabled rather than pretending.
+    #>
+    $codec = "$($cmbAudioCodec.SelectedItem)"
+    if ($codec -eq 'default') { $codec = 'opus' }   # scrcpy's own default
+
+    $keep = "$($cmbAudioEncoder.SelectedItem)"
+    $cmbAudioEncoder.BeginUpdate()
+    $cmbAudioEncoder.Items.Clear()
+    $null = $cmbAudioEncoder.Items.Add('default')
+    foreach ($encoder in @($script:audioEncoders)) {
+        if ($encoder.Codec -eq $codec) { $null = $cmbAudioEncoder.Items.Add($encoder.Name) }
+    }
+    $cmbAudioEncoder.EndUpdate()
+    $cmbAudioEncoder.SelectedIndex = [Math]::Max(0, $cmbAudioEncoder.Items.IndexOf($keep))
+    $cmbAudioEncoder.Enabled = ($cmbAudioEncoder.Items.Count -gt 1)
 }
 
 function Update-CameraSizeList {
@@ -4620,20 +4686,39 @@ function Update-CameraSizeList {
     Write-Log ("$($sizes.Count) camera size(s) reported by $serial.") $colorGood
 }
 
-function Start-AudioListen {
-    param([switch]$ToFile)
+function Get-AudioFileKind {
+    <#
+        scrcpy picks the container from the file name, and each container
+        takes only some codecs - an .opus file cannot hold aac. So the name
+        offered for a recording follows the codec. .mka takes all of them.
+    #>
+    param([string]$Codec)
 
-    if (-not $script:scrcpyPath) { Write-Log 'scrcpy.exe not found.' $colorBad; return }
+    switch ($Codec) {
+        'aac' { return 'm4a' }
+        'flac' { return 'flac' }
+        'raw' { return 'wav' }
+        default { return 'opus' }   # opus, and "default", which is opus
+    }
+}
 
-    $serial = Get-TargetSerial
-    if (-not $serial) { return }
+function Get-AudioArguments {
+    <#
+        The scrcpy command line for Listen and Record, built without starting
+        anything, so what gets sent can be checked on its own. A choice that
+        cannot apply is dropped with a line in the log saying why.
+    #>
+    param([string]$Serial, [switch]$ToFile)
 
     $source = "$($cmbAudioSource.SelectedItem)"
-    $arguments = @('-s', $serial, '--no-video', "--audio-source=$source")
+    $arguments = @('-s', $Serial, '--no-video', "--audio-source=$source")
 
-    if ("$($cmbAudioCodec.SelectedItem)" -ne 'default') {
-        $arguments += "--audio-codec=$($cmbAudioCodec.SelectedItem)"
-    }
+    $codec = "$($cmbAudioCodec.SelectedItem)"
+    if ($codec -and $codec -ne 'default') { $arguments += "--audio-codec=$codec" }
+
+    $encoder = "$($cmbAudioEncoder.SelectedItem)"
+    if ($encoder -and $encoder -ne 'default') { $arguments += "--audio-encoder=$encoder" }
+
     $rate = $cmbAudioBitrate.Text.Trim()
     if ($rate -and $rate -ne 'default') { $arguments += "--audio-bit-rate=$rate" }
 
@@ -4652,10 +4737,27 @@ function Start-AudioListen {
         }
     }
 
+    return $arguments
+}
+
+function Start-AudioListen {
+    param([switch]$ToFile)
+
+    if (-not $script:scrcpyPath) { Write-Log 'scrcpy.exe not found.' $colorBad; return }
+
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $source = "$($cmbAudioSource.SelectedItem)"
+    $arguments = @(Get-AudioArguments -Serial $serial -ToFile:$ToFile)
+
     if ($ToFile) {
+        $kind = Get-AudioFileKind -Codec "$($cmbAudioCodec.SelectedItem)"
         $dialog = New-Object System.Windows.Forms.SaveFileDialog
-        $dialog.Filter = 'Opus (*.opus)|*.opus|MP4 audio (*.m4a)|*.m4a'
-        $dialog.FileName = "phone-audio-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.opus'
+        $dialog.Filter = 'Opus (*.opus)|*.opus|MP4 audio (*.m4a)|*.m4a|FLAC (*.flac)|*.flac|' +
+            'WAV (*.wav)|*.wav|Matroska audio (*.mka)|*.mka'
+        $dialog.FilterIndex = 1 + [array]::IndexOf(@('opus', 'm4a', 'flac', 'wav'), $kind)
+        $dialog.FileName = "phone-audio-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + ".$kind"
         if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
         $arguments += @('--no-playback', "--record=$($dialog.FileName)")
     } else {
@@ -8117,21 +8219,28 @@ function Update-CamMicLayout {
     $null = Set-ButtonRowLeft -Left 12 -Top 186 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
         $btnCameraStop, $btnCameraCommand)
 
-    $grpAudio.SetBounds(12, 226, $inner, 126)
+    $grpAudio.SetBounds(12, 226, $inner, 154)
     $lblAudioSource.SetBounds(12, 30, 50, 20)
     $cmbAudioSource.SetBounds(66, 26, 200, 24)
     $null = Set-ButtonRowLeft -Left 274 -Top 25 -Buttons @($btnListen, $btnListenStop, $btnRecordAudio)
 
-    # quality and routing on their own row
-    $lblAudioCodec.SetBounds(12, 62, 48, 20)
-    $cmbAudioCodec.SetBounds(66, 58, 120, 24)
-    $lblAudioBitrate.SetBounds(198, 62, 54, 20)
-    $cmbAudioBitrate.SetBounds(256, 58, 100, 24)
-    $chkAudioDup.SetBounds(372, 60, 230, 22)
-    $lblAudioBuffer.SetBounds(612, 62, 66, 20)
-    $txtAudioBuffer.SetBounds(682, 58, 60, 24)
+    # what is sent: the codec, the encoder that makes it, and the refresh
+    # that reads both from the phone - one row, because they depend on each other
+    $lblAudioCodec.SetBounds(12, 62, 50, 20)
+    $cmbAudioCodec.SetBounds(66, 58, 100, 24)
+    $lblAudioEncoder.SetBounds(178, 62, 56, 20)
+    $cmbAudioEncoder.SetBounds(236, 58,
+        [Math]::Min(260, [Math]::Max(150, ($inner - 236 - $btnAudioEncoders.Width - 30))), 24)
+    $btnAudioEncoders.SetBounds(($cmbAudioEncoder.Bounds.Right + 6), 57, $btnAudioEncoders.Width, 26)
 
-    $lblAudioHint.SetBounds(12, 96, [Math]::Max(200, $inner - 24), 20)
+    # how much of it, where it plays, and how much delay it may absorb
+    $lblAudioBitrate.SetBounds(12, 94, 52, 20)
+    $cmbAudioBitrate.SetBounds(66, 90, 100, 24)
+    $chkAudioDup.SetBounds(178, 92, 222, 22)
+    $lblAudioBuffer.SetBounds(406, 94, 64, 20)
+    $txtAudioBuffer.SetBounds(472, 90, 60, 24)
+
+    $lblAudioHint.SetBounds(12, 124, [Math]::Max(200, $inner - 24), 20)
 }
 
 
@@ -9713,6 +9822,11 @@ function Save-Settings {
             ScreenOff      = $chkScreenOff.Checked
             StayAwake      = $chkStayAwake.Checked
             NoAudio        = $chkNoAudio.Checked
+            AudioSource    = "$($cmbAudioSource.SelectedItem)"
+            AudioCodec     = "$($cmbAudioCodec.SelectedItem)"
+            AudioBitrate   = $cmbAudioBitrate.Text
+            AudioDup       = $chkAudioDup.Checked
+            AudioBuffer    = $txtAudioBuffer.Text
             RecordFormat   = "$($cmbRecordFormat.SelectedItem)"
             RecordRotate   = "$($cmbRecordOrientation.SelectedItem)"
             TimeLimit      = [int]$numTimeLimit.Value
@@ -9783,6 +9897,11 @@ function Restore-Settings {
     $value = Get-Setting 'ScreenOff';      if ($null -ne $value) { $chkScreenOff.Checked = [bool]$value }
     $value = Get-Setting 'StayAwake';      if ($null -ne $value) { $chkStayAwake.Checked = [bool]$value }
     $value = Get-Setting 'NoAudio';        if ($null -ne $value) { $chkNoAudio.Checked = [bool]$value }
+    $value = Get-Setting 'AudioSource';    if ($value -and $cmbAudioSource.Items.Contains($value)) { $cmbAudioSource.SelectedItem = $value }
+    $value = Get-Setting 'AudioCodec';     if ($value -and $cmbAudioCodec.Items.Contains($value)) { $cmbAudioCodec.SelectedItem = $value }
+    $value = Get-Setting 'AudioBitrate';   if ($value) { $cmbAudioBitrate.Text = $value }
+    $value = Get-Setting 'AudioDup';       if ($null -ne $value) { $chkAudioDup.Checked = [bool]$value }
+    $value = Get-Setting 'AudioBuffer';    if ($null -ne $value) { $txtAudioBuffer.Text = $value }
     $value = Get-Setting 'RecordFormat';   if ($value) { $cmbRecordFormat.SelectedItem = $value }
     $value = Get-Setting 'RecordRotate';   if ($value) { $cmbRecordOrientation.SelectedItem = $value }
     $value = Get-Setting 'TimeLimit';      if ($null -ne $value) { try { $numTimeLimit.Value = [int]$value } catch { } }
@@ -9989,6 +10108,8 @@ $btnHotspotSettings.Add_Click({
 
 $btnCameraList.Add_Click({ Update-CameraList })
 $btnListEncoders.Add_Click({ Update-EncoderList })
+$btnAudioEncoders.Add_Click({ Update-EncoderList })
+$cmbAudioCodec.Add_SelectedIndexChanged({ Update-AudioEncoderChoices })
 $btnListCameraSizes.Add_Click({ Update-CameraSizeList })
 $btnCameraStart.Add_Click({ Start-Camera })
 $btnCameraFront.Add_Click({ Start-Camera -Facing 'front' })

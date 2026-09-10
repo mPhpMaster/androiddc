@@ -25,7 +25,7 @@ Bridge, so the phone only ever does what USB debugging already allows.
 | **Advanced** | Four pages: every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, input modes), more of them (recording format and time limit, orientation, window placement, shortcut keys), the adb tools (wireless pairing, mDNS discovery, bug report, private DNS, IME, hotspot), and a Root / recovery page that shows what your device cannot do and says why |
 | **Apps** | What is installed, launch, force stop, uninstall, open in its own scrcpy window, and install `.apk` or a split `.xapk` / `.apks` / `.apkm` |
 | **Contacts / SMS** | Read, add, edit, delete, call, send |
-| **Cam / Mic** | Front and rear camera as a video source with zoom, and the phone microphone or output streamed to the PC with a choice of codec and bit rate |
+| **Cam / Mic** | Front and rear camera as a video source with zoom, and the phone microphone or output streamed or recorded on the PC, with the codec, encoder and bit rate read from the phone |
 | **Files** | Browse, search, sort, rename, upload, download, move, compress, extract, preview pictures and text without saving them, free space of the current volume |
 | **Running** | Live process list with memory and state, stop anything |
 | **Wi-Fi / Bluetooth / NFC** | Radios on and off, scan, join or forget a network, paired devices |

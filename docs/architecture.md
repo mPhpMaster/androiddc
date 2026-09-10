@@ -111,15 +111,37 @@ during development:
 1. Copy `androiddc.ps1`, replace the window title with a marker, splice a test script into
    `$form.Add_Shown` with a **literal** `String.Replace` (a regex replacement would expand
    `$_` inside the test into the whole file), and position the window off screen.
-2. Let the test drive the real controls — `PerformClick()`, or `OnKeyDown` / `OnMouseUp`
-   through reflection with a plain `[object[]]` argument array.
-3. Have it write a report file, then read that.
+2. Point the copy's `$settingsPath` at a scratch file, seeded from the real one. The window
+   saves on close, so a test that changes a setting would otherwise write it into your real
+   settings.
+3. Let the test drive the real controls — `PerformClick()`, or `OnKeyDown` / `OnMouseUp`
+   through reflection with a plain `[object[]]` argument array. With two phones attached,
+   select the test phone **by serial**, never by its position in the list.
+4. Have it write a report file, then read that — and treat a locked file as "still
+   writing", not as an error. Letting that throw once killed the harness before it could
+   close the window, and left two test windows running.
+5. Close the window with `WM_CLOSE`, the message the title-bar X sends. **Never kill it:**
+   settings are only written by a normal close, and a killed window also skips everything
+   `FormClosing` cleans up.
+
+**Every replacement must match exactly once.** `String.Replace` replaces *every* occurrence
+and says nothing. Two anchors in this file are not unique, and the first harness hit both
+without anyone noticing:
+
+| Anchor | Also appears in | What the silent second hit did |
+|---|---|---|
+| `$script:adbPath = Resolve-Tool ...` | the download-if-missing branch | planted the test's path override there too |
+| `    Update-DeviceList })` | the gnirehtet *Install client* and *Uninstall client* handlers | spliced the whole test into both buttons, so clicking either one mid-test would have started the test again inside itself |
+
+Count the matches before replacing, and stop if the count is not one.
 
 Two checks worth repeating after any edit:
 
 * **Layout:** walk **every group box**, not only every page, and compare `Bounds.IntersectsWith`
-  between children and against `ClientSize`. The target is zero overlaps and zero controls
-  outside their box.
+  between children and against `ClientSize` — **at the default size and again at the
+  minimum size**. The target is zero overlaps and zero controls outside their box. Measured
+  on 2026-09-10 it is met at 1420 × 900 and not at 1120 × 700 (3 overlaps, 30 outside); see
+  the correction in the [roadmap](roadmap.md).
 * **Wiring:** compare the set of `$x.Add_Click(` handlers against the set of created controls.
   A patch that deletes code can silently take handlers with it; buttons then do nothing and
   the log stays empty.

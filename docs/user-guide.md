@@ -195,10 +195,31 @@ or torch. The phone screen is untouched. Needs Android 12 or newer.
 
 **Microphone / audio** — pick a source (`mic`, `mic-voice-communication`, `output`,
 `playback`, `voice-call`, …), then **Listen** to hear it on the PC speakers, **Stop audio**,
-or **Record audio...** to write it to a file. Below that: the audio codec, bit rate, buffer
-size, and **keep playing on the phone too** (`--audio-dup`), which needs the `output` source
-and cannot be combined with recording — scrcpy refuses that pairing, so AndroidDC says so
-instead of failing.
+or **Record audio...** to write it to a file.
+
+The second row is what gets sent: the **codec**, the **encoder** that produces it, and
+**Codecs**, which asks the phone for both. The encoder list only ever offers encoders for the
+codec you picked — scrcpy refuses a mismatch — and stays greyed out until the phone has been
+asked. `raw` stays in the codec list after a refresh even though no phone lists it: it is not
+an encoder, and scrcpy accepts it anyway.
+
+The third row: bit rate, buffer size, and **keep playing on the phone too** (`--audio-dup`),
+which needs the `output` source and cannot be combined with recording — scrcpy refuses that
+pairing, so AndroidDC says so instead of failing.
+
+**Record audio...** suggests a file name that suits the codec, because scrcpy picks the
+container from the name and each container takes only some codecs:
+
+| Codec | Suggested file |
+|---|---|
+| opus, or *default* | `.opus` |
+| aac | `.m4a` — scrcpy refuses aac in an `.opus` file |
+| flac | `.flac` |
+| raw | `.wav` |
+
+`.mka` takes all four. Source, codec, bit rate, buffer and *keep playing* are remembered
+between runs. The encoder is not: encoder names differ from phone to phone, and one saved from
+another phone would make scrcpy fail.
 
 **Sizes** and **Codecs** ask the phone what it really supports and fill the dropdowns with the
 answer, rather than offering a fixed list. On the test phone that turned five guessed camera

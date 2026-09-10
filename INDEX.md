@@ -13,16 +13,17 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 
 | File | Size | Modified | What it is |
 |---|---:|---|---|
-| `androiddc.ps1` | 443 KB, 10508 lines | 2026-09-09 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
-| `androiddc.vbs` | 344 B | 2026-09-10 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`. **This is the file to double-click.** |
-| `README.md` | 6 KB | 2026-09-10 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
-| `docs\` | 8 pages | 2026-09-10 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture. |
+| `androiddc.ps1` | 454 KB, 10746 lines | 2026-09-10 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
+| `androiddc.vbs` | 341 B | 2026-09-10 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`. **This is the file to double-click.** |
+| `README.md` | 7.2 KB | 2026-09-10 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
+| `docs\` | 9 pages | 2026-09-10 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
 | `assets\` | 10 files | 2026-09-10 | The logo: `androiddc.svg` (source), `wordmark.png` (README banner), `androiddc.ico` (window icon) and PNGs from 16 to 512 px. |
 | `LICENSE` | 12 KB | 2026-09-10 | Apache License 2.0 for AndroidDC itself. |
-| `gnirehtet-share.ps1` | 12 KB, 411 lines | 2026-09-07 | The command-line reverse-tethering script. Parameters: `-Serial -Dns -Port -Routes -All -Reinstall -StopOnly -ListDevices -DisableWifi -PauseOnError`. |
+| `gnirehtet-share.ps1` | 13 KB, 411 lines | 2026-09-10 | The command-line reverse-tethering script. Parameters: `-Serial -Dns -Port -Routes -All -Reinstall -StopOnly -ListDevices -DisableWifi -PauseOnError`. |
 | `gnirehtet-share.bat` | 118 B | 2026-09-07 | Launcher for the script above, adds `-PauseOnError` and forwards your arguments. |
-| `get-upstream.ps1` | 15 KB | 2026-09-09 | Downloads the two upstream packages below from the official GitHub releases, checks each archive against SHA256, unpacks it here and never touches the files above. `-OnlyMissing` fetches only what is absent - that is what the GUI runs when it finds a tool missing at startup. Also `-ScrcpyVersion` / `-GnirehtetVersion` / `-Destination` / `-Force` / `-SkipScrcpy` / `-SkipGnirehtet` / `-KeepArchives` / `-CacheFolder`. |
+| `get-upstream.ps1` | 17 KB | 2026-09-10 | Downloads the two upstream packages below from the official GitHub releases, checks each archive against SHA256, unpacks it here and never touches the files above. `-OnlyMissing` fetches only what is absent - that is what the GUI runs when it finds a tool missing at startup. Also `-ScrcpyVersion` / `-GnirehtetVersion` / `-Destination` / `-Force` / `-SkipScrcpy` / `-SkipGnirehtet` / `-KeepArchives` / `-CacheFolder`. |
 | `get-upstream.bat` | 97 B | 2026-09-09 | Double-click launcher for the script above; passes any arguments straight through. |
+| `.github\` | 3 files | 2026-09-10 | CI. `workflows\check.yml` runs on every push and pull request: every `.ps1` parses, no variable is read before it is assigned (`audit-variables.ps1`), every control reaches the screen and every button has a handler (`audit-wiring.ps1`), the launcher points at a file that exists, and no absolute developer path appears in a shipped file. |
 
 ## Reverse tethering (gnirehtet 2.5.1, upstream files)
 
@@ -37,7 +38,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 | File | Size | What it is |
 |---|---:|---|
 | `scrcpy.exe` | 704 KB | Mirrors and controls the Android screen. |
-| `scrcpy-server` | 716 KB | The Java side, pushed to the phone on every run. Not a PC executable. |
+| `scrcpy-server` | 717 KB | The Java side, pushed to the phone on every run. Not a PC executable. |
 | `scrcpy-noconsole.vbs` | 212 B | Starts scrcpy with no console window, passing your arguments through. |
 | `adb.exe` | 8.1 MB | Android Debug Bridge - every device command in this folder goes through it. |
 | `open_a_terminal_here.bat` | 5 B | `@cmd` - opens a command prompt in this folder. |
@@ -72,7 +73,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-fc0c15d309a23985  androiddc.ps1
+b2c6c461ada22f9f  androiddc.ps1
 ea4e1ed6ff774533  androiddc.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
@@ -89,7 +90,7 @@ d5daefbb48143fbc  gnirehtet.exe
 9f125960b915c243  LICENSE
 01c12035bf35af37  LICENSE.txt
 843758795a84d0d0  open_a_terminal_here.bat
-850cd0283d1ca1c5  README.md
+bc5a38431bf5aa08  README.md
 3ccda94c161f18ce  scrcpy-noconsole.vbs
 deacb991ed250971  scrcpy-server
 575ca1284345c7b3  scrcpy.exe

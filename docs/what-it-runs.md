@@ -113,6 +113,17 @@ on, the screen capture.
 `adb logcat -v time *:<LEVEL>` runs as a long-lived process while the Logcat page is on, and
 `adb logcat -c` empties the buffer if you hold Shift on Clear.
 
+## Camera and audio
+
+| Purpose | Command |
+|---|---|
+| Camera as the video source | `scrcpy --video-source=camera`, with `--camera-facing=front` or `back`, or `--camera-id=<id>` |
+| Camera picture, when set | `--camera-ar=<ratio>` *or* `--camera-size=<WxH>` (scrcpy takes one, never both), `--camera-fps=<n>`, `--camera-zoom=<x>` when it is not 1, `--camera-high-speed`, `--camera-torch` |
+| Camera sound | `--audio-source=mic` with *mic* ticked, otherwise `--no-audio` |
+| Listen | `scrcpy --no-video --no-window --audio-source=<source>` |
+| Record audio | `scrcpy --no-video --no-playback --audio-source=<source> --record=<file>` |
+| Audio options, when set | `--audio-codec=<codec>`, `--audio-encoder=<name>`, `--audio-bit-rate=<rate>`, `--audio-buffer=<ms>`, and `--audio-dup` for *Listen* with the `output` source only |
+
 ## Asking the phone what it supports
 
 `scrcpy --list-encoders`, `scrcpy --list-camera-sizes`, `scrcpy --list-cameras` and
