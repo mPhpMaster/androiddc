@@ -268,6 +268,20 @@ instead of rewriting**. `git reflog` finds the original if you have already done
 same configured git user, so `%an` is identical on every commit. Judge by the subject and the
 files touched, not by the name.
 
+**`git add -A` and `commit -a` take what they find, not what you wrote.** Staging is a snapshot
+of the whole tree, so a commit made while someone else has a file half-edited will carry their
+work under your message. Name the files instead:
+
+```powershell
+git commit -- docs/architecture.md      # only this path, whatever else is staged
+```
+
+This project managed both directions of that mistake in one day: an `--amend` that rewrote
+someone else's commit, and an `add -A` that swallowed someone else's uncommitted edit. In both
+cases the content survived and only the attribution was wrong — which is the argument for
+fixing it with a note rather than a rewrite, since rewriting a tip that the other person has
+already built on costs more than the wrong label.
+
 **Prefer a branch per worker.** One shared branch turns every concurrent edit into a silent
 race; separate branches turn the same disagreement into a merge conflict you can see and
 resolve. Falling back to comparing file sizes and timestamps is a sign the coordination has
