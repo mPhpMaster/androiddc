@@ -193,12 +193,30 @@ changes.
 button on another tab must select that tab first, or raise `OnClick` the way the context menus
 do.
 
+### Two code pages, and a PC where both were UTF-8
+
+Windows PowerShell 5.1, the host `androiddc.vbs` starts, uses two code pages that are easy to
+confuse. This project was caught by both on the same day:
+
+| Code page | What it decides | What it broke | Where |
+|---|---|---|---|
+| the **ANSI** page | how a `.ps1` **without a BOM** is read | the Arabic word for *Send*, typed into `Find-SendButton` | on a 1252 or 1256 PC the letters became other characters, so an Arabic-UI phone's Send button was never found |
+| the **console** page | how the output of adb, scrcpy and gnirehtet is decoded | every Arabic app or contact name | on an OEM page (437, 720 …) the names arrived as box-drawing characters |
+
+Neither showed on the development PC, because its Windows is set to *Use Unicode UTF-8 for
+worldwide language support*, which makes both pages 65001. With the console forced to 437, an
+app name came back as `┘å┘ü╪º╪░`; with the fix, exactly as scrcpy wrote it.
+
+The fixes: `androiddc.ps1` is plain ASCII, and a non-ASCII letter is built from its code
+points — `-join [char[]](0x0625, …)`. `Invoke-OffThread` decodes as UTF-8 for the call and
+then puts the console page back; every program that goes through it writes UTF-8.
+
 ### What CI checks, and how a check passes on nothing
 
-`.github/workflows/check.yml` runs on every push: every `.ps1` must parse, no variable may be
-read before it is assigned, every control must reach the screen and every button must have a
-handler, the launcher must point at a file that exists, and no absolute developer path may
-appear in a shipped file.
+`.github/workflows/check.yml` runs on every push: every `.ps1` must parse, every `.ps1` must
+be plain ASCII or carry a BOM, no variable may be read before it is assigned, every control
+must reach the screen and every button must have a handler, the launcher must point at a file
+that exists, and no absolute developer path may appear in a shipped file.
 
 The path check was itself the best example of the rule above. It was written as
 

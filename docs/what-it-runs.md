@@ -53,7 +53,8 @@ on, the screen capture.
 
 | Purpose | Command |
 |---|---|
-| List | `adb shell pm list packages -f` and `dumpsys package` |
+| List | `adb shell pm list packages --show-versioncode`, with `-3` unless system apps are shown; `pm list packages -d` for the disabled ones and `pm list packages -3` for the ones you installed |
+| Names | `scrcpy --list-apps`, once per phone, and again when the installed apps change |
 | Launch | `adb shell am start -n <component>` |
 | On its own display | `scrcpy --new-display=<size> --start-app=+<package>` |
 | Force stop | `adb shell am force-stop <package>` |
@@ -93,7 +94,7 @@ on, the screen capture.
 | Dialer only | `… -a android.intent.action.DIAL` |
 | Hang up | `adb shell input keyevent 6` |
 | USSD | the CALL intent with `#` written as `%23` |
-| Contacts | `adb shell content query|insert|update|delete --uri content://com.android.contacts/…` |
+| Contacts | `adb shell content query\|insert\|update\|delete --uri content://com.android.contacts/…` |
 | SMS list | `adb shell content query --uri content://sms` |
 | Send SMS | `adb shell am start -a android.intent.action.SENDTO -d sms:<number> --es sms_body <text>`, then the phone's own app sends it |
 
@@ -101,12 +102,12 @@ on, the screen capture.
 
 | Purpose | Command |
 |---|---|
-| Wi-Fi scan and networks | `adb shell cmd wifi start-scan|list-scan-results|list-networks` |
+| Wi-Fi scan and networks | `adb shell cmd wifi start-scan\|list-scan-results\|list-networks` |
 | Join / forget | `adb shell cmd wifi connect-network <ssid> <type> [<password>]`, `forget-network <id>` |
 | Bluetooth paired list | `adb shell dumpsys bluetooth_manager` |
 | NFC state | `adb shell dumpsys nfc` |
 | Users | `adb shell pm list users`, `am get-current-user`, `am switch-user`, `pm create-user`, `pm remove-user`, `pm get-max-users` |
-| Multi-user switch | `adb shell settings put global user_switcher_enabled 0|1` |
+| Multi-user switch | `adb shell settings put global user_switcher_enabled 0\|1` |
 
 ## The device log
 
@@ -126,8 +127,9 @@ on, the screen capture.
 
 ## Asking the phone what it supports
 
-`scrcpy --list-encoders`, `scrcpy --list-camera-sizes`, `scrcpy --list-cameras` and
-`scrcpy --list-displays` fill the dropdowns from the device instead of a fixed list.
+`scrcpy --list-encoders`, `scrcpy --list-camera-sizes`, `scrcpy --list-cameras`,
+`scrcpy --list-displays` and `scrcpy --list-apps` fill the dropdowns from the device instead
+of a fixed list.
 
 ## Root and recovery
 

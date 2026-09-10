@@ -47,6 +47,8 @@ $script:activeSerials = @()
 $script:wifiDisabled = $false
 $script:outFile = $null
 $script:audioEncoders = @()   # filled from scrcpy --list-encoders
+$script:appLabels = @{}       # serial -> @{ package = app name }, from scrcpy --list-apps
+$script:appLabelsSeen = @{}   # serial -> the user-installed packages when the names were read
 $script:errFile = $null
 $script:outOffset = 0
 $script:errOffset = 0
@@ -155,7 +157,22 @@ function Invoke-OffThread {
     $null = $shell.AddScript({
         param($exe, $arguments)
         $ErrorActionPreference = 'Continue'
-        $lines = @(& $exe @arguments 2>&1 | ForEach-Object { "$_" })
+        # adb, scrcpy and gnirehtet all write UTF-8, and they are the only
+        # programs that come through here. PowerShell decodes a native program
+        # with the console code page instead, so on a PC still on an OEM page
+        # (437, 720, ...) every Arabic app or contact name arrives garbled.
+        # Decode as UTF-8 for the call, and put the page back afterwards. A
+        # window with no console at all cannot change it, and runs as before.
+        $page = $null
+        try {
+            $page = [Console]::OutputEncoding
+            [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+        } catch { $page = $null }
+        try {
+            $lines = @(& $exe @arguments 2>&1 | ForEach-Object { "$_" })
+        } finally {
+            if ($page) { try { [Console]::OutputEncoding = $page } catch { } }
+        }
         [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Lines = $lines }
     }).AddArgument($FilePath).AddArgument($ArgumentList)
 
@@ -970,11 +987,14 @@ $txtNewDisplay.Size = New-Object System.Drawing.Size(130, 24)
 $tabScrcpy.Controls.Add($txtNewDisplay)
 
 New-ScrcpyLabel -Text 'Start app' -X 610 -Y 84 -Width 62
-$txtStartApp = New-Object System.Windows.Forms.TextBox
-$txtStartApp.Location = New-Object System.Drawing.Point(674, 84)
-$txtStartApp.Size = New-Object System.Drawing.Size(160, 24)
-$tabScrcpy.Controls.Add($txtStartApp)
-$toolTip.SetToolTip($txtStartApp, 'Package or +package to force-stop first (scrcpy --start-app)')
+$cmbStartApp = New-Object System.Windows.Forms.ComboBox
+$cmbStartApp.DropDownStyle = 'DropDown'   # pick from the phone, or type as before
+$cmbStartApp.Location = New-Object System.Drawing.Point(674, 84)
+$cmbStartApp.Size = New-Object System.Drawing.Size(160, 24)
+$cmbStartApp.DropDownWidth = 360
+$tabScrcpy.Controls.Add($cmbStartApp)
+$toolTip.SetToolTip($cmbStartApp, 'scrcpy --start-app. Open the list to pick an app by name - it is read from the phone - ' +
+    'or type a package. A leading + force-stops the app first; a leading ? finds it by name')
 
 $chkRecord = New-Object System.Windows.Forms.CheckBox
 $chkRecord.Text = 'Record to'
@@ -1199,7 +1219,7 @@ foreach ($entry in @(
             @('Max size', 'Bit rate', 'Max FPS', 'Codec')),
         @($grpWindowOpts, @($chkFullscreen, $chkBorderless, $chkOnTop, $chkNoScreensaver), @()),
         @($grpPhoneOpts, @($chkScreenOff, $chkStayAwake, $chkNoAudio, $chkViewOnly, $chkPowerOff), @()),
-        @($grpTarget, @($cmbDisplay, $btnListDisplays, $chkNewDisplay, $txtNewDisplay, $txtStartApp,
+        @($grpTarget, @($cmbDisplay, $btnListDisplays, $chkNewDisplay, $txtNewDisplay, $cmbStartApp,
             $chkRecord, $txtRecord, $btnBrowseRecord, $lblExtraArgs, $txtExtraArgs),
             @('Display', 'Start app')),
         @($grpControl, @($chkOtg, $cmbKeyboard, $cmbMouse, $cmbGamepad, $btnKeyboardLayout),
@@ -2084,10 +2104,15 @@ $lstApps.MultiSelect = $true
 $lstApps.HideSelection = $false
 $lstApps.Location = New-Object System.Drawing.Point(12, 44)
 $lstApps.Size = New-Object System.Drawing.Size(840, 240)
-$null = $lstApps.Columns.Add('Package', 430)
+$null = $lstApps.Columns.Add('Package', 320)
 $null = $lstApps.Columns.Add('Version', 110)
 $null = $lstApps.Columns.Add('Type', 80)
 $null = $lstApps.Columns.Add('State', 90)
+# The name is added last, so SubItems[1..3] keep meaning version, type and
+# state and every item's Text stays the package - the actions rely on both.
+# It is only moved to the front on screen.
+$null = $lstApps.Columns.Add('Name', 230)
+$lstApps.Columns[4].DisplayIndex = 0
 $tabApps.Controls.Add($lstApps)
 
 $txtAppFilter = New-Object System.Windows.Forms.TextBox
@@ -3974,6 +3999,34 @@ function Get-ExtraScrcpyArguments {
     return @($extra -split '\s+(?=(?:[^"]*"[^"]*")*[^"]*$)' | Where-Object { $_ -ne '' })
 }
 
+function Get-StartAppValue {
+    <#
+        What --start-app is given. A pick from the list reads "Name  (package)"
+        and scrcpy wants the package, keeping a + typed in front of it
+        (force-stop first). Anything typed by hand passes through unchanged,
+        so "com.example", "+com.example" and "?Name" still work.
+    #>
+    $text = $cmbStartApp.Text.Trim()
+    if ($text -match '^(\+?).*\(([A-Za-z0-9_.]+)\)$') { return $Matches[1] + $Matches[2] }
+    return $text
+}
+
+function Update-StartAppChoices {
+    # the phone's apps by name, sorted; whatever is typed in the box is kept
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $names = Get-AppLabels -Serial $serial
+    $typed = $cmbStartApp.Text
+    $cmbStartApp.BeginUpdate()
+    $cmbStartApp.Items.Clear()
+    foreach ($entry in @($names.GetEnumerator() | Sort-Object -Property Value)) {
+        $null = $cmbStartApp.Items.Add(('{0}  ({1})' -f $entry.Value, $entry.Key))
+    }
+    $cmbStartApp.EndUpdate()
+    $cmbStartApp.Text = $typed
+}
+
 function Get-ScrcpyArguments {
     param([string]$Serial)
 
@@ -4026,7 +4079,7 @@ function Get-ScrcpyArguments {
     if ($chkPowerOff.Checked) { $arguments += '--power-off-on-close' }
     if ($chkNoScreensaver.Checked) { $arguments += '--disable-screensaver' }
 
-    $startApp = $txtStartApp.Text.Trim()
+    $startApp = Get-StartAppValue
     if ($startApp) { $arguments += "--start-app=$startApp" }
 
     if ($chkRecord.Checked) {
@@ -5159,6 +5212,37 @@ function Get-RowValue {
 
 # --- apps --------------------------------------------------------------------
 
+function Get-AppLabels {
+    <#
+        The names of the apps on a phone, from scrcpy --list-apps. pm knows
+        packages only, and "com.shiftatinc.worker" tells nobody which app it
+        is. scrcpy prints one app per line, the name padded into a column:
+
+             - Nafath | <arabic name>          sa.gov.nic.myid
+
+        A name can hold spaces and even "|", but a package never holds a
+        space, so the package is the last word and the name is everything
+        before it. Asking takes two to five seconds, so each phone is asked
+        once and the answer kept; Update-AppList asks again when the set of
+        installed apps has changed.
+    #>
+    param([string]$Serial, [switch]$Refresh)
+
+    if (-not $Refresh -and $script:appLabels.ContainsKey($Serial)) { return $script:appLabels[$Serial] }
+
+    $labels = @{}
+    foreach ($line in @(Get-DeviceCapabilityList -Serial $Serial -Switch '--list-apps')) {
+        # "*" marks an app that came with the phone, "-" one that was installed
+        if ($line -match '^\s*[*-]\s+(.*\S)\s+(\S+)\s*$') { $labels[$Matches[2]] = $Matches[1] }
+    }
+    if ($labels.Count -eq 0) {
+        Write-Log 'scrcpy listed no app names on this phone, so packages are shown without them.' $colorWarn
+    }
+    # kept even when empty, so a phone that cannot answer is not asked on every refresh
+    $script:appLabels[$Serial] = $labels
+    return $labels
+}
+
 function Update-AppList {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -5170,6 +5254,16 @@ function Update-AppList {
     $thirdParty = (Invoke-DeviceShell -Serial $serial -CommandArguments @('pm list packages -3')).Text
 
     $filter = $txtAppFilter.Text.Trim()
+
+    # the names are read again only when the installed apps have changed -
+    # an install from here, from the Play Store, or anywhere else
+    $installed = (@([regex]::Matches($thirdParty, 'package:(\S+)') |
+        ForEach-Object { $_.Groups[1].Value } | Sort-Object) -join ' ')
+    $changed = $script:appLabelsSeen.ContainsKey($serial) -and $script:appLabelsSeen[$serial] -ne $installed
+    $names = Get-AppLabels -Serial $serial -Refresh:$changed
+    $script:appLabelsSeen[$serial] = $installed
+    $named = 0
+
     $lstApps.BeginUpdate()
     try {
         $lstApps.Items.Clear()
@@ -5177,20 +5271,25 @@ function Update-AppList {
             if ($line -notmatch 'package:(\S+)') { continue }
             $package = $Matches[1]
             $version = if ($line -match 'versionCode:(\S+)') { $Matches[1] } else { '' }
-            if ($filter -and $package -notlike "*$filter*") { continue }
+            $name = if ($names.ContainsKey($package)) { $names[$package] } else { '' }
+            # an app is found by what it is called, not only by its package
+            if ($filter -and $package -notlike "*$filter*" -and $name -notlike "*$filter*") { continue }
 
             $item = New-Object System.Windows.Forms.ListViewItem($package)
             $null = $item.SubItems.Add($version)
             $null = $item.SubItems.Add($(if ($thirdParty -match [regex]::Escape("package:$package`n") -or
                 $thirdParty -match [regex]::Escape("package:$package")) { 'user' } else { 'system' }))
             $null = $item.SubItems.Add($(if ($disabled -match [regex]::Escape("package:$package")) { 'disabled' } else { 'enabled' }))
+            $null = $item.SubItems.Add($name)
+            if ($name) { $named++ }
             $null = $lstApps.Items.Add($item)
         }
     } finally {
         $lstApps.EndUpdate()
     }
 
-    $lblAppsCount.Text = "$($lstApps.Items.Count) packages on $serial"
+    # only apps with a launcher icon have a name; services and libraries do not
+    $lblAppsCount.Text = "$($lstApps.Items.Count) packages on $serial, $named of them apps with a name"
     Write-Log "Listed $($lstApps.Items.Count) packages on $serial." $colorInfo
 }
 
@@ -5318,6 +5417,18 @@ function Uninstall-App {
     Update-AppList
 }
 
+function Get-AppListCsv {
+    # the name goes last, so a sheet built on the old four columns still reads;
+    # it is quoted, because a name can hold a comma or a quote and the rest cannot
+    $lines = @('package,version,type,state,name')
+    foreach ($item in $lstApps.Items) {
+        $name = '"' + $item.SubItems[4].Text.Replace('"', '""') + '"'
+        $lines += ('{0},{1},{2},{3},{4}' -f $item.Text, $item.SubItems[1].Text, $item.SubItems[2].Text,
+            $item.SubItems[3].Text, $name)
+    }
+    return $lines
+}
+
 function Export-AppList {
     if ($lstApps.Items.Count -eq 0) { Write-Log 'Nothing to export.' $colorWarn; return }
 
@@ -5326,11 +5437,7 @@ function Export-AppList {
     $dialog.FileName = 'apps-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.csv'
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
 
-    $lines = @('package,version,type,state')
-    foreach ($item in $lstApps.Items) {
-        $lines += ('{0},{1},{2},{3}' -f $item.Text, $item.SubItems[1].Text, $item.SubItems[2].Text, $item.SubItems[3].Text)
-    }
-    Set-Content -LiteralPath $dialog.FileName -Value $lines -Encoding UTF8
+    Set-Content -LiteralPath $dialog.FileName -Value (Get-AppListCsv) -Encoding UTF8
     Write-Log "Exported $($lstApps.Items.Count) packages to $($dialog.FileName)" $colorGood
 }
 
@@ -5630,10 +5737,17 @@ function Find-SendButton {
         'uiautomator dump /sdcard/_sms_ui.xml >/dev/null 2>&1; cat /sdcard/_sms_ui.xml')).Text
     $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @('rm', '-f', '/sdcard/_sms_ui.xml')
 
+    # "Send" in English or Arabic. The Arabic word is built from its code
+    # points, because this file has no BOM and Windows PowerShell reads such
+    # a file in the PC's ANSI code page: typed in directly, the letters were
+    # right only on a PC set to UTF-8, and the button was never found elsewhere.
+    $arabicSend = -join [char[]](0x0625, 0x0631, 0x0633, 0x0627, 0x0644)
+    $sendPattern = '(?i)(send|' + $arabicSend + ')'
+
     foreach ($match in [regex]::Matches($dump, '<node[^>]*>')) {
         $node = $match.Value
         if ($node -notmatch 'clickable="true"') { continue }
-        if ($node -notmatch '(?i)(send|إرسال)') { continue }
+        if ($node -notmatch $sendPattern) { continue }
         if ($node -match 'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"') {
             return [PSCustomObject]@{
                 X = [int](([int]$Matches[1] + [int]$Matches[3]) / 2)
@@ -8137,7 +8251,7 @@ function Update-MirrorLayout {
     $chkNewDisplay.SetBounds(($btnListDisplays.Bounds.Right + 12), 24, 110, 22)
     $txtNewDisplay.SetBounds(($chkNewDisplay.Bounds.Right + 4), 22, 130, 24)
     $script:scrcpyLabels['Start app'].SetBounds(($txtNewDisplay.Bounds.Right + 12), 26, 62, 20)
-    $txtStartApp.SetBounds(($txtNewDisplay.Bounds.Right + 78), 22,
+    $cmbStartApp.SetBounds(($txtNewDisplay.Bounds.Right + 78), 22,
         [Math]::Max(90, ($inner - $txtNewDisplay.Bounds.Right - 90)), 24)
 
     $chkRecord.SetBounds(12, 54, 80, 22)
@@ -9843,7 +9957,7 @@ function Save-Settings {
             NoScreensaver  = $chkNoScreensaver.Checked
             NewDisplay     = $chkNewDisplay.Checked
             NewDisplaySize = $txtNewDisplay.Text
-            StartApp       = $txtStartApp.Text
+            StartApp       = $cmbStartApp.Text
             ExtraArgs      = $txtExtraArgs.Text
             Otg            = $chkOtg.Checked
             Keyboard       = "$($cmbKeyboard.SelectedItem)"
@@ -9918,7 +10032,7 @@ function Restore-Settings {
     $value = Get-Setting 'NoScreensaver';  if ($null -ne $value) { $chkNoScreensaver.Checked = [bool]$value }
     $value = Get-Setting 'NewDisplay';     if ($null -ne $value) { $chkNewDisplay.Checked = [bool]$value }
     $value = Get-Setting 'NewDisplaySize'; if ($value) { $txtNewDisplay.Text = $value }
-    $value = Get-Setting 'StartApp';       if ($null -ne $value) { $txtStartApp.Text = $value }
+    $value = Get-Setting 'StartApp';       if ($null -ne $value) { $cmbStartApp.Text = $value }
     $value = Get-Setting 'ExtraArgs';      if ($null -ne $value) { $txtExtraArgs.Text = $value }
     $value = Get-Setting 'Otg';            if ($null -ne $value) { $chkOtg.Checked = [bool]$value }
     $value = Get-Setting 'Keyboard';       if ($value -and $cmbKeyboard.Items.Contains($value)) { $cmbKeyboard.SelectedItem = $value }
@@ -10109,6 +10223,7 @@ $btnHotspotSettings.Add_Click({
 $btnCameraList.Add_Click({ Update-CameraList })
 $btnListEncoders.Add_Click({ Update-EncoderList })
 $btnAudioEncoders.Add_Click({ Update-EncoderList })
+$cmbStartApp.Add_DropDown({ Update-StartAppChoices })
 $cmbAudioCodec.Add_SelectedIndexChanged({ Update-AudioEncoderChoices })
 $btnListCameraSizes.Add_Click({ Update-CameraSizeList })
 $btnCameraStart.Add_Click({ Start-Camera })

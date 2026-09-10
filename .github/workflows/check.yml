@@ -35,6 +35,35 @@ jobs:
             }
           if ($failed -gt 0) { exit 1 }
 
+      - name: Every script reads the same on every Windows
+        shell: pwsh
+        run: |
+          # Windows PowerShell 5.1, which the launcher runs, reads a .ps1 with
+          # no BOM in the PC's ANSI code page. A non-ASCII letter in such a
+          # file therefore means one thing on a UTF-8 PC and another on a 1252
+          # or 1256 one. An Arabic word in androiddc.ps1 worked only on the
+          # first. So a script either carries a BOM or is plain ASCII.
+          $files = @(Get-ChildItem -Path . -Recurse -Filter *.ps1 |
+            Where-Object { $_.FullName -notmatch '[\\/]backups[\\/]' })
+          if ($files.Count -eq 0) {
+            Write-Host '::error::no .ps1 found - this check would pass without reading anything'
+            exit 1
+          }
+          $failed = 0
+          foreach ($file in $files) {
+            $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              Write-Host "ok  $($file.Name) (has a BOM)"
+              continue
+            }
+            $at = [Array]::FindIndex($bytes, [Predicate[byte]] { param($b) $b -gt 127 })
+            if ($at -lt 0) { Write-Host "ok  $($file.Name)"; continue }
+            $line = [System.Text.Encoding]::ASCII.GetString($bytes, 0, $at).Split("`n").Count
+            Write-Host "::error file=$($file.Name),line=$line::a non-ASCII byte in a file with no BOM"
+            $failed++
+          }
+          if ($failed -gt 0) { exit 1 }
+
       - name: No variable is read before it is assigned
         shell: pwsh
         run: .\.github\audit-variables.ps1

@@ -105,7 +105,8 @@ Four inner pages holding everything you do not need every day.
 ### Mirroring (scrcpy)
 
 The full scrcpy surface: max size, bit rate, fps, video codec, display id, new virtual
-display and its size, start-app, fullscreen, borderless, always on top, screen off, stay
+display and its size, start-app (pick one of the phone's apps by name, or type a package),
+fullscreen, borderless, always on top, screen off, stay
 awake, no audio, view only, power off on close, no screensaver, keyboard/mouse/gamepad mode
 (`uhid`, `aoa`, `disabled`), OTG, recording, and a free-text box for any other flag.
 
@@ -162,7 +163,13 @@ there instead of a dead button.
 
 ## Apps
 
-Everything installed, with package name, label and paths.
+Everything installed. **Name** comes first — "Chrome", "Nafath | نفاذ" — read from the phone
+with `scrcpy --list-apps`, because `pm` only knows package names. Asking takes a few seconds,
+so each phone is asked once and the names are kept; they are read again by themselves when
+the set of installed apps changes, whether from here, the Play Store or anywhere else. Only
+apps with a launcher icon have a name; services and libraries show their package alone. The
+filter matches the name or the package, and *Export list...* adds the name as a last, quoted
+column.
 
 *Launch*, *Own scrcpy window* (opens the app on its own virtual display), *Force stop*,
 *App info*, *Uninstall*, *Install APK...*, *Export list...*

@@ -23,7 +23,7 @@ Bridge, so the phone only ever does what USB debugging already allows.
 | **Device** | Details of the selected phone, live screenshot with click-to-tap, quick toggles (Wi-Fi, Bluetooth, location, rotation, torch, battery saver, haptics, show taps, stay awake, developer options), call / SMS / USSD, and one-click mirroring |
 | **Tethering** | PC → phone with [gnirehtet](https://github.com/Genymobile/gnirehtet) (reverse tethering), and phone → PC over USB or a proxy |
 | **Advanced** | Four pages: every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, input modes), more of them (recording format and time limit, orientation, window placement, shortcut keys), the adb tools (wireless pairing, mDNS discovery, bug report, private DNS, IME, hotspot), and a Root / recovery page that shows what your device cannot do and says why |
-| **Apps** | What is installed, launch, force stop, uninstall, open in its own scrcpy window, and install `.apk` or a split `.xapk` / `.apks` / `.apkm` |
+| **Apps** | What is installed, by name as well as package, launch, force stop, uninstall, open in its own scrcpy window, and install `.apk` or a split `.xapk` / `.apks` / `.apkm` |
 | **Contacts / SMS** | Read, add, edit, delete, call, send |
 | **Cam / Mic** | Front and rear camera as a video source with zoom, and the phone microphone or output streamed or recorded on the PC, with the codec, encoder and bit rate read from the phone |
 | **Files** | Browse, search, sort, rename, upload, download, move, compress, extract, preview pictures and text without saving them, free space of the current volume |

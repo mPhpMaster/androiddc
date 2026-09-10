@@ -30,8 +30,9 @@ anything added next.
 >   now scrolls instead of cutting its audio controls off; the other pages are not fixed.
 > * **`--audio-encoder` was listed in Phase 2 but did not exist.** It does now: Cam / Mic ▸
 >   Microphone has an encoder list that follows the codec, filled from the phone.
-> * **`--list-apps` was listed in Phase 2 but did not exist** — nothing fills the app picker
->   from the phone yet.
+> * **`--list-apps` was listed in Phase 2 but did not exist.** It does now: the Apps list has
+>   a Name column read from the phone, the filter finds an app by its name, and *Start app* on
+>   the Mirroring page lists the phone's apps by name.
 
 ---
 
