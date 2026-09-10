@@ -171,6 +171,39 @@ changes.
 button on another tab must select that tab first, or raise `OnClick` the way the context menus
 do.
 
+### What CI checks, and how a check passes on nothing
+
+`.github/workflows/check.yml` runs on every push: every `.ps1` must parse, no variable may be
+read before it is assigned, the launcher must point at a file that exists, and no absolute
+developer path may appear in a shipped file.
+
+The path check was itself the best example of the rule above. It was written as
+
+```powershell
+$hits = Select-String -Path .\*.ps1, .\docs\*.md -Pattern '...' -ErrorAction SilentlyContinue
+```
+
+and **a run that matched no files at all printed `ok nothing hardcoded` and exited 0** — a
+green check that had read nothing looks exactly like a clean tree, and `SilentlyContinue`
+hides a broken pattern the same way. It now asserts that every glob matched something,
+reports how many files it read, and uses `-ErrorAction Stop`.
+
+`.github/audit-variables.ps1` walks the AST for variables that are read but never assigned,
+which is what a half-finished rename leaves behind: `$chkExtraArgs` became `$lblExtraArgs`
+and one reference stayed, and under `Set-StrictMode` that is a crash the moment a user clicks
+the control. The rule it turns on is easy to get backwards:
+
+```powershell
+$x = 1           # assigns $x
+$x.Text = 'a'    # READS $x - the property is what gets assigned
+$x[0] = 1        # READS $x
+```
+
+Counting those last two as assignments makes a typo define itself, and `$btnFileCopyPathh.Text = ...`
+passes in silence. The way that was caught was not by reading the code but by planting a
+deliberate typo and checking the audit failed — the same discipline as asserting an operation
+had an effect before trusting its timing.
+
 ### Working in a checkout someone else is also using
 
 Two people — or two assistants — editing one 10,000-line script in the same folder will
