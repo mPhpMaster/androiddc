@@ -345,9 +345,15 @@ try {
     }
 
     if ($DisableWifi) {
-        Write-Step 'Turning Wi-Fi off on the device'
-        Invoke-AdbShell -CommandArguments @('svc', 'wifi', 'disable') -IgnoreFailure | Out-Null
-        $script:wifiDisabled = $true
+        # only a radio this turned off is turned back on at exit
+        $wifiOn = ((Invoke-AdbShell -CommandArguments @('settings', 'get', 'global', 'wifi_on') -IgnoreFailure) -join '').Trim()
+        if ($wifiOn -eq '0') {
+            Write-Note 'Wi-Fi is already off on the device, and stays off afterwards.'
+        } else {
+            Write-Step 'Turning Wi-Fi off on the device'
+            Invoke-AdbShell -CommandArguments @('svc', 'wifi', 'disable') -IgnoreFailure | Out-Null
+            $script:wifiDisabled = $true
+        }
     }
 
     Write-Step "Starting reverse tethering (DNS $Dns, port $Port)"

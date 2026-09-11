@@ -97,6 +97,32 @@ if ($named.Count -eq 0) {
 }
 
 Say ''
+Say '== user / system and enabled / disabled, by whole name =='
+$chkAppsSystem.Checked = $true
+$txtAppFilter.Text = ''
+Update-AppList
+$third = (Invoke-DeviceShell -Serial $TestSerial -CommandArguments @('pm list packages -3')).Text
+$off = (Invoke-DeviceShell -Serial $TestSerial -CommandArguments @('pm list packages -d')).Text
+$userSet = @([regex]::Matches($third, 'package:(\S+)') | ForEach-Object { $_.Groups[1].Value })
+$offSet = @([regex]::Matches($off, 'package:(\S+)') | ForEach-Object { $_.Groups[1].Value })
+$wrong = 0
+$oldWrong = 0
+foreach ($item in $lstApps.Items) {
+    $package = $item.Text
+    $wantType = if ($userSet -contains $package) { 'user' } else { 'system' }
+    $wantState = if ($offSet -contains $package) { 'disabled' } else { 'enabled' }
+    if ($item.SubItems[2].Text -ne $wantType -or $item.SubItems[3].Text -ne $wantState) { $wrong++ }
+    # what the prefix search used to answer, so the check is seen able to fail
+    $oldType = if ($third -match [regex]::Escape("package:$package")) { 'user' } else { 'system' }
+    $oldState = if ($off -match [regex]::Escape("package:$package")) { 'disabled' } else { 'enabled' }
+    if ($oldType -ne $wantType -or $oldState -ne $wantState) { $oldWrong++ }
+}
+Say ("{0} packages, {1} labelled wrong   {2}" -f $lstApps.Items.Count, $wrong, (Mark ($lstApps.Items.Count -gt 0 -and $wrong -eq 0)))
+Say ("  (the prefix search would have labelled {0} of them wrong on this phone)" -f $oldWrong)
+$chkAppsSystem.Checked = $false
+Update-AppList
+
+Say ''
 Say '== Start app =='
 $tabs.SelectedTab = $tabAdvanced
 $tabsAdvanced.SelectedTab = $tabScrcpy

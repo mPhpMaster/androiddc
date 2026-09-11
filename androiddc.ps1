@@ -44,7 +44,7 @@ $script:gnirehtetPath = $null
 $script:scrcpyPath = $null
 $script:relayProcess = $null
 $script:activeSerials = @()
-$script:wifiDisabled = $false
+$script:wifiDisabled = @()     # the phones whose Wi-Fi sharing turned off
 $script:outFile = $null
 $script:audioEncoders = @()   # filled from scrcpy --list-encoders
 $script:appLabels = @{}       # serial -> @{ package = app name }, from scrcpy --list-apps
@@ -3607,9 +3607,17 @@ function Start-Sharing {
             }
 
             if ($chkWifi.Checked) {
-                Write-Log "Turning Wi-Fi off on $current ..." $colorStep
-                $null = Invoke-DeviceShell -Serial $current -CommandArguments @('svc', 'wifi', 'disable')
-                $script:wifiDisabled = $true
+                # only a radio this turned off is turned back on at the end:
+                # a phone kept on mobile data used to come back with Wi-Fi on
+                $wifiOn = (Invoke-DeviceShell -Serial $current -CommandArguments @(
+                    'settings', 'get', 'global', 'wifi_on')).Text.Trim()
+                if ($wifiOn -eq '0') {
+                    Write-Log "Wi-Fi is already off on $current, and stays off afterwards." $colorInfo
+                } else {
+                    Write-Log "Turning Wi-Fi off on $current ..." $colorStep
+                    $null = Invoke-DeviceShell -Serial $current -CommandArguments @('svc', 'wifi', 'disable')
+                    $script:wifiDisabled += $current
+                }
             }
         }
     }
@@ -3685,12 +3693,12 @@ function Stop-Sharing {
         $null = Invoke-Gnirehtet -CommandArguments @('stop', $current)
         $null = Invoke-Adb -CommandArguments @('-s', $current, 'reverse', '--remove', 'localabstract:gnirehtet')
 
-        if ($script:wifiDisabled) {
+        if ($script:wifiDisabled -contains $current) {
             $null = Invoke-DeviceShell -Serial $current -CommandArguments @('svc', 'wifi', 'enable')
             if (-not $Quiet) { Write-Log "Wi-Fi re-enabled on $current." $colorInfo }
         }
     }
-    $script:wifiDisabled = $false
+    $script:wifiDisabled = @()
 
     $script:activeSerials = @()
 
@@ -5292,8 +5300,12 @@ function Update-AppList {
 
     # the names are read again only when the installed apps have changed -
     # an install from here, from the Play Store, or anywhere else
-    $installed = (@([regex]::Matches($thirdParty, 'package:(\S+)') |
-        ForEach-Object { $_.Groups[1].Value } | Sort-Object) -join ' ')
+    # whole names, compared whole: a search for "package:com.foo" also found
+    # it at the start of "package:com.foo.bar", so a system app whose name
+    # begins another's took that app's user / disabled label
+    $userPackages = @([regex]::Matches($thirdParty, 'package:(\S+)') | ForEach-Object { $_.Groups[1].Value })
+    $disabledPackages = @([regex]::Matches($disabled, 'package:(\S+)') | ForEach-Object { $_.Groups[1].Value })
+    $installed = (@($userPackages | Sort-Object) -join ' ')
     $changed = $script:appLabelsSeen.ContainsKey($serial) -and $script:appLabelsSeen[$serial] -ne $installed
     $names = Get-AppLabels -Serial $serial -Refresh:$changed
     $script:appLabelsSeen[$serial] = $installed
@@ -5312,9 +5324,8 @@ function Update-AppList {
 
             $item = New-Object System.Windows.Forms.ListViewItem($package)
             $null = $item.SubItems.Add($version)
-            $null = $item.SubItems.Add($(if ($thirdParty -match [regex]::Escape("package:$package`n") -or
-                $thirdParty -match [regex]::Escape("package:$package")) { 'user' } else { 'system' }))
-            $null = $item.SubItems.Add($(if ($disabled -match [regex]::Escape("package:$package")) { 'disabled' } else { 'enabled' }))
+            $null = $item.SubItems.Add($(if ($userPackages -contains $package) { 'user' } else { 'system' }))
+            $null = $item.SubItems.Add($(if ($disabledPackages -contains $package) { 'disabled' } else { 'enabled' }))
             $null = $item.SubItems.Add($name)
             if ($name) { $named++ }
             $null = $lstApps.Items.Add($item)

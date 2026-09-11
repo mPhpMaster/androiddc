@@ -40,7 +40,8 @@
     files are left alone and reported as "already there".
 
 .PARAMETER KeepArchives
-    Keep the downloaded .zip files instead of deleting them at the end.
+    Keep the downloaded .zip files instead of deleting them at the end. Only
+    the archives this run used are ever deleted, whatever else is in the folder.
 
 .PARAMETER CacheFolder
     Where the archives are downloaded to. Defaults to a temp folder. An archive
@@ -219,6 +220,8 @@ function Get-Package {
     Write-Note $DownloadUri
 
     $archive = Join-Path $CacheFolder $AssetName
+    # the only archives the clean-up at the end may delete
+    $script:usedArchives += $archive
     $expected = Get-ExpectedHash -AssetName $AssetName -SumsUri $SumsUri
 
     $needDownload = $true
@@ -381,6 +384,7 @@ $work = Join-Path $env:TEMP ('upstream-unpack-' + [Guid]::NewGuid().ToString('N'
 $null = New-Item -ItemType Directory -Path $work -Force
 
 $summary = @()
+$usedArchives = @()
 try {
     if (-not $SkipScrcpy) {
         $asset = "scrcpy-win64-v$ScrcpyVersion.zip"
@@ -403,8 +407,12 @@ try {
     }
 } finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+    # the two archives this run used, never "*.zip": -CacheFolder can be any
+    # folder, and pointed at Downloads that wildcard emptied it of every zip
     if (-not $KeepArchives) {
-        Remove-Item -Path (Join-Path $CacheFolder '*.zip') -Force -ErrorAction SilentlyContinue
+        foreach ($file in $usedArchives) {
+            Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
