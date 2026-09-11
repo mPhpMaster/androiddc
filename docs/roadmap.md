@@ -28,7 +28,10 @@ anything added next.
 >   box, over 54 containers. At the minimum 1120 × 700 it did not: 3 overlaps and 31
 >   controls outside, on most pages, because a page there is only about 711 × 248. Cam / Mic
 >   now scrolls instead of cutting its audio controls off, and Root / recovery lays itself
->   out to the page's width, which brings it to 24. The other pages are not fixed.
+>   out to the page's width, which brought it to 24. On 2026-09-11 the rest were fitted, and
+>   the audit now reads 0 overlaps and 0 controls outside at both sizes: rows that run out of
+>   room wrap and their group grows, taller pages scroll, and *More scrcpy options* - which
+>   had no layout at all - uses two columns only when they fit.
 > * **"Checked at run time when a device is selected" was half true.** The Root page read the
 >   phone when the outer *Advanced* tab was opened - not from its own tab, and not when
 >   another phone was picked - so one phone's marks could stay on screen for another. It now

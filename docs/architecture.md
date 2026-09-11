@@ -147,8 +147,13 @@ Two checks worth repeating after any edit:
 * **Layout:** walk **every group box**, not only every page, and compare `Bounds.IntersectsWith`
   between children and against `ClientSize` — **at the default size and again at the
   minimum size**. The target is zero overlaps and zero controls outside their box. Measured
-  on 2026-09-10 it is met at 1420 × 900 and not at 1120 × 700 (3 overlaps, 24 outside, after the Cam / Mic and Root pages were fixed); see
-  the correction in the [roadmap](roadmap.md).
+  on 2026-09-10 it is met at 1420 × 900, and since 2026-09-11 at 1120 × 700 too; see
+  the correction in the [roadmap](roadmap.md). What made the minimum size fit, and what to
+  keep doing in a layout function: a row that can run out of its box wraps — `Set-ButtonFlow`
+  for buttons, `Set-CheckRow` for check boxes — and the box takes its height from what is in
+  it (`Get-ControlsBottom`), moving everything below it down by the difference. A page whose
+  content is taller than about 250 px sets `AutoScroll`, since that is all a page gets at the
+  smallest window.
 * **Wiring:** compare the set of `$x.Add_Click(` handlers against the set of created controls.
   A patch that deletes code can silently take handlers with it; buttons then do nothing and
   the log stays empty.

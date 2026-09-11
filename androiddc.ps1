@@ -396,6 +396,9 @@ $splitMain.Panel2.Controls.Add($tabs)
 $tabDevice = New-Object System.Windows.Forms.TabPage
 $tabDevice.Text = 'Device'
 $tabDevice.BackColor = [System.Drawing.SystemColors]::Control
+# at the smallest window a page is about 250 px tall; the pages whose content
+# is taller scroll instead of cutting their lower groups off
+$tabDevice.AutoScroll = $true
 $tabs.TabPages.Add($tabDevice)
 
 # Sharing the connection is one subject with two directions, so both live
@@ -412,11 +415,13 @@ $tabTethering.Controls.Add($tabsTethering)
 $tabShare = New-Object System.Windows.Forms.TabPage
 $tabShare.Text = 'PC -> Phone (gnirehtet)'
 $tabShare.BackColor = [System.Drawing.SystemColors]::Control
+$tabShare.AutoScroll = $true
 $tabsTethering.TabPages.Add($tabShare)
 
 $tabTether = New-Object System.Windows.Forms.TabPage
 $tabTether.Text = 'Phone -> PC (tether / proxy)'
 $tabTether.BackColor = [System.Drawing.SystemColors]::Control
+$tabTether.AutoScroll = $true
 $tabsTethering.TabPages.Add($tabTether)
 
 $tabAdvanced = New-Object System.Windows.Forms.TabPage
@@ -437,6 +442,7 @@ $tabsAdvanced.TabPages.Add($tabScrcpy)
 $tabMore = New-Object System.Windows.Forms.TabPage
 $tabMore.Text = 'More scrcpy options'
 $tabMore.BackColor = [System.Drawing.SystemColors]::Control
+$tabMore.AutoScroll = $true
 $tabsAdvanced.TabPages.Add($tabMore)
 
 $tabRoot = New-Object System.Windows.Forms.TabPage
@@ -8368,13 +8374,15 @@ function Export-RunningList {
 
 
 function Update-MirrorLayout {
-    # the groups stack down the page; inside each one the controls sit on rows
+    # The groups stack down the page on one running y; inside each the controls
+    # sit on rows. At the smallest window a row that would run out of its group
+    # wraps instead, and the group - and everything under it - makes room. At
+    # full width every row lands exactly where it always did.
     $width = $tabScrcpy.ClientSize.Width
     if ($width -lt 300) { return }
     $inner = $width - 24
     $half = [int](($inner - 12) / 2)
 
-    $grpVideo.SetBounds(12, 6, $inner, 56)
     $x = 12
     foreach ($pair in @(@('Max size', $cmbMaxSize, 58, 80), @('Bit rate', $cmbBitrate, 52, 80),
             @('Max FPS', $cmbFps, 58, 70), @('Codec', $cmbCodec, 46, 110))) {
@@ -8383,34 +8391,54 @@ function Update-MirrorLayout {
         $pair[1].SetBounds($x, 22, $pair[3], 24)
         $x += $pair[3] + 16
     }
-    $btnListEncoders.SetBounds($x, 21, $btnListEncoders.Width, 26)
+    # Codecs after the codec, or under it when the row is full
+    $videoHeight = 56
+    if (($x + $btnListEncoders.Width) -gt ($inner - 12)) {
+        $btnListEncoders.SetBounds(12, 53, $btnListEncoders.Width, 26)
+        $videoHeight = 88
+    } else {
+        $btnListEncoders.SetBounds($x, 21, $btnListEncoders.Width, 26)
+    }
+    $grpVideo.SetBounds(12, 6, $inner, $videoHeight)
+    $y = 6 + $videoHeight + 6
 
-    $grpWindowOpts.SetBounds(12, 68, $half, 80)
-    $null = Set-CheckRow -Left 12 -Top 24 -Limit ($half - 16) -Boxes @($chkFullscreen, $chkBorderless,
-        $chkOnTop, $chkNoScreensaver)
+    $windowBoxes = @($chkFullscreen, $chkBorderless, $chkOnTop, $chkNoScreensaver)
+    $phoneBoxes = @($chkScreenOff, $chkStayAwake, $chkNoAudio, $chkViewOnly, $chkPowerOff)
+    $null = Set-CheckRow -Left 12 -Top 24 -Limit ($half - 16) -Boxes $windowBoxes
+    $null = Set-CheckRow -Left 12 -Top 24 -Limit ($half - 16) -Boxes $phoneBoxes
+    # the two halves as tall as the taller one, however their boxes wrapped
+    $optsHeight = [Math]::Max(80, 8 + [Math]::Max((Get-ControlsBottom -Controls $windowBoxes),
+            (Get-ControlsBottom -Controls $phoneBoxes)))
+    $grpWindowOpts.SetBounds(12, $y, $half, $optsHeight)
+    $grpPhoneOpts.SetBounds((24 + $half), $y, $half, $optsHeight)
+    $y += $optsHeight + 6
 
-    $grpPhoneOpts.SetBounds((24 + $half), 68, $half, 80)
-    $null = Set-CheckRow -Left 12 -Top 24 -Limit ($half - 16) -Boxes @($chkScreenOff, $chkStayAwake,
-        $chkNoAudio, $chkViewOnly, $chkPowerOff)
-
-    $grpTarget.SetBounds(12, 154, $inner, 116)
     $script:scrcpyLabels['Display'].SetBounds(12, 26, 46, 20)
     $cmbDisplay.SetBounds(62, 22, 70, 24)
     $btnListDisplays.SetBounds(138, 21, $btnListDisplays.Width, 26)
     $chkNewDisplay.SetBounds(($btnListDisplays.Bounds.Right + 12), 24, 110, 22)
     $txtNewDisplay.SetBounds(($chkNewDisplay.Bounds.Right + 4), 22, 130, 24)
-    $script:scrcpyLabels['Start app'].SetBounds(($txtNewDisplay.Bounds.Right + 12), 26, 62, 20)
-    $cmbStartApp.SetBounds(($txtNewDisplay.Bounds.Right + 78), 22,
-        [Math]::Max(90, ($inner - $txtNewDisplay.Bounds.Right - 90)), 24)
+    # Start app beside the display, or on a row of its own when that would
+    # leave the list too narrow to read an app's name in it
+    $row = 0
+    if (($inner - $txtNewDisplay.Bounds.Right - 90) -ge 160) {
+        $script:scrcpyLabels['Start app'].SetBounds(($txtNewDisplay.Bounds.Right + 12), 26, 62, 20)
+        $cmbStartApp.SetBounds(($txtNewDisplay.Bounds.Right + 78), 22, ($inner - $txtNewDisplay.Bounds.Right - 90), 24)
+    } else {
+        $row = 32
+        $script:scrcpyLabels['Start app'].SetBounds(12, 58, 62, 20)
+        $cmbStartApp.SetBounds(78, 54, ($inner - 90), 24)
+    }
 
-    $chkRecord.SetBounds(12, 54, 80, 22)
-    $txtRecord.SetBounds(96, 52, [Math]::Max(120, ($inner - 96 - $btnBrowseRecord.Width - 24)), 24)
-    $btnBrowseRecord.SetBounds(($txtRecord.Bounds.Right + 8), 51, $btnBrowseRecord.Width, 26)
+    $chkRecord.SetBounds(12, (54 + $row), 80, 22)
+    $txtRecord.SetBounds(96, (52 + $row), [Math]::Max(120, ($inner - 96 - $btnBrowseRecord.Width - 24)), 24)
+    $btnBrowseRecord.SetBounds(($txtRecord.Bounds.Right + 8), (51 + $row), $btnBrowseRecord.Width, 26)
 
-    $lblExtraArgs.SetBounds(12, 86, 96, 20)
-    $txtExtraArgs.SetBounds(112, 84, [Math]::Max(140, ($inner - 130)), 24)
+    $lblExtraArgs.SetBounds(12, (86 + $row), 96, 20)
+    $txtExtraArgs.SetBounds(112, (84 + $row), [Math]::Max(140, ($inner - 130)), 24)
+    $grpTarget.SetBounds(12, $y, $inner, (116 + $row))
+    $y += 116 + $row + 6
 
-    $grpControl.SetBounds(12, 276, $inner, 56)
     $chkOtg.SetBounds(12, 24, 150, 22)
     $x = 170
     foreach ($pair in @(@('Keyboard', $cmbKeyboard), @('Mouse', $cmbMouse), @('Gamepad', $cmbGamepad))) {
@@ -8418,10 +8446,57 @@ function Update-MirrorLayout {
         $pair[1].SetBounds(($x + 64), 22, 90, 24)
         $x += 164
     }
-    $btnKeyboardLayout.SetBounds($x, 21, $btnKeyboardLayout.Width, 26)
+    # the layout button after the three modes, or under them when there is no room
+    $controlHeight = 56
+    if (($x + $btnKeyboardLayout.Width) -gt ($inner - 12)) {
+        $btnKeyboardLayout.SetBounds(12, 53, $btnKeyboardLayout.Width, 26)
+        $controlHeight = 88
+    } else {
+        $btnKeyboardLayout.SetBounds($x, 21, $btnKeyboardLayout.Width, 26)
+    }
+    $grpControl.SetBounds(12, $y, $inner, $controlHeight)
+    $y += $controlHeight + 8
 
-    $null = Set-ButtonRowLeft -Left 12 -Top 340 -Buttons @($btnScrcpy, $btnScrcpyShare, $btnOtg,
+    $null = Set-ButtonFlow -Left 12 -Top $y -Limit ($inner + 12) -Buttons @($btnScrcpy, $btnScrcpyShare, $btnOtg,
         $btnScrcpyClose, $btnShowCommand)
+}
+
+function Update-MoreLayout {
+    <#
+        This page had no layout function: two columns of 440 px groups over an
+        892 px one, which ran off any page narrower than about 916 px. Two
+        columns when they fit, one otherwise, and the keyboard group's switches
+        wrap onto as many rows as its width needs.
+    #>
+    $width = $tabMore.ClientSize.Width
+    if ($width -lt 300) { return }
+    $inner = $width - 24
+
+    $switches = @($chkPreferText, $chkRawKeys, $chkNoKeyRepeat, $chkLegacyPaste, $chkKillAdb, $chkNoCleanup)
+    if ($inner -ge 892) {
+        # as designed
+        $grpRecord.SetBounds(12, 8, 440, 84)
+        $grpTurn.SetBounds(464, 8, 440, 84)
+        $grpVirtual.SetBounds(12, 100, 440, 84)
+        $grpWindow.SetBounds(464, 100, 440, 84)
+        $chkPreferText.SetBounds(468, 26, 184, 22)
+        $chkRawKeys.SetBounds(660, 26, 140, 22)
+        $chkNoKeyRepeat.SetBounds(14, 54, 130, 22)
+        $chkLegacyPaste.SetBounds(154, 54, 120, 22)
+        $chkKillAdb.SetBounds(284, 54, 270, 22)
+        $chkNoCleanup.SetBounds(564, 54, 240, 22)
+        $grpInput.SetBounds(12, 192, 892, 84)
+        return
+    }
+
+    $y = 8
+    foreach ($group in @($grpRecord, $grpTurn, $grpVirtual, $grpWindow)) {
+        $group.SetBounds(12, $y, $inner, 84)
+        $y += 92
+    }
+    # the shortcut key and mouse fields keep their row; the switches follow it
+    $null = Set-CheckRow -Left 14 -Top 54 -Limit ($inner - 12) -Boxes $switches
+    $grpInput.SetBounds(12, $y, $inner, [Math]::Max(84, (Get-ControlsBottom -Controls $switches) + 8))
 }
 
 function Set-CheckRow {
@@ -8519,14 +8594,19 @@ function Update-TetherLayout {
         $numPort.SetBounds(252, 24, 80, 24)
         $lblRoutes.SetBounds(346, 28, 50, 20)
         $txtRoutes.SetBounds(400, 24, [Math]::Max(120, ($inner - 412)), 24)
-        $null = Set-CheckRow -Left 12 -Top 58 -Limit ($inner - 12) -Boxes @($chkWifi, $chkReinstall,
-            $chkAutoTest, $chkScrcpyAfter)
+        $tunnelBoxes = @($chkWifi, $chkReinstall, $chkAutoTest, $chkScrcpyAfter)
+        $null = Set-CheckRow -Left 12 -Top 58 -Limit ($inner - 12) -Boxes $tunnelBoxes
+        # the boxes wrap at a narrow window; the group grows with them and
+        # everything under it moves down by the same amount
+        $grow = [Math]::Max(0, (Get-ControlsBottom -Controls $tunnelBoxes) + 8 - 96)
+        $grpTunnel.SetBounds(12, 6, $inner, (96 + $grow))
 
-        $null = Set-ButtonRowLeft -Left 12 -Top 112 -Buttons @($btnStart, $btnStop, $btnTest)
-        $null = Set-ButtonRowLeft -Left 12 -Top 150 -Buttons @($btnInstallClient, $btnUninstallClient,
+        $null = Set-ButtonRowLeft -Left 12 -Top (112 + $grow) -Buttons @($btnStart, $btnStop, $btnTest)
+        $null = Set-ButtonRowLeft -Left 12 -Top (150 + $grow) -Buttons @($btnInstallClient, $btnUninstallClient,
             $btnShareRestart)
-        $chkShareAutostart.SetBounds(($btnShareRestart.Bounds.Right + 12), 154, 320, 22)
-        $lblShareHint.SetBounds(12, 188, [Math]::Max(200, $inner), 34)
+        $chkShareAutostart.SetBounds(($btnShareRestart.Bounds.Right + 12), (154 + $grow),
+            [Math]::Min(320, [Math]::Max(120, ($width - 12 - $btnShareRestart.Bounds.Right - 12))), 22)
+        $lblShareHint.SetBounds(12, (188 + $grow), [Math]::Max(200, $inner), 34)
     }
 
     $width = $tabTether.ClientSize.Width
@@ -8557,38 +8637,51 @@ function Update-ToolsLayout {
     if ($width -lt 300) { return }
     $inner = $width - 24
 
-    $grpConnect.SetBounds(12, 6, $inner, 130)
-    $x = Set-ButtonRowLeft -Left 12 -Top 20 -Buttons @($btnPair, $btnMdns, $btnReconnect, $btnBugReport)
-    $null = Set-ButtonRowLeft -Left $x -Top 20 -Buttons @($btnTcpip)
-    $txtConnect.SetBounds(12, 56, 180, 24)
-    $null = Set-ButtonRowLeft -Left 200 -Top 54 -Buttons @($btnConnect, $btnDisconnect, $btnRestartServer)
-    $null = Set-ButtonRowLeft -Left 12 -Top 90 -Buttons @($btnReverseList, $btnKillRelays, $btnRepairTunnel)
+    # the five tools on one row when they fit, on two when they do not; the
+    # rows under them, and every group after this one, move down to match
+    $next = Set-ButtonFlow -Left 12 -Top 20 -Limit ($inner - 12) -Buttons @($btnPair, $btnMdns, $btnReconnect,
+        $btnBugReport, $btnTcpip)
+    $grow = $next - 54
+    $txtConnect.SetBounds(12, (56 + $grow), 180, 24)
+    $null = Set-ButtonRowLeft -Left 200 -Top (54 + $grow) -Buttons @($btnConnect, $btnDisconnect, $btnRestartServer)
+    $null = Set-ButtonRowLeft -Left 12 -Top (90 + $grow) -Buttons @($btnReverseList, $btnKillRelays, $btnRepairTunnel)
+    $grpConnect.SetBounds(12, 6, $inner, (130 + $grow))
 
-    $grpDeviceActions.SetBounds(12, 142, $inner, 62)
+    $grpDeviceActions.SetBounds(12, (142 + $grow), $inner, 62)
     $null = Set-ButtonRowLeft -Left 12 -Top 24 -Buttons @($btnInstallApk, $btnScreenshot, $btnScreenToggle,
         $btnReboot, $btnBattery)
 
-    $grpDnsBox.SetBounds(12, 210, $inner, 86)
+    $grpDnsBox.SetBounds(12, (210 + $grow), $inner, 86)
     $lblDns.SetBounds(12, 28, 34, 20)
     $cmbDnsMode.SetBounds(50, 24, 180, 24)
-    $txtDnsHost.SetBounds(238, 24, 200, 24)
-    $null = Set-ButtonRowLeft -Left 446 -Top 23 -Buttons @($btnDnsRead, $btnDnsAdGuard, $btnDnsApply)
+    # the host box gives up width so its three buttons stay inside the group
+    $dnsButtons = @($btnDnsRead, $btnDnsAdGuard, $btnDnsApply)
+    $buttonsWidth = 0
+    foreach ($button in $dnsButtons) { $buttonsWidth += $button.Width + 8 }
+    $hostWidth = [Math]::Max(100, [Math]::Min(200, ($inner - 12 - 238 - 8 - $buttonsWidth)))
+    $txtDnsHost.SetBounds(238, 24, $hostWidth, 24)
+    $null = Set-ButtonRowLeft -Left (238 + $hostWidth + 8) -Top 23 -Buttons $dnsButtons
     $txtDnsState.SetBounds(12, 56, [Math]::Max(200, $inner - 24), 20)
 
-    $grpImeBox.SetBounds(12, 302, $inner, 92)
+    $grpImeBox.SetBounds(12, (302 + $grow), $inner, 92)
     $lblIme.SetBounds(12, 28, 92, 20)
-    $cmbIme.SetBounds(106, 24, 300, 24)
-    $null = Set-ButtonRowLeft -Left 414 -Top 23 -Buttons @($btnImeList, $btnImeDisable, $btnImeEnable)
+    # likewise the keyboard list for its three buttons
+    $imeButtons = @($btnImeList, $btnImeDisable, $btnImeEnable)
+    $buttonsWidth = 0
+    foreach ($button in $imeButtons) { $buttonsWidth += $button.Width + 8 }
+    $imeWidth = [Math]::Max(140, [Math]::Min(300, ($inner - 12 - 106 - 8 - $buttonsWidth)))
+    $cmbIme.SetBounds(106, 24, $imeWidth, 24)
+    $null = Set-ButtonRowLeft -Left (106 + $imeWidth + 8) -Top 23 -Buttons $imeButtons
     $null = Set-ButtonRowLeft -Left 12 -Top 55 -Buttons @($btnImeDefault, $btnImeReset)
     $lblImeHint.SetBounds(($btnImeReset.Bounds.Right + 12), 60, [Math]::Max(80, $inner - $btnImeReset.Bounds.Right - 24), 20)
 
-    $grpHotspotBox.SetBounds(12, 400, $inner, 96)
+    $grpHotspotBox.SetBounds(12, (400 + $grow), $inner, 96)
     $lblHotspot.SetBounds(12, 28, 60, 20)
     $null = Set-ButtonRowLeft -Left 76 -Top 24 -Buttons @($btnHotspotOn, $btnHotspotOff, $btnHotspotState,
         $btnHotspotSettings, $btnHotspotInfo)
     $null = Set-ButtonRowLeft -Left 76 -Top 58 -Buttons @($btnUsbTetherOn, $btnUsbTetherOff)
 
-    $lblToolsHint.SetBounds(12, 502, [Math]::Max(80, $inner), 20)
+    $lblToolsHint.SetBounds(12, (502 + $grow), [Math]::Max(80, $inner), 20)
 }
 
 function Update-ScreenLayout {
@@ -8620,8 +8713,15 @@ function Update-ScreenLayout {
     $btnSendText.SetBounds(($width - 98), ($top + 67), 90, 26)
     $txtSendText.SetBounds(8, ($top + 68), [Math]::Max(80, $width - 114), 24)
 
-    $lblScreenHint.SetBounds(8, ($height - 34), ($width - 16), 30)
-    $picScreen.SetBounds(8, ($top + 100), ($width - 16), ($height - $top - 140))
+    # the hint's second line wraps again in a narrow pane; it gets the height
+    # its text measures at this width, and the picture ends above it. Two lines
+    # measure 30, which puts both exactly where they always were.
+    $hintHeight = [System.Windows.Forms.TextRenderer]::MeasureText($lblScreenHint.Text, $lblScreenHint.Font,
+        (New-Object System.Drawing.Size(($width - 16), 10000)),
+        [System.Windows.Forms.TextFormatFlags]::WordBreak).Height
+    $hintHeight = [Math]::Max(30, $hintHeight)
+    $lblScreenHint.SetBounds(8, ($height - $hintHeight - 4), ($width - 16), $hintHeight)
+    $picScreen.SetBounds(8, ($top + 100), ($width - 16), ($height - $hintHeight - 10 - ($top + 100)))
 }
 
 
@@ -8649,6 +8749,32 @@ function Set-ButtonRowRight {
     }
 }
 
+function Set-ButtonFlow {
+    # buttons side by side at their own widths, as Set-ButtonRowLeft does, but
+    # one that would pass Limit starts a new row; returns the next free y
+    param($Buttons, [int]$Left, [int]$Top, [int]$Limit, [int]$Gap = 8, [int]$RowStep = 34)
+
+    $x = $Left
+    $y = $Top
+    foreach ($button in $Buttons) {
+        if ($x -gt $Left -and ($x + $button.Width) -gt $Limit) { $x = $Left; $y += $RowStep }
+        $button.SetBounds($x, $y, $button.Width, 28)
+        $x += $button.Width + $Gap
+    }
+    return ($y + $RowStep)
+}
+
+function Get-ControlsBottom {
+    # the lowest edge among some controls, to size the box that holds them
+    param($Controls)
+
+    $bottom = 0
+    foreach ($control in $Controls) {
+        if ($control.Bounds.Bottom -gt $bottom) { $bottom = $control.Bounds.Bottom }
+    }
+    return $bottom
+}
+
 
 function Update-DeviceTabLayout {
     $width = $tabDevice.ClientSize.Width
@@ -8659,7 +8785,7 @@ function Update-DeviceTabLayout {
     $btnDeviceCopy.SetBounds(212, 10, 80, 28)
     $btnDeviceScrcpy.SetBounds(300, 10, 150, 28)
 
-    $rightWidth = [Math]::Max(360, [Math]::Min(460, [int]($width * 0.46)))
+    $rightWidth = [Math]::Max(390, [Math]::Min(460, [int]($width * 0.46)))
     $leftWidth = [Math]::Max(200, $width - $rightWidth - 38)
     # a cut off sentence helps nobody: it shows only when it fits, and the
     # tooltip carries it the rest of the time
@@ -8675,10 +8801,27 @@ function Update-DeviceTabLayout {
     $grpToggles.SetBounds($x, 46, $rightWidth, 214)
     $grpDial.SetBounds($x, 268, $rightWidth, 84)
 
+    # The phone group was never laid out: its buttons kept their design places
+    # and ran out of the group at the smallest window. The number and the two
+    # buttons that act on it share a row; the other three go below.
+    $dialWidth = $grpDial.ClientSize.Width
+    $btnPhoneEnd.SetBounds(($dialWidth - 12 - $btnPhoneEnd.Width), 24, $btnPhoneEnd.Width, 26)
+    $btnPhoneCall.SetBounds(($btnPhoneEnd.Left - 8 - $btnPhoneCall.Width), 24, $btnPhoneCall.Width, 26)
+    $lblPhoneNumber.SetBounds(12, 28, 56, 20)
+    $txtPhoneNumber.SetBounds(72, 25, [Math]::Max(100, ($btnPhoneCall.Left - 8 - 72)), 24)
+    $x2 = 12
+    foreach ($button in @($btnPhoneSms, $btnPhoneUssd, $btnPhoneDialer)) {
+        $button.SetBounds($x2, 54, $button.Width, 26)
+        $x2 += $button.Width + 8
+    }
+
     # two columns, sized from what the buttons actually are now
     if ($script:togglePairs.Count -gt 0) {
-        $labelWidth = 100
         $buttonWidth = $script:togglePairs[0][1].Width
+        # the caption gives way first, down to what the captions need, so the
+        # two columns still fit the group at the smallest window
+        $room = $grpToggles.ClientSize.Width - 24
+        $labelWidth = [Math]::Max(84, [Math]::Min(100, [Math]::Floor(($room - 8) / 2) - (2 * $buttonWidth) - 12))
         $pairWidth = $labelWidth + 8 + (2 * $buttonWidth) + 4
         $column = [Math]::Max($pairWidth + 8, [int](($grpToggles.ClientSize.Width - 24) / 2))
 
@@ -8765,6 +8908,9 @@ function Update-RightLayout {
     $btnSaveLog.SetBounds(124, ($height - $logHeight - 40), 96, 28)
     $lblStatus.SetBounds(($width - 348), ($height - $logHeight - 40), 342, 28)
     $tabs.SetBounds(20, 194, ($width - 26), ($height - $logHeight - 240))
+
+    # the Running page's info line was 300 px from x 556, past a narrow page
+    $lblRunningInfo.SetBounds(556, 15, [Math]::Max(100, ($tabRunning.ClientSize.Width - 568)), 20)
 
     foreach ($pair in @(@($tabApps, $lstApps), @($tabContacts, $lstContacts), @($tabSms, $lstSms),
             @($tabRunning, $lstRunning), @($tabFiles, $lstFiles))) {
@@ -8866,6 +9012,7 @@ function Update-RightLayout {
     Update-MirrorLayout
     Update-CamMicLayout
     Update-TetherLayout
+    Update-MoreLayout
 }
 
 function Update-LogcatLayout {
@@ -8875,8 +9022,20 @@ function Update-LogcatLayout {
 
     $btnLogcatSave.SetBounds(($width - 94), 10, 80, 28)
     $chkLogcatFollow.SetBounds(($width - 172), 14, 70, 22)
-    $txtLogcatFilter.SetBounds(524, 12, [Math]::Max(90, ($width - 704)), 24)
-    $txtLogcat.SetBounds(14, 46, ($width - 28), ($height - 82))
+    # the filter sits between the level and "follow" when there is room for a
+    # useful box there, and on a row of its own under the buttons when not -
+    # at the smallest window it used to lie on top of "follow" and Save
+    $room = ($width - 172 - 8) - 524
+    if ($room -ge 120) {
+        $lblLogcatFilter.SetBounds(462, 16, 58, 20)
+        $txtLogcatFilter.SetBounds(524, 12, $room, 24)
+        $top = 46
+    } else {
+        $lblLogcatFilter.SetBounds(14, 50, 58, 20)
+        $txtLogcatFilter.SetBounds(76, 46, ($width - 90), 24)
+        $top = 78
+    }
+    $txtLogcat.SetBounds(14, $top, ($width - 28), ($height - $top - 36))
     $lblLogcatState.SetBounds(14, ($height - 30), ($width - 28), 20)
 }
 
@@ -8885,7 +9044,10 @@ function Update-ShellLayout {
     $height = $tabShell.ClientSize.Height
     if ($width -lt 300 -or $height -lt 200) { return }
 
-    $cmbShellPreset.SetBounds(($width - 304), 11, 290, 26)
+    # the presets list gives way before the status line disappears under it
+    $presetWidth = [Math]::Min(290, [Math]::Max(200, ($width - 306 - 150 - 14)))
+    $cmbShellPreset.SetBounds(($width - 14 - $presetWidth), 11, $presetWidth, 26)
+    $lblShellStatus.SetBounds(306, 16, [Math]::Max(40, ($cmbShellPreset.Left - 8 - 306)), 20)
     $txtShellOut.SetBounds(14, 46, ($width - 28), ($height - 112))
     $btnShellSend.SetBounds(($width - 100), ($height - 58), 86, 28)
     $txtShellIn.SetBounds(14, ($height - 57), ($width - 124), 26)
@@ -10736,7 +10898,12 @@ $btnReverseList.Add_Click({ Show-ReverseTunnels })
 $btnKillRelays.Add_Click({ Stop-StrayRelays })
 $btnRepairTunnel.Add_Click({ Repair-Tunnel })
 
-$splitMain.Panel1.Add_Resize({ Update-ScreenLayout })
+# grpScreen fills Panel1 by docking, and a docked control only takes its new
+# size in the layout pass that follows Panel1's Resize. Laid out on that
+# event, the pane read the old width: after the window shrank, Send text sat
+# past the edge until a tab change laid it out again. Its own Resize comes
+# after it has been sized.
+$grpScreen.Add_Resize({ Update-ScreenLayout })
 $splitMain.Panel2.Add_Resize({
     Update-RightLayout
     Update-ShellLayout

@@ -13,7 +13,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 
 | File | Size | Modified | What it is |
 |---|---:|---|---|
-| `androiddc.ps1` | 469 KB, 11058 lines | 2026-09-10 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
+| `androiddc.ps1` | 477 KB, 11225 lines | 2026-09-11 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
 | `androiddc.vbs` | 341 B | 2026-09-10 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`. **This is the file to double-click.** |
 | `README.md` | 7.2 KB | 2026-09-10 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
 | `docs\` | 9 pages | 2026-09-10 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
@@ -73,7 +73,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-f75537c02c743f92  androiddc.ps1
+786bfcbedecce3a5  androiddc.ps1
 ea4e1ed6ff774533  androiddc.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
@@ -99,4 +99,4 @@ deacb991ed250971  scrcpy-server
 4cc809d2cd822e18  swresample-6.dll
 ```
 
-Index written 2026-09-10.
+Index written 2026-09-11.
