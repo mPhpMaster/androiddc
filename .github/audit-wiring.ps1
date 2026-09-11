@@ -79,6 +79,7 @@ foreach ($file in $Path) {
 
     $created = @{}
     $line = @{}
+    $creations = @{}
     foreach ($node in $tree.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true)) {
         if ($node.Left -isnot [System.Management.Automation.Language.VariableExpressionAst]) { continue }
         $variable = $node.Left.VariablePath.UserPath
@@ -86,16 +87,40 @@ foreach ($file in $Path) {
         if ($node.Right.Extent.Text -match 'New-Object\s+System\.Windows\.Forms\.(\w+)') {
             $created[$variable] = $matches[1]
             $line[$variable] = $node.Extent.StartLineNumber
+
+            # one statement inside a loop makes many controls on purpose; only
+            # separate statements that reuse a name are counted below
+            $inLoop = $false
+            for ($up = $node.Parent; $up; $up = $up.Parent) {
+                if ($up -is [System.Management.Automation.Language.LoopStatementAst]) { $inLoop = $true; break }
+            }
+            if (-not $inLoop) {
+                if (-not $creations.ContainsKey($variable)) { $creations[$variable] = @() }
+                $creations[$variable] += $node.Extent.StartLineNumber
+            }
         }
     }
     if ($created.Count -eq 0) { continue }
+
+    # A name given to a second control loses the first: every line after the
+    # second New-Object means the new one, and the earlier control can no
+    # longer be placed or wired by name. Two labels were both $lblDns, and the
+    # tunnel page's one was never laid out.
+    $reused = 0
+    foreach ($variable in ($creations.Keys | Sort-Object)) {
+        $lines = @($creations[$variable])
+        if ($lines.Count -lt 2) { continue }
+        Write-Host ("::error file={0},line={1}::`${2} is given a new control {3} times (lines {4}) - the earlier ones can no longer be reached by that name" -f
+            $name, $lines[-1], $variable, $lines.Count, ($lines -join ', '))
+        $reused++
+    }
 
     $parented = [System.Collections.Generic.HashSet[string]]::new()
     foreach ($match in [regex]::Matches($text, '\.(?:Controls|TabPages|Items)\.Add(?:Range)?\(\s*\$(\w+)')) {
         $null = $parented.Add($match.Groups[1].Value)
     }
 
-    $broken = 0
+    $broken = $reused
     foreach ($variable in ($created.Keys | Sort-Object)) {
         $type = $created[$variable]
         if ($notVisual -contains $type) { continue }

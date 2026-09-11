@@ -608,11 +608,15 @@ $txtDeviceInfo.Size = New-Object System.Drawing.Size(820, 240)
 $tabDevice.Controls.Add($txtDeviceInfo)
 
 # --- tab 1: gnirehtet --------------------------------------------------------
-$lblDns = New-Object System.Windows.Forms.Label
-$lblDns.Text = 'DNS'
-$lblDns.Location = New-Object System.Drawing.Point(16, 22)
-$lblDns.Size = New-Object System.Drawing.Size(34, 20)
-$tabShare.Controls.Add($lblDns)
+# Named apart from $lblDns on the Device tools page. Both were once called
+# $lblDns: from the second New-Object on, the name meant the tools label only,
+# so this one was never placed by Update-TetherLayout and sat 6 px above the
+# Port and Routes labels on its row.
+$lblTunnelDns = New-Object System.Windows.Forms.Label
+$lblTunnelDns.Text = 'DNS'
+$lblTunnelDns.Location = New-Object System.Drawing.Point(16, 22)
+$lblTunnelDns.Size = New-Object System.Drawing.Size(34, 20)
+$tabShare.Controls.Add($lblTunnelDns)
 
 $cmbDns = New-Object System.Windows.Forms.ComboBox
 $cmbDns.DropDownStyle = 'DropDown'
@@ -831,7 +835,7 @@ $grpTunnel = New-Object System.Windows.Forms.GroupBox
 $grpTunnel.Text = 'Tunnel settings'
 $tabShare.Controls.Add($grpTunnel)
 
-foreach ($control in @($lblDns, $cmbDns, $lblPort, $numPort, $lblRoutes, $txtRoutes,
+foreach ($control in @($lblTunnelDns, $cmbDns, $lblPort, $numPort, $lblRoutes, $txtRoutes,
         $chkWifi, $chkReinstall, $chkAutoTest, $chkScrcpyAfter)) {
     $tabShare.Controls.Remove($control)
     $grpTunnel.Controls.Add($control)
@@ -8588,7 +8592,7 @@ function Update-TetherLayout {
         $inner = $width - 24
 
         $grpTunnel.SetBounds(12, 6, $inner, 96)
-        $lblDns.SetBounds(12, 28, 34, 20)
+        $lblTunnelDns.SetBounds(12, 28, 34, 20)
         $cmbDns.SetBounds(50, 24, 150, 24)
         $lblPort.SetBounds(214, 28, 34, 20)
         $numPort.SetBounds(252, 24, 80, 24)

@@ -66,6 +66,7 @@ checks scrcpy's own output, a move checks the copy arrived before deleting the o
 | `adb shell` with several arguments | Rebuilt and re-parsed by the device shell | `Quote-DevicePath` each path; for redirection send one whole string |
 | `Register-ObjectEvent` on a live adb stream (logcat) | Afterwards no asynchronous read completes on any adb process started later — the live shell went silent until restart. Not the volume: the same subscription on 20000 lines from `cmd` leaves reads working | Read the stream in a C# class on .NET's own threads: `LineReader`, like `LiveShell` |
 | `$process.StandardInput.WriteLine($text)` | Encoded in the console's input code page; .NET Framework has no `StandardInputEncoding`. On an OEM page Arabic becomes `?`, which the phone's shell expands as a file pattern | Write `[Text.Encoding]::UTF8.GetBytes($text + "`n")` to `StandardInput.BaseStream` |
+| `$lblDns = New-Object ...Label` a second time | The name now means the new control only. The first still exists and shows, but nothing can place or wire it by name: the tunnel page's DNS label was never laid out and sat 6 px above its row | One name per control. `audit-wiring.ps1` fails the build on a reused name |
 
 ## Event handlers
 
@@ -233,7 +234,7 @@ the underlying stream itself.
 
 `.github/workflows/check.yml` runs on every push: every `.ps1` must parse, every `.ps1` must
 be plain ASCII or carry a BOM, no variable may be read before it is assigned, every control
-must reach the screen and every button must have a handler, the launcher must point at a file
+must reach the screen, every button must have a handler and no control's name may be reused, the launcher must point at a file
 that exists, and no absolute developer path may appear in a shipped file.
 
 The path check was itself the best example of the rule above. It was written as
