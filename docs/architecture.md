@@ -108,8 +108,9 @@ adding it to the hash table in `Save-Settings` and a matching `Get-Setting` line
 
 ## Testing
 
-There is no unit-test framework here; the program is tested by running it. The pattern used
-during development:
+There is no unit-test framework here; the program is tested by running it. The tests are in
+[`tests/`](../tests/README.md), and `tests\run.ps1` runs them — three without a phone, five
+with one. This is how that harness works, and why:
 
 1. Copy `androiddc.ps1`, replace the window title with a marker, splice a test script into
    `$form.Add_Shown` with a **literal** `String.Replace` (a regex replacement would expand

@@ -89,7 +89,8 @@ jobs:
       - name: No absolute developer paths in shipped files
         shell: pwsh
         run: |
-          $targets = @('.\*.ps1', '.\.github\*.ps1', '.\*.vbs', '.\*.bat', '.\docs\*.md', '.\README.md')
+          $targets = @('.\*.ps1', '.\.github\*.ps1', '.\.github\*.py', '.\tests\*.ps1', '.\tests\*.md',
+            '.\*.vbs', '.\*.bat', '.\docs\*.md', '.\README.md')
 
           # A check that reads no files passes exactly as quietly as a clean
           # tree, and SilentlyContinue hides a bad pattern the same way. So
