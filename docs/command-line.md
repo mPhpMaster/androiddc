@@ -93,7 +93,7 @@ Reverse tethering with no window: give a phone the PC's internet from a script o
 | `-Reinstall` | — | Push the client APK again first |
 | `-StopOnly` | — | Stop a running tunnel and exit |
 | `-ListDevices` | — | Print what adb sees and exit |
-| `-DisableWifi` | — | Turn the phone's Wi-Fi off so it cannot slip back to its own network |
+| `-DisableWifi` | — | Turn the phone's Wi-Fi off so it cannot slip back to its own network; turned back on at exit only if it was on |
 | `-PauseOnError` | — | Keep the console open when something fails |
 
 `gnirehtet-share.bat` runs it with `-PauseOnError` and forwards your arguments, so it can be

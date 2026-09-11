@@ -228,6 +228,15 @@ function Invoke-DeviceShellText {
     return Invoke-Adb -CommandArguments @('-s', $Serial, 'shell', "echo $encoded | base64 -d | sh")
 }
 
+function Test-TextContains {
+    # what the filter boxes mean: the typed text somewhere in the value, any
+    # case. -like "*$filter*" read [ ] ? * as a pattern, so "IMG [1]" found
+    # "IMG 1" but not "IMG [1].jpg", and a lone "[" was an invalid pattern.
+    param([string]$Text, [string]$Part)
+
+    return $Text.IndexOf($Part, [StringComparison]::OrdinalIgnoreCase) -ge 0
+}
+
 function Quote-DeviceArgument {
     # one word for the phone's shell, whatever it contains
     param([string]$Text)
@@ -5320,7 +5329,7 @@ function Update-AppList {
             $version = if ($line -match 'versionCode:(\S+)') { $Matches[1] } else { '' }
             $name = if ($names.ContainsKey($package)) { $names[$package] } else { '' }
             # an app is found by what it is called, not only by its package
-            if ($filter -and $package -notlike "*$filter*" -and $name -notlike "*$filter*") { continue }
+            if ($filter -and -not (Test-TextContains $package $filter) -and -not (Test-TextContains $name $filter)) { continue }
 
             $item = New-Object System.Windows.Forms.ListViewItem($package)
             $null = $item.SubItems.Add($version)
@@ -5506,7 +5515,7 @@ function Update-ContactList {
             $contactId = Get-RowValue -Row $row -Column 'contact_id'
             $rawId = Get-RowValue -Row $row -Column 'raw_contact_id'
             if (-not $number) { continue }
-            if ($filter -and ($name -notlike "*$filter*") -and ($number -notlike "*$filter*")) { continue }
+            if ($filter -and -not (Test-TextContains $name $filter) -and -not (Test-TextContains $number $filter)) { continue }
 
             $item = New-Object System.Windows.Forms.ListViewItem($name)
             $null = $item.SubItems.Add($number)
@@ -5700,7 +5709,7 @@ function Update-SmsList {
             $type = Get-RowValue -Row $row -Column 'type'
             $body = (Get-RowValue -Row $row -Column 'body' -Last) -replace "`r?`n", ' '
             if (-not $id) { continue }
-            if ($filter -and ($address -notlike "*$filter*") -and ($body -notlike "*$filter*")) { continue }
+            if ($filter -and -not (Test-TextContains $address $filter) -and -not (Test-TextContains $body $filter)) { continue }
 
             $when = ''
             if ($stamp -match '^\d+$') {
@@ -6460,6 +6469,7 @@ function Update-FileList {
 
         $rows += [PSCustomObject]@{
             Name        = $name
+            Label       = $name
             Path        = (Join-DevicePath -Parent $Path -Child $name)
             IsDirectory = $isDirectory
             IsLink      = $isLink
@@ -6487,12 +6497,12 @@ function Show-FileRows {
         3 { { $_.Stamp } }
         4 { { $_.Permissions } }
         5 { { $_.Owner } }
-        default { { $_.Name.ToLowerInvariant() } }
+        default { { $_.Label.ToLowerInvariant() } }
     }
 
     $filter = $txtFileSearch.Text.Trim()
     if ($filter -and -not $script:fileSearchResults) {
-        $rows = @($rows | Where-Object { $_.Name -like "*$filter*" })
+        $rows = @($rows | Where-Object { Test-TextContains $_.Label $filter })
     }
 
     if ($script:fileFoldersFirst) {
@@ -6512,7 +6522,7 @@ function Show-FileRows {
     try {
         $lstFiles.Items.Clear()
         foreach ($row in $rows) {
-            $label = if ($row.IsDirectory) { "[ $($row.Name) ]" } else { $row.Name }
+            $label = if ($row.IsDirectory) { "[ $($row.Label) ]" } else { $row.Label }
             $item = New-Object System.Windows.Forms.ListViewItem($label)
             $null = $item.SubItems.Add($(if ($row.IsDirectory) { '<dir>' } else { $row.Extension }))
             $null = $item.SubItems.Add($(if ($row.IsDirectory) { '' } else { Format-FileSize -Bytes $row.Size }))
@@ -6697,10 +6707,17 @@ function Compress-DeviceFiles {
     $name = $name.Trim()
     if ($name -notmatch '\.(tar\.gz|tgz|tar)$') { $name += '.tar.gz' }
 
-    # the phone has tar and gzip but no zip, so a tarball it is
+    # the phone has tar and gzip but no zip, so a tarball it is. Entries from
+    # one folder go in by name; search hits from several go in by their path
+    # from /, since no one folder holds them all.
     $target = Join-DevicePath -Parent $folder -Child $name
-    $arguments = @('tar', '-czf', (Quote-DeviceArgument $target), '-C', (Quote-DeviceArgument $folder))
-    foreach ($row in $rows) { $arguments += (Quote-DeviceArgument $row.Name) }
+    $oneFolder = @($rows | Where-Object { (Split-DevicePath -Path $_.Path) -ne $folder }).Count -eq 0
+    $base = if ($oneFolder) { $folder } else { '/' }
+    $arguments = @('tar', '-czf', (Quote-DeviceArgument $target), '-C', (Quote-DeviceArgument $base))
+    foreach ($row in $rows) {
+        $entry = if ($oneFolder) { $row.Name } else { $row.Path.TrimStart('/') }
+        $arguments += (Quote-DeviceArgument $entry)
+    }
 
     Write-Log "Packing $($rows.Count) item(s) into $target ..." $colorStep
     $result = Invoke-DeviceShell -Serial $serial -CommandArguments $arguments
@@ -6939,8 +6956,14 @@ function ConvertFrom-LsOutput {
         $shown = $full
         if ($Root -and $full.StartsWith($Root)) { $shown = $full.Substring($Root.TrimEnd('/').Length).TrimStart('/') }
 
+        # Name is the file's own name, as in a folder listing; the path under
+        # the search root is only what the list shows. With the relative path
+        # as its name, Move to PC looked for dest\DCIM/Camera/x.jpg, found
+        # nothing, and never deleted the phone copy; Rename and Compress went
+        # to folders that do not exist.
         $rows += [PSCustomObject]@{
-            Name        = $shown
+            Name        = $name
+            Label       = $shown
             Path        = $full
             IsDirectory = $isDirectory
             IsLink      = $permissions.StartsWith('l')
@@ -7732,6 +7755,16 @@ function Get-DeviceScreenState {
     return $state
 }
 
+function Get-SignalStrength {
+    # what the list sorts by, strongest first: the number, not the text -
+    # as text "-60 dBm" came before "-45 dBm", since 6 > 4. A saved network
+    # that is out of range ("saved") goes last.
+    param([string]$Signal)
+
+    if ($Signal -match '^(-?\d+)') { return [int]$Matches[1] }
+    return -1000
+}
+
 function Update-WifiList {
     param([switch]$Scan, [switch]$Saved)
 
@@ -7795,7 +7828,7 @@ function Update-WifiList {
     $lstWifi.BeginUpdate()
     try {
         $lstWifi.Items.Clear()
-        foreach ($row in ($rows | Sort-Object -Property @{ Expression = { $_.Signal } } -Descending)) {
+        foreach ($row in ($rows | Sort-Object -Property @{ Expression = { Get-SignalStrength $_.Signal } } -Descending)) {
             $joined = ($link.Ssid -and $row.Ssid -eq $link.Ssid)
             $item = New-Object System.Windows.Forms.ListViewItem(
                 $(if ($joined) { $row.Ssid + '   <- connected' } else { $row.Ssid }))
@@ -8270,7 +8303,7 @@ function Update-RunningList {
         $rows = @($rows | Where-Object { $_.Name -like '*.*' })
     }
     if ($filter) {
-        $rows = @($rows | Where-Object { $_.Name -like "*$filter*" })
+        $rows = @($rows | Where-Object { Test-TextContains $_.Name $filter })
     }
 
     $property = switch ($script:runningSortColumn) {
@@ -10052,7 +10085,8 @@ function Update-LogcatView {
         $null = $script:logcatRaw.Add($line)
         if ($script:logcatRaw.Count -gt 6000) { $script:logcatRaw.RemoveRange(0, 2000) }
 
-        if ($filter -and $line -notlike "*$filter*") { continue }
+        # inline rather than Test-TextContains: this runs for every line
+        if ($filter -and $line.IndexOf($filter, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
         $null = $batch.AppendLine($line)
     }
     # 1500 lines every 250 ms is 6000 a second, past anything but a log storm.
@@ -10146,7 +10180,7 @@ function Show-LogcatFiltered {
 
     $matching = New-Object System.Collections.Generic.List[string]
     foreach ($line in $script:logcatRaw) {
-        if ($filter -and $line -notlike "*$filter*") { continue }
+        if ($filter -and $line.IndexOf($filter, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
         $null = $matching.Add($line)
     }
 

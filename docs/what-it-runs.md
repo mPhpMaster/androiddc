@@ -10,6 +10,13 @@ Nothing here happens on its own: each command runs because you pressed the butto
 The only things that repeat by themselves are the device list refresh and, if you switch it
 on, the screen capture.
 
+**Where you typed the text** — an SMS body, a number, a Wi-Fi name or password, a user name,
+a contact, *Send text* — the command goes as `adb shell "echo <base64> | base64 -d | sh"`.
+Decoded, it is exactly the command listed below, with each thing you typed as one quoted
+argument. Sent as plain arguments, adb and the phone's shell split it at every space (an SMS
+kept its first word) and read `'` `;` `$` as shell syntax; base64 is the one form neither
+Windows nor the phone reinterprets.
+
 ## Reading the device
 
 | Purpose | Command |
@@ -80,7 +87,7 @@ on, the screen capture.
 | Download | `adb pull` |
 | Upload | `adb push` |
 | Rename, delete, new folder | `adb shell mv` / `rm` / `mkdir -p` |
-| Compress | `adb shell tar -czf <archive> -C <folder> <names>` |
+| Compress | `adb shell tar -czf <archive> -C <folder> <names>`; search hits from several folders: `-C / <paths>` |
 | Extract | `adb shell unzip -o` or `tar -xzf` or `gzip -dc` |
 | Preview | `adb exec-out cat <path>` into memory, nothing written to disk |
 | Open on the phone | `adb shell am start -a android.intent.action.VIEW -d file://…` |

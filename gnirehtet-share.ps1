@@ -40,7 +40,8 @@
     Print the connected devices and exit.
 
 .PARAMETER DisableWifi
-    Turn Wi-Fi off on the device while tethering (restored on exit).
+    Turn Wi-Fi off on the device while tethering. Restored on exit: turned
+    back on only if it was on before, left off if it already was.
     Silently ignored when the device does not allow it.
 
 .PARAMETER PauseOnError

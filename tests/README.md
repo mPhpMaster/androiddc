@@ -25,6 +25,8 @@ exit code is the number of tests that failed or did not finish.
 | `layout` | no | Every control inside its box and none on another, on every page, at the default and the smallest window size |
 | `pane-resize` | no | The phone-screen pane follows the window at once, shrinking and growing, with no tab touched in between |
 | `screenshots` | no | Pictures of the pages at the smallest size, for a person to look at — the layout test cannot see text cut off inside a label |
+| `file-rows` | no | A search hit keeps its own file name, the filter takes `[ ]` literally, *Compress* finds what it packs from one folder or several. The functions that would reach a phone are replaced inside the test |
+| `wifi-list` | no, uses one if given | Strongest network first by the number, not the text; with a phone, the list it gives as well (read only, no scan) |
 | `audio` | yes | The encoder list read from the phone and following the codec, the command line, the file name for each codec, a real *Listen*, the choices remembered |
 | `apps` | yes | Names read once and kept, read again when the apps change, a non-ASCII name arriving whole, the filter, the export, *Start app* |
 | `root` | yes | The Root page reads the phone on opening, its marks belong to one phone, `jdwp` stops by itself, `emu` explains its silence |

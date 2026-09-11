@@ -75,7 +75,7 @@ Gives the phone the PC's internet, no root required. Pick a **DNS** (8.8.8.8 by 
 | Control | What it does |
 |---|---|
 | **Start sharing / Stop** | Runs the gnirehtet relay on the PC and the client on the phone |
-| **Turn Wi-Fi off while sharing** | So the phone cannot silently fall back to its own network |
+| **Turn Wi-Fi off while sharing** | So the phone cannot silently fall back to its own network. Turned back on when sharing stops - only on a phone where it was on to begin with |
 | **Reinstall client APK** | Pushes `gnirehtet.apk` again before starting |
 | **Check internet after start** | Runs the connection test by itself |
 | **Open scrcpy after start** | Starts mirroring once the tunnel is up |
