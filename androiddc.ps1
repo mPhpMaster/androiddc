@@ -228,6 +228,30 @@ function Invoke-DeviceShellText {
     return Invoke-Adb -CommandArguments @('-s', $Serial, 'shell', "echo $encoded | base64 -d | sh")
 }
 
+function Quote-DeviceArgument {
+    # one word for the phone's shell, whatever it contains
+    param([string]$Text)
+
+    return "'" + ($Text -replace "'", "'\''") + "'"
+}
+
+function Invoke-DeviceCommand {
+    <#
+        Runs one command on the phone with every argument arriving exactly as
+        given. Measured on a phone: "adb shell printf [%s] a 'b c'" printed
+        [a][b][c] - adb joins its arguments with spaces and the phone's shell
+        splits them again, so an SMS body kept only its first word. Quoting
+        for that shell is not enough on its own either: Windows PowerShell
+        drops a double quote inside an argument to a native program ('say
+        "hi"' arrived as 'say hi'). So each argument is quoted for sh, and the
+        whole line goes over base64, which has no character either side reads.
+    #>
+    param([string]$Serial, [string[]]$Arguments)
+
+    $command = (@($Arguments) | ForEach-Object { Quote-DeviceArgument $_ }) -join ' '
+    return Invoke-DeviceShellText -Serial $Serial -Command $command
+}
+
 function Invoke-Gnirehtet {
     param([string[]]$CommandArguments)
 
@@ -5501,18 +5525,20 @@ function Add-Contact {
         'content insert --uri content://com.android.contacts/raw_contacts --bind account_name:s:null --bind account_type:s:null')
     if ($result.Text -match 'Error|Exception') { Write-Log $result.Text $colorBad; return }
 
+    # the row just made is the one with the highest id; the last row of an
+    # unsorted query is only whichever the provider happened to return last
     $newest = (Invoke-DeviceShell -Serial $serial -CommandArguments @(
-        'content query --uri content://com.android.contacts/raw_contacts --projection _id | tail -1')).Text
+        "content query --uri content://com.android.contacts/raw_contacts --projection _id --sort '_id DESC' | head -1")).Text
     if ($newest -notmatch '_id=(\d+)') { Write-Log 'Could not find the new contact row.' $colorBad; return }
     $rawId = $Matches[1]
 
-    # quotes matter: a value with spaces is rejected unquoted
-    $null = Invoke-DeviceShellText -Serial $serial -Command (
-        "content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:$rawId " +
-        "--bind mimetype:s:vnd.android.cursor.item/name --bind 'data1:s:$name'")
-    $null = Invoke-DeviceShellText -Serial $serial -Command (
-        "content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:$rawId " +
-        "--bind mimetype:s:vnd.android.cursor.item/phone_v2 --bind 'data1:s:$number'")
+    # one argument each: a name has spaces, and can have an apostrophe (O'Brien)
+    $null = Invoke-DeviceCommand -Serial $serial -Arguments @('content', 'insert', '--uri',
+        'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
+        '--bind', 'mimetype:s:vnd.android.cursor.item/name', '--bind', "data1:s:$name")
+    $null = Invoke-DeviceCommand -Serial $serial -Arguments @('content', 'insert', '--uri',
+        'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
+        '--bind', 'mimetype:s:vnd.android.cursor.item/phone_v2', '--bind', "data1:s:$number")
 
     Write-Log "Added $name ($number) to $serial." $colorGood
     Update-ContactList
@@ -5531,12 +5557,12 @@ function Edit-Contact {
     $name = $values[0].Trim()
     $number = $values[1].Trim()
 
-    $null = Invoke-DeviceShellText -Serial $serial -Command (
-        "content update --uri content://com.android.contacts/data --bind 'data1:s:$name' " +
-        "--where ""raw_contact_id=$rawId AND mimetype='vnd.android.cursor.item/name'""")
-    $null = Invoke-DeviceShellText -Serial $serial -Command (
-        "content update --uri content://com.android.contacts/data --bind 'data1:s:$number' " +
-        "--where ""raw_contact_id=$rawId AND mimetype='vnd.android.cursor.item/phone_v2'""")
+    $null = Invoke-DeviceCommand -Serial $serial -Arguments @('content', 'update', '--uri',
+        'content://com.android.contacts/data', '--bind', "data1:s:$name",
+        '--where', "raw_contact_id=$rawId AND mimetype='vnd.android.cursor.item/name'")
+    $null = Invoke-DeviceCommand -Serial $serial -Arguments @('content', 'update', '--uri',
+        'content://com.android.contacts/data', '--bind', "data1:s:$number",
+        '--where', "raw_contact_id=$rawId AND mimetype='vnd.android.cursor.item/phone_v2'")
 
     Write-Log "Updated contact $rawId on $serial." $colorGood
     Update-ContactList
@@ -5576,7 +5602,8 @@ function Start-PhoneCall {
     $answer = [System.Windows.Forms.MessageBox]::Show("Call $number from $serial ?", 'Call', 'YesNo', 'Question')
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
 
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @(
+    # a number from a contact is often written "050 123 4567"
+    $result = Invoke-DeviceCommand -Serial $serial -Arguments @(
         'am', 'start', '-a', 'android.intent.action.CALL', '-d', "tel:$number")
     Write-Log ("call $number -> " + $result.Text.Trim()) $colorInfo
     Wait-Pumped -Milliseconds 1200
@@ -5711,9 +5738,10 @@ function Send-Sms {
 
     # Android exposes no shell command that sends an SMS, so the message is
     # composed in the phone's SMS app (Arabic survives: it is an intent extra).
+    # The body has spaces, so it goes as one argument, not word by word.
     $null = Invoke-DeviceShell -Serial $serial -CommandArguments @('input', 'keyevent', '224')
     Wait-Pumped -Milliseconds 500
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @(
+    $result = Invoke-DeviceCommand -Serial $serial -Arguments @(
         'am', 'start', '-a', 'android.intent.action.SENDTO', '-d', "sms:$number",
         '--es', 'sms_body', $body, '--ez', 'exit_on_sent', 'true')
 
@@ -5802,8 +5830,8 @@ function Edit-Sms {
     $values = Show-InputDialog -Title "Edit message $id" -Fields @('Body') -Values @($item.SubItems[3].Text)
     if (-not $values) { return }
 
-    $result = Invoke-DeviceShellText -Serial $serial -Command (
-        "content update --uri content://sms --bind 'body:s:$($values[0])' --where ""_id=$id""")
+    $result = Invoke-DeviceCommand -Serial $serial -Arguments @('content', 'update', '--uri', 'content://sms',
+        '--bind', "body:s:$($values[0])", '--where', "_id=$id")
     if ($result.Text -match 'Exception|denied') {
         Write-Log ("edit $id -> " + $result.Text.Trim()) $colorBad
     } else {
@@ -6349,13 +6377,6 @@ function Format-FileSize {
     return "$Bytes B"
 }
 
-function Quote-DevicePath {
-    param([string]$Path)
-
-    # the device shell re-parses what adb sends, so paths need quoting
-    return "'" + ($Path -replace "'", "'\''") + "'"
-}
-
 function Join-DevicePath {
     param([string]$Parent, [string]$Child)
 
@@ -6375,7 +6396,7 @@ function Update-FileList {
     # a trailing slash makes ls list the contents of a symlinked dir (/sdcard)
     # instead of the link entry itself
     $listPath = if ($Path.EndsWith('/')) { $Path } else { "$Path/" }
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('ls', '-la', (Quote-DevicePath $listPath))
+    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('ls', '-la', (Quote-DeviceArgument $listPath))
     if ($result.Text -match 'Permission denied') {
         Write-Log "Permission denied: $Path (adb shell cannot read it)" $colorBad
         return
@@ -6620,7 +6641,7 @@ function Show-FileSpace {
     # how full the volume under the current folder is
     param([string]$Serial, [string]$Path)
 
-    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('df', '-h', (Quote-DevicePath $Path))).Text
+    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('df', '-h', (Quote-DeviceArgument $Path))).Text
     foreach ($line in ($text -split "`r?`n")) {
         if ($line -match '^\s*\S+\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+%)\s+(\S+)\s*$') {
             $lblFileSpace.Text = "space here: $($Matches[2]) used of $($Matches[1])   |   $($Matches[3]) free   |   $($Matches[4]) full   |   volume $($Matches[5])"
@@ -6667,8 +6688,8 @@ function Compress-DeviceFiles {
 
     # the phone has tar and gzip but no zip, so a tarball it is
     $target = Join-DevicePath -Parent $folder -Child $name
-    $arguments = @('tar', '-czf', (Quote-DevicePath $target), '-C', (Quote-DevicePath $folder))
-    foreach ($row in $rows) { $arguments += (Quote-DevicePath $row.Name) }
+    $arguments = @('tar', '-czf', (Quote-DeviceArgument $target), '-C', (Quote-DeviceArgument $folder))
+    foreach ($row in $rows) { $arguments += (Quote-DeviceArgument $row.Name) }
 
     Write-Log "Packing $($rows.Count) item(s) into $target ..." $colorStep
     $result = Invoke-DeviceShell -Serial $serial -CommandArguments $arguments
@@ -6707,19 +6728,19 @@ function Expand-DeviceArchive {
     if (-not "$into".Trim()) { return }
     $into = $into.Trim()
 
-    $null = Invoke-DeviceShell -Serial $serial -CommandArguments @('mkdir', '-p', (Quote-DevicePath $into))
+    $null = Invoke-DeviceShell -Serial $serial -CommandArguments @('mkdir', '-p', (Quote-DeviceArgument $into))
 
     if ($lower.EndsWith('.zip') -or $lower.EndsWith('.apk')) {
-        $arguments = @('unzip', '-o', (Quote-DevicePath $archive.Path), '-d', (Quote-DevicePath $into))
+        $arguments = @('unzip', '-o', (Quote-DeviceArgument $archive.Path), '-d', (Quote-DeviceArgument $into))
     } elseif ($lower.EndsWith('.tar.gz') -or $lower.EndsWith('.tgz')) {
-        $arguments = @('tar', '-xzf', (Quote-DevicePath $archive.Path), '-C', (Quote-DevicePath $into))
+        $arguments = @('tar', '-xzf', (Quote-DeviceArgument $archive.Path), '-C', (Quote-DeviceArgument $into))
     } elseif ($lower.EndsWith('.tar.bz2') -or $lower.EndsWith('.tbz')) {
-        $arguments = @('tar', '-xjf', (Quote-DevicePath $archive.Path), '-C', (Quote-DevicePath $into))
+        $arguments = @('tar', '-xjf', (Quote-DeviceArgument $archive.Path), '-C', (Quote-DeviceArgument $into))
     } elseif ($lower.EndsWith('.tar')) {
-        $arguments = @('tar', '-xf', (Quote-DevicePath $archive.Path), '-C', (Quote-DevicePath $into))
+        $arguments = @('tar', '-xf', (Quote-DeviceArgument $archive.Path), '-C', (Quote-DeviceArgument $into))
     } elseif ($lower.EndsWith('.gz')) {
         $plain = Join-DevicePath -Parent $into -Child ($archive.Name -replace '\.gz$', '')
-        $arguments = @('gzip', '-dc', (Quote-DevicePath $archive.Path), '>', (Quote-DevicePath $plain))
+        $arguments = @('gzip', '-dc', (Quote-DeviceArgument $archive.Path), '>', (Quote-DeviceArgument $plain))
     } else {
         Write-Log "$($archive.Name) is not a kind of archive the phone can open (zip, tar, tar.gz, tar.bz2, gz)." $colorWarn
         return
@@ -6933,7 +6954,7 @@ function Search-DeviceFiles {
     Write-Log "Searching '$query' under $root ..." $colorStep
 
     # one ls line per hit, so the same parser can be reused
-    $command = "find -L " + (Quote-DevicePath $root) + " -iname " + (Quote-DevicePath "*$query*") +
+    $command = "find -L " + (Quote-DeviceArgument $root) + " -iname " + (Quote-DeviceArgument "*$query*") +
         " -exec ls -lad {} + 2>/dev/null | head -400"
     $result = Invoke-DeviceShell -Serial $serial -CommandArguments @($command)
 
@@ -7072,7 +7093,7 @@ function Invoke-FileTransfer {
                 Remove-Item -LiteralPath $Target -Force -ErrorAction SilentlyContinue
             }
         } else {
-            $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @('rm', '-f', (Quote-DevicePath $Target))
+            $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @('rm', '-f', (Quote-DeviceArgument $Target))
         }
         Write-Log "Cancelled, and the half written copy was removed." $colorWarn
         return [PSCustomObject]@{ Ok = $false; Text = 'cancelled'; Cancelled = $true }
@@ -7159,7 +7180,7 @@ function Send-DeviceFiles {
 function Get-DeviceFileSize {
     param([string]$Serial, [string]$Path)
 
-    $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-la', (Quote-DevicePath $Path))
+    $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-la', (Quote-DeviceArgument $Path))
     if ($result.Text -match '^[dlbcps-][rwxsStT-]{9}\s+\d+\s+\S+\s+\S+\s+(\d+)\s') { return [long]$Matches[1] }
     return -1
 }
@@ -7205,8 +7226,8 @@ function Move-FilesToPc {
             }
         }
 
-        $arguments = if ($row.IsDirectory) { @('rm', '-rf', (Quote-DevicePath $row.Path)) }
-                     else { @('rm', '-f', (Quote-DevicePath $row.Path)) }
+        $arguments = if ($row.IsDirectory) { @('rm', '-rf', (Quote-DeviceArgument $row.Path)) }
+                     else { @('rm', '-f', (Quote-DeviceArgument $row.Path)) }
         $remove = Invoke-DeviceShell -Serial $serial -CommandArguments $arguments
         if ($remove.Text.Trim()) {
             Write-Log ('  delete failed: ' + $remove.Text.Trim()) $colorBad
@@ -7274,7 +7295,7 @@ function New-DeviceDirectory {
     if (-not $name.Trim()) { return }
 
     $target = Join-DevicePath -Parent $script:filePath -Child $name.Trim()
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('mkdir', '-p', (Quote-DevicePath $target))
+    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('mkdir', '-p', (Quote-DeviceArgument $target))
     if ($result.Text.Trim()) {
         Write-Log $result.Text $colorBad
     } else {
@@ -7303,7 +7324,7 @@ function Rename-DeviceFile {
     if (-not $parent) { $parent = '/' }
     $target = Join-DevicePath -Parent $parent -Child $name.Trim()
     $result = Invoke-DeviceShell -Serial $serial -CommandArguments @(
-        'mv', (Quote-DevicePath $rows[0].Path), (Quote-DevicePath $target))
+        'mv', (Quote-DeviceArgument $rows[0].Path), (Quote-DeviceArgument $target))
     if ($result.Text.Trim()) {
         Write-Log $result.Text $colorBad
     } else {
@@ -7326,8 +7347,8 @@ function Remove-DeviceFiles {
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
 
     foreach ($row in $rows) {
-        $arguments = if ($row.IsDirectory) { @('rm', '-rf', (Quote-DevicePath $row.Path)) }
-                     else { @('rm', '-f', (Quote-DevicePath $row.Path)) }
+        $arguments = if ($row.IsDirectory) { @('rm', '-rf', (Quote-DeviceArgument $row.Path)) }
+                     else { @('rm', '-f', (Quote-DeviceArgument $row.Path)) }
         $result = Invoke-DeviceShell -Serial $serial -CommandArguments $arguments
         if ($result.Text.Trim()) {
             Write-Log ("$($row.Path): " + $result.Text.Trim()) $colorBad
@@ -7820,7 +7841,8 @@ function Connect-WifiNetwork {
     }
 
     Write-Log "Joining $($row.Ssid) ($security) ..." $colorStep
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments $arguments
+    # a network called "My Home", or a password with a space or a $ in it
+    $result = Invoke-DeviceCommand -Serial $serial -Arguments $arguments
     if ($result.Text -match 'Failed|Error|error') {
         Write-Log $result.Text.Trim() $colorBad
     } else {
@@ -8058,7 +8080,7 @@ function Add-DeviceUser {
     $name = [Microsoft.VisualBasic.Interaction]::InputBox('Name for the new user:', 'Add user', 'user')
     if (-not $name.Trim()) { return }
 
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('pm', 'create-user', $name.Trim())
+    $result = Invoke-DeviceCommand -Serial $serial -Arguments @('pm', 'create-user', $name.Trim())
     if ($result.Text -match 'Success.*id (\d+)') {
         Write-Log "Created user $($Matches[1]) '$($name.Trim())'." $colorGood
     } else {
@@ -8076,7 +8098,7 @@ function Rename-DeviceUser {
     $name = [Microsoft.VisualBasic.Interaction]::InputBox("New name for user $($user.Id):", 'Rename user', $user.Name)
     if (-not $name.Trim() -or $name -eq $user.Name) { return }
 
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('pm', 'rename-user', $user.Id, $name.Trim())
+    $result = Invoke-DeviceCommand -Serial $serial -Arguments @('pm', 'rename-user', $user.Id, $name.Trim())
     if ($result.Text -match 'MANAGE_USERS') {
         # adb shell holds CREATE_USERS but not MANAGE_USERS, so Android refuses
         Write-Log 'Android does not let adb rename a user (MANAGE_USERS is a system permission).' $colorWarn
@@ -9431,7 +9453,7 @@ function Start-QuickCall {
     $answer = [System.Windows.Forms.MessageBox]::Show("Call $number from $serial ?", 'Call', 'YesNo', 'Question')
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
 
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @(
+    $result = Invoke-DeviceCommand -Serial $serial -Arguments @(
         'am', 'start', '-a', 'android.intent.action.CALL', '-d', "tel:$number")
     if ($result.Text -match 'Error|Exception') { Write-Log $result.Text.Trim() $colorBad; return }
     Write-Log "Calling $number from $serial." $colorGood
@@ -9446,7 +9468,7 @@ function Open-QuickDialer {
     $number = $txtPhoneNumber.Text.Trim()
     if (-not $number) { Write-Log 'Type a number first.' $colorWarn; return }
 
-    $null = Invoke-DeviceShell -Serial $serial -CommandArguments @(
+    $null = Invoke-DeviceCommand -Serial $serial -Arguments @(
         'am', 'start', '-a', 'android.intent.action.DIAL', '-d', "tel:$number")
     Write-Log "Put $number in the dialer without calling." $colorInfo
     Wait-Pumped -Milliseconds 1200
@@ -9729,9 +9751,10 @@ function Send-Text {
     $serial = if ($script:captureSerial) { $script:captureSerial } else { Get-TargetSerial }
     if (-not $serial) { return }
 
-    # 'input text' takes %s for a space and chokes on unescaped shell characters.
+    # 'input text' takes %s for a space; every other character - ' & ( ; -
+    # has to reach it untouched by the phone's shell, so it goes as one argument
     $escaped = $text -replace ' ', '%s'
-    $null = Invoke-DeviceShell -Serial $serial -CommandArguments @('input', 'text', $escaped)
+    $null = Invoke-DeviceCommand -Serial $serial -Arguments @('input', 'text', $escaped)
     Write-Log "typed on $serial : $text" $colorInfo
     $txtSendText.Clear()
     Wait-Pumped -Milliseconds 400

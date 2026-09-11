@@ -173,7 +173,9 @@ trap { Say ('TRAPPED: ' + `$_.Exception.Message); continue }
     $after = if (Test-Path -LiteralPath $realSettings) { (Get-FileHash -LiteralPath $realSettings).Hash } else { '' }
 
     $lines = if (Test-Path -LiteralPath $report) { @(Get-Content -LiteralPath $report -Encoding UTF8) } else { @() }
-    $failures = @($lines | Where-Object { $_ -match '\bFAIL\b|^TRAPPED' })
+    # case-sensitive: -match ignores case, and a heading that said a check
+    # "must be able to fail" was counted as a failed check
+    $failures = @($lines | Where-Object { $_ -cmatch '\bFAIL\b|^TRAPPED' })
     $result = 'passed'
     if (-not $done) { $result = 'did not finish' }
     elseif ($failures.Count -gt 0) { $result = "$($failures.Count) failed" }

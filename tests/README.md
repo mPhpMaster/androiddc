@@ -30,13 +30,15 @@ exit code is the number of tests that failed or did not finish.
 | `root` | yes | The Root page reads the phone on opening, its marks belong to one phone, `jdwp` stops by itself, `emu` explains its silence |
 | `logcat-shell` | yes | The live shell answers while logcat runs, after it stops, and after a second run |
 | `encoding` | yes | adb read and written as UTF-8: logcat, the live shell both ways, a pull, `jdwp` |
+| `device-arguments` | yes | Text a person typed - spaces, `'`, `"`, `; & $`, Arabic, a new line - reaches the phone as one argument, unchanged; the old way is shown splitting it |
 
 ## What they do to the phone
 
 Nothing that stays. `audio` captures the phone's sound for a few seconds without saving it.
 `root` runs `adb root` only on a retail build, where the phone refuses it; on a userdebug or
 eng build it would really restart adbd as root, so there it is skipped. `encoding` pulls
-`/system/etc/hosts` to the output folder and deletes it.
+`/system/etc/hosts` to the output folder and deletes it. `device-arguments` only runs `printf`
+on the phone and reads the newest contact id; nothing is sent, dialled or written.
 
 ## Writing one
 

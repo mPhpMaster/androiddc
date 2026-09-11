@@ -13,7 +13,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 
 | File | Size | Modified | What it is |
 |---|---:|---|---|
-| `androiddc.ps1` | 477 KB, 11229 lines | 2026-09-11 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
+| `androiddc.ps1` | 479 KB, 11252 lines | 2026-09-11 | The main tool: a WinForms control panel for phones over ADB. Fourteen tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery), Apps, Contacts, SMS, Cam / Mic, Files, Running, Wi-Fi, Bluetooth, NFC, Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
 | `androiddc.vbs` | 341 B | 2026-09-10 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`. **This is the file to double-click.** |
 | `README.md` | 7.2 KB | 2026-09-10 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
 | `docs\` | 9 pages | 2026-09-10 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
@@ -24,7 +24,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 | `get-upstream.ps1` | 17 KB | 2026-09-10 | Downloads the two upstream packages below from the official GitHub releases, checks each archive against SHA256, unpacks it here and never touches the files above. `-OnlyMissing` fetches only what is absent - that is what the GUI runs when it finds a tool missing at startup. Also `-ScrcpyVersion` / `-GnirehtetVersion` / `-Destination` / `-Force` / `-SkipScrcpy` / `-SkipGnirehtet` / `-KeepArchives` / `-CacheFolder`. |
 | `get-upstream.bat` | 97 B | 2026-09-09 | Double-click launcher for the script above; passes any arguments straight through. |
 | `.github\` | 4 files | 2026-09-10 | CI. `workflows\check.yml` runs on every push and pull request: every `.ps1` parses, no variable is read before it is assigned (`audit-variables.ps1`), every control reaches the screen, every button has a handler and no control's name is reused (`audit-wiring.ps1`), the launcher points at a file that exists, and no absolute developer path appears in a shipped file. `update-index.py` rewrites the numbers in this index. |
-| `tests\` | 10 files | 2026-09-11 | The test suite. `run.ps1` runs the real window off screen with a test spliced in, closes it normally and reads its report. Three tests need no phone (layout at both window sizes, the phone-screen pane, screenshots) and five need one (audio, apps, root, logcat and the live shell, UTF-8). How to run them: `tests\README.md`. |
+| `tests\` | 11 files | 2026-09-11 | The test suite. `run.ps1` runs the real window off screen with a test spliced in, closes it normally and reads its report. Three tests need no phone (layout at both window sizes, the phone-screen pane, screenshots) and six need one (audio, apps, root, logcat and the live shell, UTF-8, text arriving on the phone unchanged). How to run them: `tests\README.md`. |
 
 ## Reverse tethering (gnirehtet 2.5.1, upstream files)
 
@@ -74,7 +74,7 @@ Settings live outside this folder, in `%APPDATA%\AndroidDC\settings.json`
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-adb87a8c96c37216  androiddc.ps1
+f5495e2ad3b5b978  androiddc.ps1
 ea4e1ed6ff774533  androiddc.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
