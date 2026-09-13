@@ -64,6 +64,19 @@ def files_in(folder, recursive=False):
     return len([f for f in os.listdir(base) if os.path.isfile(os.path.join(base, f))])
 
 
+def newest_date(folder):
+    # a folder row's date is its newest file's, as a file row's is its own
+    stamps = [os.path.getmtime(os.path.join(d, f))
+              for d, _, files in os.walk(os.path.join(root, folder)) for f in files]
+    return datetime.date.fromtimestamp(max(stamps)).isoformat() if stamps else None
+
+
+for folder in ('docs', 'assets', '.github', 'tests'):
+    date = newest_date(folder)
+    if date:
+        s = re.sub(r'(\| `' + re.escape(folder) + r'\\?` \| [^|]+ \| )[0-9]{4}-[0-9]{2}-[0-9]{2}( \|)',
+                   lambda m: m.group(1) + date + m.group(2), s)
+
 docs_count = len([f for f in os.listdir(os.path.join(root, 'docs')) if f.endswith('.md')])
 s = re.sub(r'(\| `docs\\?` \| )[0-9]+ pages', lambda m: '%s%d pages' % (m.group(1), docs_count), s)
 for folder, recursive in (('assets', False), ('.github', True), ('tests', False)):

@@ -2,15 +2,14 @@
 
 <#
 .SYNOPSIS
-    Windows GUI around adb + gnirehtet + scrcpy.
+    AndroidDC - one Windows window that drives Android devices over adb.
 
 .DESCRIPTION
-    Four tabs sharing one device list and one log pane:
-
-      * PC -> Phone : gnirehtet reverse tethering (the PC shares its internet).
-      * Phone -> PC : USB tethering (the phone shares its mobile data).
-      * scrcpy      : mirror / control the device with the usual options.
-      * ADB tools   : wireless adb, install APK, screenshots, device info...
+    Fourteen tabs sharing one device list and one log pane: Device,
+    Tethering (both directions), Advanced (scrcpy mirroring and its options,
+    adb tools, root / recovery), Apps, Contacts, SMS, Cam / Mic, Files,
+    Running, Wi-Fi, Bluetooth, NFC, Users and Shell (live shell, logcat).
+    The full guide is docs\user-guide.md; what changed is CHANGELOG.md.
 
     Closing the window stops the relay, stops the client on the device and
     removes the adb reverse tunnel.
@@ -35,6 +34,8 @@ Add-Type -AssemblyName Microsoft.VisualBasic   # InputBox for rename / new folde
     [System.Windows.Forms.UnhandledExceptionMode]::CatchException)
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# the release this file is; CHANGELOG.md says what each one changed
+$appVersion = '1.0.0'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
@@ -6990,7 +6991,8 @@ function Search-DeviceFiles {
     # one ls line per hit, so the same parser can be reused
     $command = "find -L " + (Quote-DeviceArgument $root) + " -iname " + (Quote-DeviceArgument "*$query*") +
         " -exec ls -lad {} + 2>/dev/null | head -400"
-    $result = Invoke-DeviceShell -Serial $serial -CommandArguments @($command)
+    # typed text: as base64, so a " in the query is not dropped on the way
+    $result = Invoke-DeviceShellText -Serial $serial -Command $command
 
     $rows = @(ConvertFrom-LsOutput -Text $result.Text -Root $root)
 
@@ -11219,6 +11221,7 @@ $form.Add_FormClosing({
 })
 
 $form.Add_Shown({
+    Write-Log "AndroidDC $appVersion" $colorInfo
     Write-Log "adb:       $($script:adbPath)" $colorInfo
     Write-Log "gnirehtet: $($script:gnirehtetPath)" $colorInfo
     Write-Log ("scrcpy:    " + $(if ($script:scrcpyPath) { $script:scrcpyPath } else { 'not found' })) $colorInfo

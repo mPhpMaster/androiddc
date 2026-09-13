@@ -76,6 +76,8 @@ until the download is finished before opening.
 | `docs/` | The full documentation |
 | `assets/` | Logo, icon and the window icon |
 | `INDEX.md` | What every file in the folder is |
+| `CHANGELOG.md` | What each release changed |
+| `tests/` | Tests that run the real window, with or without a phone |
 
 Settings live in `%APPDATA%\AndroidDC\settings.json`, outside the repository.
 
