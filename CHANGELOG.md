@@ -43,6 +43,11 @@ Found by a review of the whole code, each checked against a phone:
   Android 15 prints a network once per security type it accepts, under the same id. Two saved
   networks whose names differ only in case ("KAIF 5G", "Kaif 5G") are two rows, not one.
 * A new contact's details go to the row just created.
+* When a phone refuses to install the sharing client over USB (`INSTALL_FAILED_USER_RESTRICTED`,
+  seen on Xiaomi), the log says which setting allows it.
+* Sharing can be started again right after it was stopped. Each start used the same log files,
+  and a process the stopped relay had left behind still held them, so the new start failed with
+  "being used by another process". Every start has its own files now.
 * Logcat no longer silences the live shell; adb output is read as UTF-8 on any code page.
 
 ### Checks

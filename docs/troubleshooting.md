@@ -47,6 +47,17 @@ it does freeze:
   Unplug it and the call ends.
 * `adb kill-server` from another program while a command is in flight has the same effect.
 
+## Sharing stops at "Install failed"
+
+Starting a share installs the gnirehtet client on the phone the first time. If the log shows
+`INSTALL_FAILED_USER_RESTRICTED`, the phone refuses any app installed over USB:
+
+* **Xiaomi, Redmi, POCO:** Settings → Developer options → turn on **Install via USB** (it may ask
+  you to sign in to a Mi account), then start again and accept the prompt on the phone.
+* Other phones with a similar switch name it *Verify apps over USB* or *USB install*.
+
+The log says this itself when it happens.
+
 ## Sharing says it started but the phone has no internet
 
 1. Press **Test connection**. Do not use ping — see [Limits](limits.md).

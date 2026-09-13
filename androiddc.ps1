@@ -3613,7 +3613,15 @@ function Start-Sharing {
                 Write-Log "Installing the client on $current ..." $colorStep
                 $result = Invoke-Gnirehtet -CommandArguments @('install', $current)
                 Write-Log $result.Text $colorInfo
-                if ($result.ExitCode -ne 0) { Write-Log 'Install failed.' $colorBad; return }
+                if ($result.ExitCode -ne 0) {
+                    Write-Log 'Install failed.' $colorBad
+                    # measured on a Xiaomi phone: it refuses any adb install until allowed
+                    if ($result.Text -match 'INSTALL_FAILED_USER_RESTRICTED') {
+                        Write-Log ('The phone blocks installs over USB. On Xiaomi / Redmi / POCO turn on ' +
+                            'Developer options > Install via USB, then accept the prompt on the phone.') $colorWarn
+                    }
+                    return
+                }
             }
 
             if ($chkWifi.Checked) {
@@ -3632,8 +3640,13 @@ function Start-Sharing {
         }
     }
 
-    $script:outFile = Join-Path $env:TEMP ("androiddc-$PID.out.log")
-    $script:errFile = Join-Path $env:TEMP ("androiddc-$PID.err.log")
+    # a new pair of files for every start. Measured: sharing stopped and started
+    # again a few seconds later failed with "being used by another process" -
+    # something the stopped relay started still held the old pair open, and
+    # emptying that file ended the whole start. The files go when the app closes.
+    $stamp = Get-Date -Format 'HHmmssfff'
+    $script:outFile = Join-Path $env:TEMP ("androiddc-$PID.relay-$stamp.out.log")
+    $script:errFile = Join-Path $env:TEMP ("androiddc-$PID.relay-$stamp.err.log")
     foreach ($file in @($script:outFile, $script:errFile)) {
         Set-Content -LiteralPath $file -Value '' -Encoding UTF8
     }
@@ -11298,7 +11311,7 @@ try {
         }
     }
     foreach ($pattern in @("androiddc-$PID.scrcpy-*", "androiddc-$PID.app-*", "androiddc-$PID.camera.*",
-            "androiddc-$PID.pull.png")) {
+            "androiddc-$PID.pull.png", "androiddc-$PID.relay-*")) {
         Get-ChildItem -Path $env:TEMP -Filter $pattern -ErrorAction SilentlyContinue |
             Remove-Item -Force -ErrorAction SilentlyContinue
     }
