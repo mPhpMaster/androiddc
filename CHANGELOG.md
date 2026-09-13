@@ -39,7 +39,9 @@ Found by a review of the whole code, each checked against a phone:
 * Search and *Recent files* hits: *Move to PC* deletes the phone copy once the PC copy is
   verified, and *Rename* and *Compress* work on them, from one folder or several.
 * Filter boxes take `[ ]` and `*` literally.
-* Wi-Fi networks sorted by signal strength as a number.
+* Wi-Fi networks sorted by signal strength as a number, and each saved network listed once:
+  Android 15 prints a network once per security type it accepts, under the same id. Two saved
+  networks whose names differ only in case ("KAIF 5G", "Kaif 5G") are two rows, not one.
 * A new contact's details go to the row just created.
 * Logcat no longer silences the live shell; adb output is read as UTF-8 on any code page.
 

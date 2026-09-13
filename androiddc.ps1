@@ -7814,8 +7814,13 @@ function Update-WifiList {
     $text = (Invoke-DeviceShell -Serial $serial -CommandArguments @('cmd', 'wifi', 'list-networks')).Text
     foreach ($line in ($text -split "`r?`n")) {
         if ($line -match '^\s*(\d+)\s+(.*?)\s{2,}(\S+)\s*$') {
+            # Android 15 prints a network once per security type it accepts,
+            # with the same id ("wpa2-psk", then "wpa3-sae^"): one row per id
+            if (@($rows | Where-Object { $_.SavedId -eq $Matches[1] }).Count -gt 0) { continue }
             $ssid = $Matches[2].Trim()
-            $known = @($rows | Where-Object { $_.Ssid -eq $ssid })
+            # case-sensitive, and only a scanned row not yet given an id: "KAIF 5G"
+            # and "Kaif 5G" are two saved networks, and -eq made them one row
+            $known = @($rows | Where-Object { $_.Ssid -ceq $ssid -and -not $_.SavedId })
             if ($known.Count -gt 0) {
                 foreach ($entry in $known) { $entry.SavedId = $Matches[1] }
             } elseif ($Saved -or $rows.Count -eq 0) {
@@ -7831,7 +7836,7 @@ function Update-WifiList {
     try {
         $lstWifi.Items.Clear()
         foreach ($row in ($rows | Sort-Object -Property @{ Expression = { Get-SignalStrength $_.Signal } } -Descending)) {
-            $joined = ($link.Ssid -and $row.Ssid -eq $link.Ssid)
+            $joined = ($link.Ssid -and $row.Ssid -ceq $link.Ssid)
             $item = New-Object System.Windows.Forms.ListViewItem(
                 $(if ($joined) { $row.Ssid + '   <- connected' } else { $row.Ssid }))
             $null = $item.SubItems.Add($row.Security)
