@@ -2,6 +2,21 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### The window
+
+* At the smallest window every page has room again. The log took a fixed share of the height
+  and left the Files list about 40 px - not one row. Its height can now be dragged by the bar
+  above its buttons, or the log folded away; the window remembers both. A short window also
+  gives the device list two rows instead of four.
+* Wi-Fi, Bluetooth and NFC are one tab, **Radios**. As three tabs of their own, fourteen in
+  all, Users and Shell fell off the tab strip at the smallest window.
+* The device list's columns share the width it has, so *Client* no longer hides behind a
+  scroll bar.
+* The battery and signal line stays on one line and ends in "..." when it does not fit; its
+  tooltip holds the whole of it.
+
 ## 1.0.0
 
 The first release. One window on Windows that drives Android devices over plain `adb`, with

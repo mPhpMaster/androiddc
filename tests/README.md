@@ -22,7 +22,7 @@ exit code is the number of tests that failed or did not finish.
 
 | Test | Needs a phone | What it checks |
 |---|---|---|
-| `layout` | no | Every control inside its box and none on another, on every page, at the default and the smallest window size |
+| `layout` | no | Every control inside its box and none on another, on every page, at the default and the smallest window size; every tab strip fits without scrolling, the device columns fit their list, the Files list shows six rows, and the log folds and drags without taking the pages' room |
 | `pane-resize` | no | The phone-screen pane follows the window at once, shrinking and growing, with no tab touched in between |
 | `screenshots` | no | Pictures of the pages at the smallest size, for a person to look at — the layout test cannot see text cut off inside a label |
 | `file-rows` | no | A search hit keeps its own file name, the filter takes `[ ]` literally, *Compress* finds what it packs from one folder or several. The functions that would reach a phone are replaced inside the test |

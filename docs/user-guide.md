@@ -7,7 +7,12 @@ Every tab and every button. The window has three fixed parts:
 * the **phone screen** frame on the left, folded away by the slim strip beside it;
 * the **device list** at the top right, shared by every tab;
 * the **log** at the bottom right, colour coded: steps in blue, good news in green,
-  warnings in amber, failures in red.
+  warnings in amber, failures in red. Drag the bar above its buttons to give it more or less
+  room, or fold it away with ▼ (double-clicking the bar does the same); the window remembers
+  both.
+
+On a short window the device list shows two rows instead of four, and the line under it
+(battery, signal, screen) ends in "..." when it does not fit - hover it for the whole line.
 
 Actions apply to whatever is selected in the device list. Select several devices with
 Ctrl+click or Shift+click and one press acts on all of them.
@@ -280,7 +285,12 @@ What is running right now: process, package, memory, state and kind, read from
 *Force stop*, *Kill (background)*, *App info*, *Kill all background*, *Copy*, *Export...*,
 and a filter box.
 
-## Wi-Fi
+## Radios
+
+Wi-Fi, Bluetooth and NFC, one page each under this tab. Opening a page reads what the phone
+is doing right away.
+
+### Wi-Fi
 
 State line, **Wi-Fi on/off**, **Scan**, **Saved networks**, the list (SSID, security, signal,
 BSSID, saved id), a password box with *show*, **Connect**, **Forget**, **Status**, and
@@ -288,13 +298,13 @@ BSSID, saved id), a password box with *show*, **Connect**, **Forget**, **Status*
 
 Joining a saved network needs no password. Joining a new one does — type it in the box first.
 
-## Bluetooth
+### Bluetooth
 
 State line, **Bluetooth on/off**, **Refresh**, the paired list (name, address, bond) and
 **Copy address**. Pairing and connecting happen on the phone: Android exposes no adb command
 for either, and the tab says so rather than offering a button that cannot work.
 
-## NFC
+### NFC
 
 State read from `dumpsys nfc`, **NFC on/off**, **Refresh**, **NFC settings**, and a box with
 the relevant lines of the dump. If the phone has no NFC hardware, the tab reports that.

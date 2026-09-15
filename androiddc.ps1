@@ -5,10 +5,11 @@
     AndroidDC - one Windows window that drives Android devices over adb.
 
 .DESCRIPTION
-    Fourteen tabs sharing one device list and one log pane: Device,
+    Twelve tabs sharing one device list and one log pane: Device,
     Tethering (both directions), Advanced (scrcpy mirroring and its options,
     adb tools, root / recovery), Apps, Contacts, SMS, Cam / Mic, Files,
-    Running, Wi-Fi, Bluetooth, NFC, Users and Shell (live shell, logcat).
+    Running, Radios (Wi-Fi, Bluetooth, NFC), Users and Shell (live shell,
+    logcat).
     The full guide is docs\user-guide.md; what changed is CHANGELOG.md.
 
     Closing the window stops the relay, stops the client on the device and
@@ -416,7 +417,10 @@ $lblDeviceStatus = New-Object System.Windows.Forms.Label
 $lblDeviceStatus.Text = 'select a device to read its battery and signal'
 $lblDeviceStatus.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
 $lblDeviceStatus.Location = New-Object System.Drawing.Point(14, 144)
-$lblDeviceStatus.Size = New-Object System.Drawing.Size(864, 32)
+# one line: wrapped, it broke an item in two at the smallest window. What does
+# not fit ends in "...", and the tooltip holds the whole line.
+$lblDeviceStatus.Size = New-Object System.Drawing.Size(750, 20)
+$lblDeviceStatus.AutoEllipsis = $true
 $lblDeviceStatus.Anchor = 'Top, Left, Right'
 $grpDevices.Controls.Add($lblDeviceStatus)
 
@@ -524,20 +528,31 @@ $tabRunning.Text = 'Running'
 $tabRunning.BackColor = [System.Drawing.SystemColors]::Control
 $tabs.TabPages.Add($tabRunning)
 
+# Wi-Fi, Bluetooth and NFC are one subject, the phone's radios. As three tabs
+# of their own they pushed Users and Shell off the strip at the smallest window.
+$tabRadios = New-Object System.Windows.Forms.TabPage
+$tabRadios.Text = 'Radios'
+$tabRadios.BackColor = [System.Drawing.SystemColors]::Control
+$tabs.TabPages.Add($tabRadios)
+
+$tabsRadios = New-Object System.Windows.Forms.TabControl
+$tabsRadios.Dock = 'Fill'
+$tabRadios.Controls.Add($tabsRadios)
+
 $tabWifi = New-Object System.Windows.Forms.TabPage
 $tabWifi.Text = 'Wi-Fi'
 $tabWifi.BackColor = [System.Drawing.SystemColors]::Control
-$tabs.TabPages.Add($tabWifi)
+$tabsRadios.TabPages.Add($tabWifi)
 
 $tabBt = New-Object System.Windows.Forms.TabPage
 $tabBt.Text = 'Bluetooth'
 $tabBt.BackColor = [System.Drawing.SystemColors]::Control
-$tabs.TabPages.Add($tabBt)
+$tabsRadios.TabPages.Add($tabBt)
 
 $tabNfc = New-Object System.Windows.Forms.TabPage
 $tabNfc.Text = 'NFC'
 $tabNfc.BackColor = [System.Drawing.SystemColors]::Control
-$tabs.TabPages.Add($tabNfc)
+$tabsRadios.TabPages.Add($tabNfc)
 
 $tabUsers = New-Object System.Windows.Forms.TabPage
 $tabUsers.Text = 'Users'
@@ -3423,6 +3438,26 @@ $btnSaveLog.Size = New-Object System.Drawing.Size(96, 28)
 $btnSaveLog.Anchor = 'Bottom, Left'
 $splitMain.Panel2.Controls.Add($btnSaveLog)
 
+# The log took a fixed share of the height, and at the smallest window that
+# left the Files list about 40 px - not one row. It can now be dragged taller
+# or shorter by the bar above its buttons, or folded away.
+$btnLogFold = New-Object System.Windows.Forms.Button
+$btnLogFold.Text = [char]0x25BC
+$btnLogFold.Font = New-Object System.Drawing.Font('Segoe UI', 7)
+$btnLogFold.Size = New-Object System.Drawing.Size(28, 28)
+$splitMain.Panel2.Controls.Add($btnLogFold)
+
+$pnlLogGrip = New-Object System.Windows.Forms.Panel
+$pnlLogGrip.Cursor = [System.Windows.Forms.Cursors]::HSplit
+$pnlLogGrip.Size = New-Object System.Drawing.Size(200, 6)
+$splitMain.Panel2.Controls.Add($pnlLogGrip)
+$toolTip.SetToolTip($pnlLogGrip, 'Drag to give the log more or less room; double-click to fold it')
+
+# 0 = the height that suits the window; anything else was dragged by hand
+$script:logHeight = 0
+$script:logFolded = $false
+$script:logDrag = $null
+
 $lblStatus = New-Object System.Windows.Forms.Label
 $lblStatus.Text = 'Stopped'
 $lblStatus.TextAlign = 'MiddleRight'
@@ -5070,6 +5105,7 @@ function Update-DeviceStatus {
     if (-not $serial -or $lstDevices.SelectedItems.Count -eq 0 -or
         $lstDevices.SelectedItems[0].SubItems[4].Text -ne 'device') {
         $lblDeviceStatus.Text = 'select a ready device to read its battery, signal and screen'
+        $toolTip.SetToolTip($lblDeviceStatus, '')
         return
     }
 
@@ -5083,7 +5119,8 @@ function Update-DeviceStatus {
     $parts = @($serial, $battery, $signal)
     if ($null -ne $screen.ScreenOn) { $parts += $(if ($screen.ScreenOn) { 'screen on' } else { 'SCREEN OFF' }) }
     if ($null -ne $screen.Locked) { $parts += $(if ($screen.Locked) { 'LOCKED' } else { 'unlocked' }) }
-    $lblDeviceStatus.Text = ($parts -join '   |   ')
+    $lblDeviceStatus.Text = ($parts -join '  |  ')
+    $toolTip.SetToolTip($lblDeviceStatus, (($parts -join '  |  ') -replace '  \|  ', [Environment]::NewLine))
 
     # a phone that is locked or dark explains half the things that then fail
     if ($screen.Locked -or ($null -ne $screen.ScreenOn -and -not $screen.ScreenOn)) {
@@ -8984,20 +9021,75 @@ function Update-RadioLayout {
     }
 }
 
+function Update-DeviceColumns {
+    # Serial was 210 px whatever the width, so at the smallest window Client
+    # went past the edge behind a scroll bar. The short columns keep their
+    # width; Serial and Model share the rest.
+    $room = $lstDevices.ClientSize.Width - 4
+    if ($room -lt 300 -or $lstDevices.Columns.Count -lt 6) { return }
+    $fixed = 55 + 70 + 85 + 70
+    $rest = [Math]::Max(200, $room - $fixed)
+    $serialWidth = [int]($rest * 0.55)
+    $lstDevices.Columns[0].Width = $serialWidth
+    $lstDevices.Columns[1].Width = 55
+    $lstDevices.Columns[2].Width = $rest - $serialWidth
+    $lstDevices.Columns[3].Width = 70
+    $lstDevices.Columns[4].Width = 85
+    $lstDevices.Columns[5].Width = 70
+}
+
+function Switch-LogPane {
+    $script:logFolded = -not $script:logFolded
+    Update-RightLayout
+}
+
 function Update-RightLayout {
     $width = $splitMain.Panel2.ClientSize.Width
     $height = $splitMain.Panel2.ClientSize.Height
     if ($width -lt 400 -or $height -lt 300) { return }
 
-    $logHeight = [Math]::Max(90, [Math]::Min(190, [int]($height * 0.22)))
-
     $btnTogglePane.SetBounds(0, [int](($height - 76) / 2), 16, 76)
-    $grpDevices.SetBounds(20, 6, ($width - 26), 182)
-    $txtLog.SetBounds(20, ($height - $logHeight - 6), ($width - 26), $logHeight)
-    $btnClear.SetBounds(20, ($height - $logHeight - 40), 96, 28)
-    $btnSaveLog.SetBounds(124, ($height - $logHeight - 40), 96, 28)
-    $lblStatus.SetBounds(($width - 348), ($height - $logHeight - 40), 342, 28)
-    $tabs.SetBounds(20, 194, ($width - 26), ($height - $logHeight - 240))
+
+    # a short window gives the device list two rows instead of four: one phone
+    # is the usual case, and every pixel here is one the pages below lack
+    $listHeight = if ($height -lt 760) { 70 } else { 115 }
+    $grpDevices.SetBounds(20, 6, ($width - 26), ($listHeight + 56))
+    $lstDevices.Height = $listHeight
+    # as wide as the list, so it never runs under the buttons beside it
+    $lblDeviceStatus.SetBounds(14, (22 + $listHeight + 6), ($lstDevices.Width - 2), 20)
+    Update-DeviceColumns
+    $tabsTop = $grpDevices.Bottom + 6
+
+    # the pages keep at least this much; the log gives way first
+    $pagesLeast = 300
+    $logMost = [Math]::Max(60, $height - $tabsTop - 48 - $pagesLeast)
+    if ($script:logFolded) {
+        $logHeight = 0
+    } elseif ($script:logHeight -gt 0) {
+        $logHeight = [Math]::Max(60, [Math]::Min($logMost, $script:logHeight))
+    } else {
+        $logHeight = if ($height -lt 760) { 80 } else { [Math]::Max(90, [Math]::Min(190, [int]($height * 0.22))) }
+        $logHeight = [Math]::Min($logMost, $logHeight)
+    }
+
+    $rowTop = if ($script:logFolded) { $height - 34 } else { $height - $logHeight - 40 }
+    $txtLog.Visible = -not $script:logFolded
+    if ($script:logFolded) {
+        # hidden, but still placed where it overlaps nothing
+        $txtLog.SetBounds(20, ($height - 4), ($width - 26), 1)
+        $btnLogFold.Text = [char]0x25B2
+        $toolTip.SetToolTip($btnLogFold, 'Show the log again')
+    } else {
+        $txtLog.SetBounds(20, ($height - $logHeight - 6), ($width - 26), $logHeight)
+        $btnLogFold.Text = [char]0x25BC
+        $toolTip.SetToolTip($btnLogFold, 'Fold the log away and give its room to the pages')
+    }
+    $btnClear.SetBounds(20, $rowTop, 96, 28)
+    $btnSaveLog.SetBounds(124, $rowTop, 96, 28)
+    $btnLogFold.SetBounds(228, $rowTop, 28, 28)
+    $lblStatus.SetBounds(($width - 348), $rowTop, 342, 28)
+    $pnlLogGrip.SetBounds(20, ($rowTop - 8), ($width - 26), 6)
+    $tabs.SetBounds(20, $tabsTop, ($width - 26), ($rowTop - 8 - $tabsTop))
 
     # the Running page's info line was 300 px from x 556, past a narrow page
     $lblRunningInfo.SetBounds(556, 15, [Math]::Max(100, ($tabRunning.ClientSize.Width - 568)), 20)
@@ -10395,6 +10487,8 @@ function Save-Settings {
             Mouse          = "$($cmbMouse.SelectedItem)"
             Gamepad        = "$($cmbGamepad.SelectedItem)"
             Connect        = $txtConnect.Text
+            LogHeight      = [int]$script:logHeight
+            LogFolded      = [bool]$script:logFolded
         }
 
         $data | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding UTF8
@@ -10470,6 +10564,8 @@ function Restore-Settings {
     $value = Get-Setting 'Mouse';          if ($value -and $cmbMouse.Items.Contains($value)) { $cmbMouse.SelectedItem = $value }
     $value = Get-Setting 'Gamepad';        if ($value -and $cmbGamepad.Items.Contains($value)) { $cmbGamepad.SelectedItem = $value }
     $value = Get-Setting 'Connect';        if ($null -ne $value) { $txtConnect.Text = $value }
+    $value = Get-Setting 'LogHeight';      if ($value) { try { $script:logHeight = [int]$value } catch { } }
+    $value = Get-Setting 'LogFolded';      if ($null -ne $value) { $script:logFolded = [bool]$value }
 }
 
 # --- timer: pump the relay output and watch for an unexpected exit ----------
@@ -10844,6 +10940,17 @@ $tabsTethering.Add_SelectedIndexChanged({
     Update-TetherLayout
     Update-RightLayout
 })
+function Update-ShownRadio {
+    # a freshly opened radio page should already say what the phone is doing
+    if ($script:busy -gt 0 -or -not (Get-SelectedSerial)) { return }
+    if ($tabsRadios.SelectedTab -eq $tabWifi -and $lstWifi.Items.Count -eq 0) { Update-WifiList -Saved }
+    elseif ($tabsRadios.SelectedTab -eq $tabBt -and $lstBt.Items.Count -eq 0) { Update-BluetoothList }
+    elseif ($tabsRadios.SelectedTab -eq $tabNfc) { Update-NfcState }
+}
+$tabsRadios.Add_SelectedIndexChanged({
+    Update-RightLayout
+    Update-ShownRadio
+})
 $tabsAdvanced.Add_SelectedIndexChanged({
     Update-ToolsLayout
     Update-MirrorLayout
@@ -10859,6 +10966,34 @@ $tabsAdvanced.Add_SelectedIndexChanged({
 
 $btnClearShot.Add_Click({ Clear-Capture })
 $btnTogglePane.Add_Click({ Switch-ScreenPane })
+$btnLogFold.Add_Click({ Switch-LogPane })
+$pnlLogGrip.Add_DoubleClick({ Switch-LogPane })
+$pnlLogGrip.Add_MouseDown({
+    param($sender, $eventArgs)
+    if ($eventArgs.Button -ne [System.Windows.Forms.MouseButtons]::Left) { return }
+    # screen coordinates: the bar itself moves while it is dragged
+    $start = if ($script:logFolded) { 0 } else { $txtLog.Height }
+    $script:logDrag = @{ Y = [System.Windows.Forms.Control]::MousePosition.Y; Height = $start }
+})
+$pnlLogGrip.Add_MouseMove({
+    if (-not $script:logDrag) { return }
+    $wanted = $script:logDrag.Height - ([System.Windows.Forms.Control]::MousePosition.Y - $script:logDrag.Y)
+    $current = if ($script:logFolded) { 0 } else { $txtLog.Height }
+    # a layout pass per pixel is more than PowerShell keeps up with
+    if ([Math]::Abs($wanted - $current) -lt 4) { return }
+    $script:logFolded = $false
+    $script:logHeight = [Math]::Max(60, $wanted)
+    Update-RightLayout
+})
+$pnlLogGrip.Add_MouseUp({ $script:logDrag = $null })
+$pnlLogGrip.Add_Paint({
+    param($sender, $eventArgs)
+    # three short lines in the middle say "this can be dragged"
+    $middle = [int]($sender.Width / 2)
+    $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(160, 164, 168))
+    foreach ($y in @(1, 3, 5)) { $eventArgs.Graphics.DrawLine($pen, ($middle - 14), $y, ($middle + 14), $y) }
+    $pen.Dispose()
+})
 
 # every list gets its own right-click menu, built from the buttons that already
 # act on that list, so the two can never drift apart
@@ -11024,9 +11159,7 @@ $tabs.Add_SelectedIndexChanged({
     # a freshly opened radio tab should already say what the phone is doing
     if ($script:busy -eq 0 -and (Get-TargetSerial)) {
         if ($tabs.SelectedTab -eq $tabFiles) { Update-FileVolumes -Serial (Get-TargetSerial) }
-        elseif ($tabs.SelectedTab -eq $tabWifi -and $lstWifi.Items.Count -eq 0) { Update-WifiList -Saved }
-        elseif ($tabs.SelectedTab -eq $tabBt -and $lstBt.Items.Count -eq 0) { Update-BluetoothList }
-        elseif ($tabs.SelectedTab -eq $tabNfc) { Update-NfcState }
+        elseif ($tabs.SelectedTab -eq $tabRadios) { Update-ShownRadio }
         elseif ($tabs.SelectedTab -eq $tabUsers -and $lstUsers.Items.Count -eq 0) { Update-UserList }
         elseif ($tabs.SelectedTab -eq $tabAdvanced -and $tabsAdvanced.SelectedTab -eq $tabRoot) {
             Update-RootAvailability

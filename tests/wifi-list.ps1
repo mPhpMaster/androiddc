@@ -19,7 +19,8 @@ if (-not $TestSerial) {
     Say 'SKIPPED - no phone given'
 } else {
     Select-TestPhone
-    $tabs.SelectedTab = $tabWifi
+    $tabs.SelectedTab = $tabRadios
+    $tabsRadios.SelectedTab = $tabWifi
     Wait-Pumped -Milliseconds 400
     Update-WifiList
 
