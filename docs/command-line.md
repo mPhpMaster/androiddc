@@ -2,7 +2,25 @@
 
 [← back to the README](../README.md)
 
-Two scripts work without the window.
+Two scripts work without the window, and both windows take one switch of their own.
+
+---
+
+## The windows: -Minimized
+
+```powershell
+.\androiddc.vbs -Minimized
+.\androiddc-nova.vbs -Minimized
+```
+
+| Parameter | What it does |
+|---|---|
+| `-Minimized` | Starts with the window hidden in the tray (the icon by the clock). A phone that is already plugged in runs its automation rule as if it had just been plugged in |
+
+This is what the *Start with Windows* entry runs. Both launchers pass whatever they are given on
+to their script, so the same works on `androiddc.ps1` and `nova\androiddc-nova.ps1` directly.
+Nova also has `-OffScreen`, `-SettingsFile`, `-PageNames` and `-TestScript`, which exist for
+its tests (`nova\tests\run.ps1`).
 
 ---
 

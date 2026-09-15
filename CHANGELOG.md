@@ -2,7 +2,7 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.2.1
 
 ### The rules set before, seen without looking for them
 
@@ -14,6 +14,14 @@
   rules page. The icon's tooltip counts the rules that are on.
 * The classic *Advanced > Automation* tab and Nova's *Automation* entry in the side navigation
   carry the number of rules, e.g. **Automation (2)**.
+
+### Documentation
+
+* Every page caught up with 1.2: `-Minimized` in the command line, start with Windows and the
+  icon by the clock in getting started, rules in *What it runs on your phone*, three new
+  troubleshooting sections (a rule that did not run, the icon out of sight, not starting with
+  Windows), the shared folder and four new PowerShell traps in the architecture, and the icon's
+  clicks in *Keyboard and mouse*.
 
 ## 1.2.0
 

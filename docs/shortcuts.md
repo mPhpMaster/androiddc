@@ -94,5 +94,16 @@ selected picks it first.
 | The bar above the log's buttons | Drag to give the log more or less room; double-click to fold it |
 | ▼ / ▲ beside *Save log...* | Folds the log away, or brings it back |
 
+## The icon by the clock
+
+| Action | What it does |
+|---|---|
+| Left click | Hides the window, or shows it again |
+| Minimize button | Hides the window there too, off the taskbar; it keeps watching for phones |
+| Right click | *Automation* (the rules that are set, and *Open the rules ...*), *Show the window* or *Hide to the tray*, *Exit* |
+| Hover | How many automation rules are on |
+
+The same in both windows. The window's close button still quits the program.
+
 Multiple devices: `Ctrl` + click adds one device to the selection, `Shift` + click takes a
 range. Most buttons then act on all of them and the log names each device.

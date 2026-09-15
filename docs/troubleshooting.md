@@ -78,6 +78,42 @@ The phone's own settings screen is driven for this. It fails when:
 Open the hotspot screen on the phone and flip it there; the state line still reports it
 correctly afterwards.
 
+## A rule did not run when I plugged the phone in
+
+1. **Is the rule there and on?** The log lists every rule at startup, and so does *Automation*
+   in the menu of the icon by the clock. A rule that is *off*, or has *nothing to do yet*, runs
+   nothing.
+2. **Is it that phone?** A rule belongs to one serial. A phone connected over Wi-Fi has a
+   different serial (`<ip>:5555`) from the same phone on a cable.
+3. **Was the phone already plugged in?** A window you open by hand does not run the rules for
+   phones already there, and neither does the one the other window's switch button opens.
+   Unplug and plug again, or press *Run now*. Only a window started with Windows runs the rules
+   for phones already plugged in.
+4. **Is the phone ready?** A phone waiting for its *Allow USB debugging?* prompt is not ready.
+   The rule runs once the prompt is accepted.
+5. **Is one of AndroidDC's questions open?** While a dialog of this program waits for an
+   answer, the device list is not watched.
+6. **USB tethering or the hotspot did not switch?** Many phones refuse that from adb, and
+   AndroidDC then taps the switch in the phone's settings. That needs the screen on and the
+   phone unlocked, so put *Wake the screen* in the rule and unlock the phone.
+
+The log says what each action did, one line per action, starting with `Automation:`.
+
+## I cannot find AndroidDC after minimizing it
+
+Minimizing hides the window in the icon by the clock, not in the taskbar. If Windows has tucked
+the icon away, it is under the **^** arrow next to the clock. A click on it shows the window.
+Drag it out next to the clock to keep it in sight.
+
+## AndroidDC did not start with Windows
+
+* Look under *Advanced > Automation* (Nova: *Automation*): the box shows what is really
+  written, not what was last clicked.
+* The entry points at the launcher inside this folder. After moving the folder, turn the box
+  off and on again, so the entry points at the new place.
+* Windows' *Task Manager > Startup apps* lists it by the program the entry runs, *Microsoft
+  Windows Based Script Host* (wscript). A startup app switched off there does not run.
+
 ## The picture is stale or black
 
 * Press **Capture** once by hand. If the log shows a timeout, the phone is busy or asleep.
@@ -106,8 +142,10 @@ Behind a proxy, set `$env:HTTPS_PROXY` before running it.
 
 ## Recovering settings
 
-Settings live in `%APPDATA%\AndroidDC\settings.json`. Delete that file to start clean; the
-next run recreates it with defaults. A file left by an older name is copied over once, so
+Settings live in `%APPDATA%\AndroidDC\settings.json` (Nova: `nova-settings.json`). Delete that
+file to start clean; the next run recreates it with defaults. The automation rules are
+`automation.json` in the same folder. If that file cannot be read, AndroidDC says so in the
+log and leaves it as it is instead of overwriting it. A file left by an older name is copied over once, so
 nothing is lost when upgrading.
 
 ## The live shell shows nothing after Logcat has run

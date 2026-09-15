@@ -2,8 +2,26 @@
 
 [← back to the README](../README.md)
 
-For anyone changing the code. AndroidDC is a single PowerShell script with a WinForms user
-interface — no build step, no modules, no dependencies beyond what Windows already has.
+For anyone changing the code. The classic window is a single PowerShell script with a WinForms
+user interface — no build step, no modules, no dependencies beyond what Windows already has.
+The Nova window is WPF in PowerShell, one file per page; its own rules are in
+[`nova/CONTRACT.md`](../nova/CONTRACT.md).
+
+## What the two windows share
+
+`shared\` holds what both windows dot-source, so it is written once:
+
+| File | What it does |
+|---|---|
+| `Automation.ps1` | Starting with Windows (one `AndroidDC` value under the user's Run key), the actions a rule can hold, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone that was just plugged in from one that was already there, and a named mutex so only one window runs the rules |
+| `Tray.ps1` | The icon by the clock: hiding and showing the window, its menu, and the list of rules in that menu |
+
+Nothing in `shared\` touches a control. An action calls the window's own function by name —
+both windows use the same names, `Set-UsbTethering`, `Start-Scrcpy` and the rest — and each
+window passes a script block that selects the rule's phone first. The files are written at
+once, not when a window closes, because the other window reads them. Tests point
+`ANDROIDDC_AUTOMATION_FILE`, `ANDROIDDC_RUN_KEY` and `ANDROIDDC_AUTOMATION_MUTEX` at copies of
+their own.
 
 ## The shape of the file
 
@@ -67,6 +85,10 @@ checks scrcpy's own output, a move checks the copy arrived before deleting the o
 | A `"` inside an argument to a native program (Windows PowerShell 5.1) | Dropped: `'say "hi"'` reaches adb as `'say hi'` | `Invoke-DeviceCommand` sends the line as base64, which neither side parses |
 | `Register-ObjectEvent` on a live adb stream (logcat) | Afterwards no asynchronous read completes on any adb process started later — the live shell went silent until restart. Not the volume: the same subscription on 20000 lines from `cmd` leaves reads working | Read the stream in a C# class on .NET's own threads: `LineReader`, like `LiveShell` |
 | `$process.StandardInput.WriteLine($text)` | Encoded in the console's input code page; .NET Framework has no `StandardInputEncoding`. On an OEM page Arabic becomes `?`, which the phone's shell expands as a file pattern | Write `[Text.Encoding]::UTF8.GetBytes($text + "`n")` to `StandardInput.BaseStream` |
+| `Form.CanFocus` in a window started from a hidden process (both launchers start one) | False, because `IsWindowVisible` is false there although the window is on screen — the device watch that waited for it never ran | Ask the one thing that matters: `IsWindowEnabled`, which a dialog or message box turns off |
+| `$form.Hide()` / `$window.Hide()` on a window inside `ShowDialog` | Ends the dialog, so the program quits instead of going to the tray | `ShowWindow(handle, SW_HIDE)` and `SW_RESTORE` / `SW_SHOW` (`shared\Tray.ps1`) |
+| `$list \| ConvertTo-Json` with one rule in the list | The pipe unrolls a one-item array, and the file holds an object where a list was meant | `ConvertTo-Json -InputObject $object -Depth 6` |
+| `New-Item -Path <registry key> -Force` on a key that exists | Recreates the key, and every value under it goes — the user's whole Run key | Create a key only after `Test-Path` says it is not there |
 | `$lblDns = New-Object ...Label` a second time | The name now means the new control only. The first still exists and shows, but nothing can place or wire it by name: the tunnel page's DNS label was never laid out and sat 6 px above its row | One name per control. `audit-wiring.ps1` fails the build on a reused name |
 
 ## Event handlers
@@ -110,8 +132,9 @@ adding it to the hash table in `Save-Settings` and a matching `Get-Setting` line
 ## Testing
 
 There is no unit-test framework here; the program is tested by running it. The tests are in
-[`tests/`](../tests/README.md), and `tests\run.ps1` runs them — three without a phone, five
-with one. This is how that harness works, and why:
+[`tests/`](../tests/README.md), which lists each one and whether it needs a phone, and
+`tests\run.ps1` runs them; Nova's are in `nova\tests\`. This is how the classic harness works,
+and why:
 
 1. Copy `androiddc.ps1`, replace the window title with a marker, splice a test script into
    `$form.Add_Shown` with a **literal** `String.Replace` (a regex replacement would expand
@@ -236,8 +259,10 @@ the underlying stream itself.
 
 `.github/workflows/check.yml` runs on every push: every `.ps1` must parse, every `.ps1` must
 be plain ASCII or carry a BOM, no variable may be read before it is assigned, every control
-must reach the screen, every button must have a handler and no control's name may be reused, the launcher must point at a file
-that exists, and no absolute developer path may appear in a shipped file.
+must reach the screen, every button must have a handler and no control's name may be reused, both launchers must point at a file
+that exists, Nova's own audit must pass (`nova\tests\audit.ps1`: no function defined twice,
+well-formed XAML, page-prefixed names), and no absolute developer path may appear in a shipped
+file.
 
 The path check was itself the best example of the rule above. It was written as
 

@@ -19,6 +19,12 @@ anything added next.
 | 4 — shown but blocked | done: Advanced ▸ Root / recovery, eleven commands marked against the real device |
 | 5 — docs and checks | done: user guide, shortcuts, command reference, limits, README, and CI |
 
+> **After the rebuild.** What came later is not planned on this page; the
+> [changelog](../CHANGELOG.md) records it. In short: 1.1.0 added a second window, Nova, over the
+> same tool. 1.2.0 added starting with Windows, a rule per phone that runs chosen actions when
+> that phone is plugged in, and an icon by the clock. 1.2.1 lists the rules that are set in the
+> log and in that icon's menu.
+
 > **Corrections, measured on 2026-09-10.** Four of the "done" claims above did not hold when
 > they were checked against the code and the running window.
 >

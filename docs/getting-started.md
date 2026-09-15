@@ -52,6 +52,11 @@ Either launcher runs its PowerShell script with `-NoProfile -ExecutionPolicy Byp
 To change your mind later, **Open Nova window** on the classic *Device* tab, or **Classic
 window** at the bottom of Nova's side navigation, closes one and opens the other.
 
+While either window runs, its icon sits by the clock: a click hides the window there and
+brings it back, and minimizing hides it too. To have AndroidDC start by itself when you sign in,
+and do something every time a particular phone is plugged in, see *Advanced > Automation* in
+the [user guide](user-guide.md#automation) (Nova: the *Automation* page).
+
 To see a script's own output while developing, run it directly instead:
 
 ```powershell
@@ -86,6 +91,8 @@ else behaves the same.
 | What | Where |
 |---|---|
 | Your settings | `%APPDATA%\AndroidDC\settings.json` (classic) and `nova-settings.json` (Nova) |
+| Automation rules, for both windows | `%APPDATA%\AndroidDC\automation.json` |
+| Start with Windows, only when you turn it on | the value `AndroidDC` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` |
 | Temporary captures, recordings, previews | `%TEMP%\androiddc-<pid>.*`, removed when the program closes |
 | Downloaded archives | `%TEMP%\upstream-downloads`, removed unless `-KeepArchives` |
 

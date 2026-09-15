@@ -6,9 +6,9 @@ AndroidDC installs no agent and grants itself nothing. Every action is an ordina
 command, the same ones you could type yourself. This page lists them so you can audit the tool
 instead of trusting it.
 
-Nothing here happens on its own: each command runs because you pressed the button next to it.
-The only things that repeat by themselves are the device list refresh and, if you switch it
-on, the screen capture.
+Nothing here happens on its own: each command runs because you pressed the button next to it,
+or because you set an automation rule for that phone (see below). The only things that repeat
+by themselves are the device list refresh and, if you switch it on, the screen capture.
 
 **Where you typed the text** — an SMS body, a number, a Wi-Fi name or password, a user name,
 a contact, *Send text* — the command goes as `adb shell "echo <base64> | base64 -d | sh"`.
@@ -148,6 +148,20 @@ the page is unlocked. The page reads `getprop ro.build.type`, `ro.debuggable`, `
 seconds and is then stopped, and the ids it printed are named with `adb shell ps -A -o
 PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone is read again.
 
+## Automation rules
+
+A rule runs nothing of its own: each action is the same function its button calls, so it runs
+the commands listed on this page for that button, on the rule's phone only. It starts when
+that phone becomes ready in `adb devices -l`, or when you press *Run now*. Two actions have no
+button elsewhere:
+
+| Action | Command |
+|---|---|
+| Wake the screen | `adb shell input keyevent 224` |
+| Open an app | `adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER <package>`, then `adb shell am start -n <component>` |
+
+The rules you set are listed in the log at startup and in the menu of the icon by the clock.
+
 ## Connection plumbing
 
 `adb tcpip 5555`, `adb connect|disconnect`, `adb kill-server|start-server`, `adb reconnect`,
@@ -158,7 +172,9 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 
 | What | Where | Removed |
 |---|---|---|
-| Settings | `%APPDATA%\AndroidDC\settings.json` | Kept on purpose |
+| Settings | `%APPDATA%\AndroidDC\settings.json`, and `nova-settings.json` for Nova | Kept on purpose |
+| Automation rules | `%APPDATA%\AndroidDC\automation.json`, written when you change a rule | Kept on purpose; delete the file to drop every rule |
+| Start with Windows | the value `AndroidDC` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, only when you turn it on | When you turn it off; nothing else under that key is touched |
 | scrcpy and app output | `%TEMP%\androiddc-<pid>.*` | When the program closes |
 | Media previews | `%TEMP%\androiddc-<pid>.preview.*` | When the program closes |
 | Downloads you asked for | The PC folder you chose | Kept, they are yours |

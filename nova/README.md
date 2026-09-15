@@ -34,6 +34,9 @@ does the reverse. If a tool is missing, the program offers to fetch it with the 
 * **Activity log** - every step, colour coded; drag its top edge, or fold it away. Above it, the
   command that is running and the state of the internet sharing.
 * `F5` reads the page on screen again. `Ctrl`+`L` empties the log.
+* **The icon by the clock** - a click hides the window there or brings it back, and minimizing
+  hides it too. Its menu lists the automation rules that are set, and the log lists them at
+  startup.
 
 Settings are kept in `%APPDATA%\AndroidDC\nova-settings.json`, apart from the classic
 window's `settings.json`, so switching never mixes them.
