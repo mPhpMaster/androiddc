@@ -1,0 +1,96 @@
+<!--
+  Messages: the conversations read from the phone's SMS provider on the left,
+  a new message composed in the phone's own SMS app on the right.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid.ColumnDefinitions>
+    <ColumnDefinition Width="*"/>
+    <ColumnDefinition Width="14"/>
+    <ColumnDefinition Width="290"/>
+  </Grid.ColumnDefinitions>
+
+  <!-- ================================================== the messages == -->
+  <Border Grid.Column="0" Style="{StaticResource CardPanel}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <Grid Grid.Row="0" Margin="0,0,0,10">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*" MaxWidth="280"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="MESSAGES" Style="{StaticResource Caps}" Margin="0,0,14,0" VerticalAlignment="Center"/>
+        <Grid Grid.Column="1">
+          <TextBox x:Name="MessagesFilter" ToolTip="Filter by number or text (Enter reads the phone again)"/>
+          <TextBlock x:Name="MessagesFilterHint" Text="Filter by number or text" IsHitTestVisible="False"
+                     Foreground="{StaticResource MutedText}" Margin="11,0,0,0" VerticalAlignment="Center"/>
+        </Grid>
+        <Button x:Name="MessagesRefresh" Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                Margin="8,0,0,0" ToolTip="Refresh the messages"/>
+        <TextBlock x:Name="MessagesCount" Grid.Column="3" Style="{StaticResource MutedLine}" Margin="12,0,0,0"
+                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+      </Grid>
+
+      <ListView x:Name="MessagesList" Grid.Row="1" SelectionMode="Extended">
+        <ListView.View>
+          <GridView>
+            <GridViewColumn Header="DATE" Width="124" DisplayMemberBinding="{Binding When}"/>
+            <GridViewColumn Header="DIR" Width="54" DisplayMemberBinding="{Binding Direction}"/>
+            <GridViewColumn Header="NUMBER" Width="130" DisplayMemberBinding="{Binding Address}"/>
+            <GridViewColumn Header="MESSAGE" Width="420" DisplayMemberBinding="{Binding Body}"/>
+            <GridViewColumn Header="ID" Width="60" DisplayMemberBinding="{Binding Id}"/>
+          </GridView>
+        </ListView.View>
+      </ListView>
+
+      <WrapPanel Grid.Row="2" Margin="0,10,0,0">
+        <Button x:Name="MessagesCopy" Content="Copy" Margin="0,0,8,0" ToolTip="Copy the selected rows (date, number, message)"/>
+        <Button x:Name="MessagesEdit" Content="Edit body" Margin="0,0,8,0" ToolTip="Edit the body before resending"/>
+        <Button x:Name="MessagesExport" Content="Export all..." Margin="0,0,8,0"
+                ToolTip="Save the listed messages to a CSV or text file on this PC"/>
+        <Button x:Name="MessagesDelete" Content="Delete" Style="{StaticResource DangerButton}"
+                ToolTip="Delete the selected messages from the phone"/>
+      </WrapPanel>
+    </Grid>
+  </Border>
+
+  <!-- ================================================= a new message == -->
+  <Border Grid.Column="2" Style="{StaticResource CardPanel}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*" MinHeight="44"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <TextBlock Grid.Row="0" Text="NEW MESSAGE" Style="{StaticResource Caps}"/>
+      <TextBlock Grid.Row="1" Text="To" Style="{StaticResource FieldLabel}"/>
+      <TextBox x:Name="MessagesTo" Grid.Row="2" ToolTip="The number to send to"/>
+      <TextBlock Grid.Row="3" Text="Message" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
+      <TextBox x:Name="MessagesBody" Grid.Row="4" AcceptsReturn="True" TextWrapping="Wrap"
+               VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" FlowDirection="LeftToRight"
+               ToolTip="Arabic works: the text is handed to the SMS app as an intent extra"/>
+      <CheckBox x:Name="MessagesAutoSend" Grid.Row="5" IsChecked="True" Margin="0,8,0,4"
+                ToolTip="Android has no shell command that sends an SMS: the message is composed in the SMS app and its Send button is tapped">
+        <TextBlock Text="tap Send on the phone automatically" TextWrapping="Wrap"/>
+      </CheckBox>
+      <Button x:Name="MessagesSend" Grid.Row="6" Style="{StaticResource Primary}" Margin="0,6,0,0"
+              ToolTip="Compose the message in the phone's SMS app, after a confirmation">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="&#xE724;" Style="{StaticResource Glyph}"/>
+          <TextBlock Text="Send" Margin="8,0,0,0" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+    </Grid>
+  </Border>
+</Grid>

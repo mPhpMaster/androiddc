@@ -41,14 +41,22 @@ should download it, waits for the download to finish and then opens.
 
 ## 3. Start it
 
-Double-click **`androiddc.vbs`**. That launcher runs the PowerShell script with
-`-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden`, so no console window appears and
-your execution policy is left alone.
+There are two windows over the same tool; start whichever you prefer:
 
-To see the script's own output while developing, run it directly instead:
+* **`androiddc.vbs`** - the classic window, with tabs.
+* **`androiddc-nova.vbs`** - the Nova window, with a side navigation and cards
+  ([its README](../nova/README.md)).
+
+Either launcher runs its PowerShell script with `-NoProfile -ExecutionPolicy Bypass
+-WindowStyle Hidden`, so no console window appears and your execution policy is left alone.
+To change your mind later, **Open Nova window** on the classic *Device* tab, or **Classic
+window** at the bottom of Nova's side navigation, closes one and opens the other.
+
+To see a script's own output while developing, run it directly instead:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\androiddc.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -STA -File .\nova\androiddc-nova.ps1
 ```
 
 ## 4. First run
@@ -77,7 +85,7 @@ else behaves the same.
 
 | What | Where |
 |---|---|
-| Your settings | `%APPDATA%\AndroidDC\settings.json` |
+| Your settings | `%APPDATA%\AndroidDC\settings.json` (classic) and `nova-settings.json` (Nova) |
 | Temporary captures, recordings, previews | `%TEMP%\androiddc-<pid>.*`, removed when the program closes |
 | Downloaded archives | `%TEMP%\upstream-downloads`, removed unless `-KeepArchives` |
 

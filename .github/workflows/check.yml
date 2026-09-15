@@ -72,25 +72,35 @@ jobs:
         shell: pwsh
         run: .\.github\audit-wiring.ps1
 
-      - name: The launcher must point at a file that exists
+      - name: Both launchers must point at a file that exists
         shell: pwsh
         run: |
-          $vbs = Get-Content -LiteralPath .\androiddc.vbs -Raw
-          if ($vbs -notmatch 'androiddc\.ps1') {
-            Write-Host '::error::androiddc.vbs does not launch androiddc.ps1'
-            exit 1
+          $pairs = @(
+            @{ Vbs = '.\androiddc.vbs'; Pattern = '\\androiddc\.ps1'; Script = '.\androiddc.ps1' },
+            @{ Vbs = '.\androiddc-nova.vbs'; Pattern = '\\nova\\androiddc-nova\.ps1'; Script = '.\nova\androiddc-nova.ps1' }
+          )
+          foreach ($pair in $pairs) {
+            if (-not (Test-Path -LiteralPath $pair.Vbs)) { Write-Host "::error::$($pair.Vbs) is missing"; exit 1 }
+            $vbs = Get-Content -LiteralPath $pair.Vbs -Raw
+            if ($vbs -notmatch $pair.Pattern) { Write-Host "::error::$($pair.Vbs) does not launch $($pair.Script)"; exit 1 }
+            if (-not (Test-Path -LiteralPath $pair.Script)) { Write-Host "::error::$($pair.Script) is missing"; exit 1 }
+            Write-Host "ok  $($pair.Vbs) -> $($pair.Script)"
           }
-          if (-not (Test-Path .\androiddc.ps1)) {
-            Write-Host '::error::androiddc.ps1 is missing'
-            exit 1
-          }
-          Write-Host 'ok  androiddc.vbs -> androiddc.ps1'
+
+      - name: 'AndroidDC Nova: no function twice, XAML well-formed, names prefixed'
+        shell: pwsh
+        run: |
+          # the audit exits with its number of problems; a step must fail on it explicitly
+          & .\nova\tests\audit.ps1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: No absolute developer paths in shipped files
         shell: pwsh
         run: |
           $targets = @('.\*.ps1', '.\.github\*.ps1', '.\.github\*.py', '.\tests\*.ps1', '.\tests\*.md',
-            '.\*.vbs', '.\*.bat', '.\docs\*.md', '.\README.md')
+            '.\*.vbs', '.\*.bat', '.\docs\*.md', '.\README.md',
+            '.\nova\*.ps1', '.\nova\*.md', '.\nova\lib\*.ps1', '.\nova\pages\*.ps1', '.\nova\pages\*.xaml',
+            '.\nova\ui\*.xaml', '.\nova\tests\*.ps1')
 
           # A check that reads no files passes exactly as quietly as a clean
           # tree, and SilentlyContinue hides a bad pattern the same way. So

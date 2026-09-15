@@ -1,0 +1,221 @@
+<!--
+  Files: a file manager for the phone. The top card holds where you are (up, the
+  path, the jump list, hidden, folders first, the count) and how you look (the
+  filter, a search below this folder, recent files, and the PC folder the
+  downloads go to). The list takes the room. Under it a slim line: the
+  selection buttons and the space of the volume - replaced by the transfer row
+  while a copy runs. Then one action bar in four groups: moving, organising,
+  archiving, opening.
+
+  The page is dense, so the gaps are small: at the smallest window the list
+  still shows its rows.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid.Resources>
+    <!-- a delete that shows its bin: the danger colours with the icon's size and font -->
+    <Style x:Key="FilesDangerIcon" TargetType="Button" BasedOn="{StaticResource DangerButton}">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Width" Value="34"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="FontFamily" Value="{StaticResource IconFont}"/>
+      <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <!-- the selection links on the slim line under the list -->
+    <Style x:Key="FilesLink" TargetType="Button" BasedOn="{StaticResource Ghost}">
+      <Setter Property="MinHeight" Value="24"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="FontSize" Value="12.5"/>
+    </Style>
+  </Grid.Resources>
+  <Grid.RowDefinitions>
+    <RowDefinition Height="Auto"/>
+    <RowDefinition Height="*"/>
+    <RowDefinition Height="Auto"/>
+    <RowDefinition Height="Auto"/>
+  </Grid.RowDefinitions>
+
+  <!-- ======================================================= where and how == -->
+  <Border Grid.Row="0" Style="{StaticResource CardPanel}" Padding="10,7">
+    <StackPanel>
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Button x:Name="FilesUp" Style="{StaticResource IconButton}" Content="&#xE74A;"
+                ToolTip="Up one folder (Backspace in the list)"/>
+        <TextBox x:Name="FilesPath" Grid.Column="1" Margin="6,0,0,0" Text="/sdcard" FontFamily="{StaticResource MonoFont}"
+                 FontSize="12.5" ToolTip="Path on the phone - press Enter to open it"/>
+        <Button x:Name="FilesGo" Grid.Column="2" Content="Go" Margin="6,0,0,0"
+                ToolTip="Open the path in the box"/>
+        <ComboBox x:Name="FilesQuick" Grid.Column="3" Width="150" Margin="6,0,0,0"
+                  ToolTip="Jump to a common folder, or to any mounted volume (a card, a USB stick)"/>
+        <CheckBox x:Name="FilesHidden" Grid.Column="4" Content="hidden" IsChecked="True" Margin="12,0,0,0"
+                  VerticalAlignment="Center" ToolTip="Show names that start with a dot"/>
+        <CheckBox x:Name="FilesFoldersFirst" Grid.Column="5" Content="folders first" IsChecked="True" Margin="12,0,0,0"
+                  VerticalAlignment="Center" ToolTip="Keep folders above files, whichever column sorts"/>
+        <TextBlock x:Name="FilesInfo" Grid.Column="6" Width="104" Margin="12,0,2,0" Style="{StaticResource MutedLine}"
+                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" TextAlignment="Right" VerticalAlignment="Center"/>
+      </Grid>
+
+      <Grid Margin="0,6,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="2*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="3*"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Grid>
+          <TextBox x:Name="FilesSearch"
+                   ToolTip="Type to filter this folder; press Enter or &quot;Search here&quot; to look inside subfolders too"/>
+          <TextBlock Text="Filter or search" IsHitTestVisible="False" Margin="9,0,0,0" VerticalAlignment="Center"
+                     FontSize="13" Foreground="{StaticResource MutedText}" TextTrimming="CharacterEllipsis">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Setter Property="Visibility" Value="Collapsed"/>
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Text, ElementName=FilesSearch}" Value="">
+                    <Setter Property="Visibility" Value="Visible"/>
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </Grid>
+        <Button x:Name="FilesSearchHere" Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE721;" Margin="6,0,0,0"
+                ToolTip="Search here: the current folder and everything under it (Enter in the box)"/>
+        <Button x:Name="FilesSearchClear" Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE711;" Margin="6,0,0,0"
+                ToolTip="Clear the search and read the folder again"/>
+        <Button x:Name="FilesRecent" Grid.Column="3" Content="Recent files" Margin="6,0,0,0"
+                ToolTip="Everything created or changed on the phone within the chosen window, wherever it lives"/>
+        <ComboBox x:Name="FilesRecentWindow" Grid.Column="4" Width="112" Margin="6,0,0,0" SelectedIndex="0"
+                  ToolTip="How far back Recent files looks">
+          <ComboBoxItem Content="today"/>
+          <ComboBoxItem Content="last 2 days"/>
+          <ComboBoxItem Content="last week"/>
+          <ComboBoxItem Content="last 30 days"/>
+        </ComboBox>
+        <Border Grid.Column="5" Width="1" Height="20" Background="{StaticResource Border}" Margin="12,0" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="6" Text="PC folder" Style="{StaticResource MutedLine}" TextWrapping="NoWrap"
+                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBox x:Name="FilesLocal" Grid.Column="7" ToolTip="Where downloads are saved on this PC"/>
+        <Button x:Name="FilesLocalBrowse" Grid.Column="8" Content="Browse..." Margin="6,0,0,0"
+                ToolTip="Pick the PC folder"/>
+        <Button x:Name="FilesOpenLocal" Grid.Column="9" Style="{StaticResource IconButton}" Content="&#xE838;" Margin="6,0,0,0"
+                ToolTip="Open the PC folder in Explorer"/>
+      </Grid>
+    </StackPanel>
+  </Border>
+
+  <!-- ============================================================ the list == -->
+  <ListView x:Name="FilesList" Grid.Row="1" Margin="0,6,0,0" SelectionMode="Extended">
+    <ListView.View>
+      <GridView>
+        <GridViewColumn Header="NAME" Width="310">
+          <GridViewColumn.CellTemplate>
+            <DataTemplate>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Glyph}" Style="{StaticResource Glyph}" FontSize="13" Foreground="{Binding Brush}"
+                           Margin="0,0,8,0"/>
+                <TextBlock Text="{Binding Label}" Foreground="{Binding Brush}" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"/>
+              </StackPanel>
+            </DataTemplate>
+          </GridViewColumn.CellTemplate>
+        </GridViewColumn>
+        <GridViewColumn Header="TYPE" Width="70" DisplayMemberBinding="{Binding Type}"/>
+        <GridViewColumn Header="SIZE" Width="86" DisplayMemberBinding="{Binding SizeText}"/>
+        <GridViewColumn Header="MODIFIED" Width="128" DisplayMemberBinding="{Binding Stamp}"/>
+        <GridViewColumn Header="PERMISSIONS" Width="108" DisplayMemberBinding="{Binding Permissions}"/>
+        <GridViewColumn Header="OWNER" Width="100" DisplayMemberBinding="{Binding Owner}"/>
+      </GridView>
+    </ListView.View>
+  </ListView>
+
+  <!-- ===================================================== the slim line == -->
+  <Grid Grid.Row="2" Margin="0,3,0,0" Height="26">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+      <Button x:Name="FilesSelectAll" Style="{StaticResource FilesLink}" Content="Select all"
+              ToolTip="Select every row in the list (Ctrl+A)"/>
+      <Button x:Name="FilesSelectNone" Style="{StaticResource FilesLink}" Content="None"
+              ToolTip="Clear the selection (Esc)"/>
+      <Button x:Name="FilesSelectInvert" Style="{StaticResource FilesLink}" Content="Invert"
+              ToolTip="Select what is not selected right now"/>
+    </StackPanel>
+    <TextBlock x:Name="FilesSpace" Grid.Column="1" Margin="12,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+               Foreground="{StaticResource MutedText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+               ToolTip="Space on the volume that holds the folder on screen"/>
+    <Grid x:Name="FilesTransfer" Grid.Column="1" Margin="12,0,0,0" Visibility="Collapsed">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="200"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+      <ProgressBar x:Name="FilesProgress" Minimum="0" Maximum="1000" VerticalAlignment="Center"/>
+      <TextBlock x:Name="FilesProgressText" Grid.Column="1" Margin="10,0" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                 TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+      <Button x:Name="FilesCancel" Grid.Column="2" Content="Cancel" MinHeight="24" Height="24"
+              ToolTip="Stop the transfer and remove the half written file"/>
+    </Grid>
+  </Grid>
+
+  <!-- ===================================================== the actions == -->
+  <WrapPanel Grid.Row="3" Margin="0,3,0,0">
+    <!-- moving -->
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+      <Button x:Name="FilesDownload" Style="{StaticResource IconButton}" Content="&#xE896;" Margin="0,0,6,0"
+              ToolTip="Download to the PC folder"/>
+      <Button x:Name="FilesMoveToPc" Content="Move to PC" Margin="0,0,6,0"
+              ToolTip="Download, verify the copy, then delete it from the phone"/>
+      <Button x:Name="FilesUpload" Style="{StaticResource IconButton}" Content="&#xE898;" Margin="0,0,6,0"
+              ToolTip="Upload files to this folder..."/>
+      <Button x:Name="FilesMoveToPhone" Content="Move to phone"
+              ToolTip="Upload, verify it arrived, then delete the file from this PC"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+      <Border Width="1" Height="20" Background="{StaticResource Border}" Margin="12,0" VerticalAlignment="Center"/>
+      <!-- organising -->
+      <Button x:Name="FilesNewDir" Style="{StaticResource IconButton}" Content="&#xE8F4;" Margin="0,0,6,0"
+              ToolTip="New folder on the phone"/>
+      <Button x:Name="FilesRename" Style="{StaticResource IconButton}" Content="&#xE8AC;" Margin="0,0,6,0"
+              ToolTip="Rename"/>
+      <Button x:Name="FilesDelete" Style="{StaticResource FilesDangerIcon}" Content="&#xE74D;"
+              ToolTip="Delete from the phone"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+      <Border Width="1" Height="20" Background="{StaticResource Border}" Margin="12,0" VerticalAlignment="Center"/>
+      <!-- archiving -->
+      <Button x:Name="FilesCompress" Content="Compress" Margin="0,0,6,0"
+              ToolTip="Pack the selected items into a .tar.gz on the phone itself"/>
+      <Button x:Name="FilesExtract" Content="Extract"
+              ToolTip="Unpack a .zip, .tar, .tar.gz, .tar.bz2 or .gz on the phone itself, into a folder you name"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+      <Border Width="1" Height="20" Background="{StaticResource Border}" Margin="12,0" VerticalAlignment="Center"/>
+      <!-- opening -->
+      <Button x:Name="FilesPreview" Style="{StaticResource IconButton}" Content="&#xE7B3;" Margin="0,0,6,0"
+              ToolTip="Preview - look at a picture or a text file without saving it on this PC"/>
+      <Button x:Name="FilesOpenPhone" Content="Open on phone" Margin="0,0,6,0"
+              ToolTip="Ask the phone to open the file with one of its apps"/>
+      <Button x:Name="FilesCopyPath" Style="{StaticResource IconButton}" Content="&#xE8C8;"
+              ToolTip="Copy the full path"/>
+    </StackPanel>
+  </WrapPanel>
+</Grid>

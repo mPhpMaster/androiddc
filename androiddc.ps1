@@ -36,7 +36,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic   # InputBox for rename / new folde
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # the release this file is; CHANGELOG.md says what each one changed
-$appVersion = '1.0.0'
+$appVersion = '1.1.0'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
@@ -614,6 +614,14 @@ $btnDeviceScrcpy.Location = New-Object System.Drawing.Point(300, 10)
 $btnDeviceScrcpy.Size = New-Object System.Drawing.Size(150, 28)
 $tabDevice.Controls.Add($btnDeviceScrcpy)
 $toolTip.SetToolTip($btnDeviceScrcpy, 'Start scrcpy right away, using whatever is set on the Advanced tab')
+
+# the same tool in the new window (nova\); this one closes the normal way
+$btnOpenNova = New-Object System.Windows.Forms.Button
+$btnOpenNova.Text = 'Open Nova window'
+$btnOpenNova.Location = New-Object System.Drawing.Point(458, 10)
+$btnOpenNova.Size = New-Object System.Drawing.Size(140, 28)
+$tabDevice.Controls.Add($btnOpenNova)
+$toolTip.SetToolTip($btnOpenNova, 'Close this window and open AndroidDC Nova: the same tool in the new design')
 
 $grpToggles = New-Object System.Windows.Forms.GroupBox
 $grpToggles.Text = 'Quick toggles  (applied to every selected device)'
@@ -9062,16 +9070,17 @@ function Update-DeviceTabLayout {
     $btnDeviceRefresh.SetBounds(14, 10, 190, 28)
     $btnDeviceCopy.SetBounds(212, 10, 80, 28)
     $btnDeviceScrcpy.SetBounds(300, 10, 150, 28)
+    $btnOpenNova.SetBounds(458, 10, 140, 28)
 
     $rightWidth = [Math]::Max(390, [Math]::Min(460, [int]($width * 0.46)))
     $leftWidth = [Math]::Max(200, $width - $rightWidth - 38)
     # a cut off sentence helps nobody: it shows only when it fits, and the
     # tooltip carries it the rest of the time
-    $room = $leftWidth - 452
+    $room = $leftWidth - 598
     $lblDeviceHint.Visible = ($room -ge 150)
     # always placed, even when hidden: a control left at its creation spot still
     # has bounds, and those bounds sat on top of the Mirror button
-    $lblDeviceHint.SetBounds(458, 16, [Math]::Max(1, $room), 20)
+    $lblDeviceHint.SetBounds(604, 16, [Math]::Max(1, $room), 20)
     $toolTip.SetToolTip($btnDeviceRefresh, $lblDeviceHint.Text)
     $txtDeviceInfo.SetBounds(14, 46, $leftWidth, ($height - 58))
 
@@ -11157,6 +11166,17 @@ $lstUsers.Add_DoubleClick({ Switch-DeviceUser })
 
 
 $btnDeviceScrcpy.Add_Click({ Start-Scrcpy })
+$btnOpenNova.Add_Click({
+    $launcher = Join-Path $scriptRoot 'androiddc-nova.vbs'
+    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+        Write-Log 'androiddc-nova.vbs is not next to this program, so the Nova window cannot be opened.' $colorWarn
+        return
+    }
+    Write-Log 'Opening the AndroidDC Nova window and closing this one ...' $colorStep
+    Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $launcher + '"')
+    # closed the normal way, so this window's settings are written
+    $form.Close()
+})
 $btnPhoneCall.Add_Click({ Start-QuickCall })
 $btnPhoneEnd.Add_Click({ Stop-PhoneCall })
 $btnPhoneSms.Add_Click({ Send-QuickSms })

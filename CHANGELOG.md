@@ -2,9 +2,28 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.1.0
 
-### The window
+### A second window: Nova
+
+* **AndroidDC Nova** (`androiddc-nova.vbs`, the code in `nova/`) is the same tool in a newer
+  design: a side navigation grouped into Workspace, Personal, Connect and System, a device card
+  with battery, signal and screen, a card per task, and an activity log that can be dragged or
+  folded. It is WPF hosted in Windows PowerShell 5.1 - still nothing to install.
+* Every feature of the classic window is there, page by page: Overview (battery, temperature
+  and memory, quick toggles that show the phone's state, phone number), Screen, Mirroring,
+  Apps, Files, Camera & mic, Messages, Contacts, Tethering, Radios, Tools, Running, Users and
+  Shell. `F5`, `Ctrl`+`1`...`9` and `Ctrl`+`L` work there too.
+* The two windows share the project's adb, scrcpy and gnirehtet and keep their settings apart
+  (`nova-settings.json`). **Open Nova window** on the classic *Device* tab and **Classic
+  window** in Nova close one and open the other, the normal way, so settings are saved.
+* Nova's typefaces, DM Sans and Space Grotesk, ship in `nova/fonts/` under the SIL Open Font
+  License.
+* `nova/tests/` runs the real Nova window off screen: a test per page, and a tour that opens
+  every page and inner tab at the default and the smallest size. CI also runs
+  `nova/tests/audit.ps1` (no function defined twice, well-formed XAML, page-prefixed names).
+
+### The classic window
 
 * At the smallest window every page has room again. The log took a fixed share of the height
   and left the Files list about 40 px - not one row. Its height can now be dragged by the bar

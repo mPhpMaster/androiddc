@@ -51,7 +51,8 @@ The home tab: what the phone is, and the handful of things you do most often.
 **Top row** — *Load details + screenshot* reads the device properties into the panel on the
 left; *Copy* puts them on the clipboard; **Mirror with scrcpy** starts mirroring immediately
 using whatever is configured on the *Advanced* tab, so you never have to go there for a normal
-session.
+session. **Open Nova window** closes this window (saving its settings) and opens the same tool
+in the Nova design; Nova's *Classic window* button brings you back.
 
 **Quick toggles** — each row is a pair of On/Off buttons applied to every selected device:
 auto-rotate, location, Bluetooth, Wi-Fi, battery saver, vibrate on ring, touch haptics, show

@@ -18,6 +18,10 @@
 *.exe binary
 *.dll binary
 *.zip binary
+# Nova's typefaces: under text=auto a font could be taken for text and have its
+# bytes rewritten as line endings
+*.ttf binary
+*.otf binary
 
 # so GitHub counts the project as PowerShell, not as VBScript
 *.ps1 linguist-language=PowerShell

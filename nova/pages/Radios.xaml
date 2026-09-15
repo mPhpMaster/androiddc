@@ -1,0 +1,175 @@
+<!--
+  Radios: Wi-Fi, Bluetooth and NFC, one inner page each. Opening one reads
+  what the phone is doing.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid.Resources>
+    <!-- the network or device the phone is on stands out -->
+    <Style x:Key="RadiosRow" TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding Connected}" Value="True">
+          <Setter Property="Foreground" Value="{StaticResource Success}"/>
+          <Setter Property="FontWeight" Value="SemiBold"/>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+  </Grid.Resources>
+
+  <TabControl x:Name="RadiosTabs">
+
+    <!-- ===================================================== Wi-Fi ===== -->
+    <TabItem x:Name="RadiosTabWifi" Header="Wi-Fi">
+      <Border Style="{StaticResource CardPanel}">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="RadiosWifiState" Text="Wi-Fi: unknown" Style="{StaticResource H2}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+              <Button x:Name="RadiosWifiOn" Content="Wi-Fi on" Margin="0,0,8,0" ToolTip="Turn Wi-Fi on"/>
+              <Button x:Name="RadiosWifiOff" Content="Wi-Fi off" Margin="0,0,8,0" ToolTip="Turn Wi-Fi off"/>
+              <Button x:Name="RadiosWifiScan" Content="Scan" Margin="0,0,8,0" ToolTip="Ask the phone to scan and list what it can see"/>
+              <Button x:Name="RadiosWifiSaved" Content="Saved networks"
+                      ToolTip="List the networks saved on the phone (F5 does this too)"/>
+            </WrapPanel>
+          </Grid>
+
+          <ListView x:Name="RadiosWifiList" Grid.Row="1" SelectionMode="Single" ItemContainerStyle="{StaticResource RadiosRow}">
+            <ListView.View>
+              <GridView>
+                <GridViewColumn Header="SSID" Width="270" DisplayMemberBinding="{Binding Shown}"/>
+                <GridViewColumn Header="SECURITY" Width="130" DisplayMemberBinding="{Binding Security}"/>
+                <GridViewColumn Width="90">
+                  <GridViewColumn.Header>
+                    <GridViewColumnHeader Content="SIGNAL" Tag="Strength"/>
+                  </GridViewColumn.Header>
+                  <GridViewColumn.CellTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding SignalShown}"/>
+                    </DataTemplate>
+                  </GridViewColumn.CellTemplate>
+                </GridViewColumn>
+                <GridViewColumn Header="BSSID" Width="150" DisplayMemberBinding="{Binding Bssid}"/>
+                <GridViewColumn Header="SAVED ID" Width="76" DisplayMemberBinding="{Binding SavedId}"/>
+              </GridView>
+            </ListView.View>
+          </ListView>
+
+          <WrapPanel Grid.Row="2" Margin="0,10,0,0">
+            <StackPanel Margin="0,0,10,0">
+              <TextBlock Text="Password" Style="{StaticResource FieldLabel}"/>
+              <Grid Width="200">
+                <PasswordBox x:Name="RadiosWifiPass" ToolTip="Only needed when joining a network the phone has not saved"/>
+                <TextBox x:Name="RadiosWifiPassShown" Visibility="Collapsed"
+                         ToolTip="Only needed when joining a network the phone has not saved"/>
+              </Grid>
+            </StackPanel>
+            <CheckBox x:Name="RadiosWifiShowPass" Content="show" VerticalAlignment="Bottom" Margin="0,0,14,7"
+                      ToolTip="Show the password as it is typed"/>
+            <Button x:Name="RadiosWifiConnect" Content="Connect" Style="{StaticResource Primary}" VerticalAlignment="Bottom"
+                    Margin="0,0,8,0" ToolTip="Join the picked network (double-click a row does the same)"/>
+            <Button x:Name="RadiosWifiForget" Content="Forget" Style="{StaticResource DangerButton}" VerticalAlignment="Bottom"
+                    Margin="0,0,8,0" ToolTip="Remove a saved network - pick a row that has a saved id"/>
+            <Button x:Name="RadiosWifiStatus" Content="Status" VerticalAlignment="Bottom" Margin="0,0,8,0"
+                    ToolTip="Write the phone's Wi-Fi status into the log"/>
+            <Button x:Name="RadiosWifiSettings" Content="Wi-Fi settings" VerticalAlignment="Bottom"
+                    ToolTip="Open the Wi-Fi screen on the phone itself"/>
+          </WrapPanel>
+        </Grid>
+      </Border>
+    </TabItem>
+
+    <!-- ================================================= Bluetooth ===== -->
+    <TabItem x:Name="RadiosTabBluetooth" Header="Bluetooth">
+      <Border Style="{StaticResource CardPanel}">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+
+          <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="RadiosBtState" Text="Bluetooth: unknown" Style="{StaticResource H2}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+              <Button x:Name="RadiosBtOn" Content="Bluetooth on" Margin="0,0,8,0" ToolTip="Turn Bluetooth on"/>
+              <Button x:Name="RadiosBtOff" Content="Bluetooth off" Margin="0,0,8,0" ToolTip="Turn Bluetooth off"/>
+              <Button x:Name="RadiosBtRefresh" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                      ToolTip="Refresh the paired list"/>
+            </WrapPanel>
+          </Grid>
+
+          <ListView x:Name="RadiosBtList" Grid.Row="1" SelectionMode="Single" ItemContainerStyle="{StaticResource RadiosRow}">
+            <ListView.View>
+              <GridView>
+                <GridViewColumn Header="NAME" Width="300" DisplayMemberBinding="{Binding Shown}"/>
+                <GridViewColumn Header="ADDRESS" Width="170" DisplayMemberBinding="{Binding Address}"/>
+                <GridViewColumn Header="BOND" Width="110" DisplayMemberBinding="{Binding Bond}"/>
+              </GridView>
+            </ListView.View>
+          </ListView>
+
+          <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <Button x:Name="RadiosBtCopy" Content="Copy address" Margin="0,0,8,0" ToolTip="Copy the name and address"/>
+              <Button x:Name="RadiosBtSettings" Content="Bluetooth settings"
+                      ToolTip="Pairing and connecting happen on the phone - this opens that screen"/>
+            </StackPanel>
+            <TextBlock Grid.Column="1" Style="{StaticResource MutedLine}" Margin="14,0,0,0" VerticalAlignment="Center"
+                       Text="Android has no adb command that pairs or connects a Bluetooth device; the radio and the paired list are all it exposes."/>
+          </Grid>
+        </Grid>
+      </Border>
+    </TabItem>
+
+    <!-- ======================================================= NFC ===== -->
+    <TabItem x:Name="RadiosTabNfc" Header="NFC">
+      <Border Style="{StaticResource CardPanel}">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+
+          <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="RadiosNfcState" Text="NFC: unknown" Style="{StaticResource H1}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+              <Button x:Name="RadiosNfcOn" Content="NFC on" Margin="0,0,8,0" ToolTip="Turn NFC on"/>
+              <Button x:Name="RadiosNfcOff" Content="NFC off" Margin="0,0,8,0" ToolTip="Turn NFC off"/>
+              <Button x:Name="RadiosNfcRefresh" Style="{StaticResource IconButton}" Content="&#xE72C;" Margin="0,0,8,0"
+                      ToolTip="Read the NFC state again"/>
+              <Button x:Name="RadiosNfcSettings" Content="NFC settings" ToolTip="Open the NFC screen on the phone"/>
+            </WrapPanel>
+          </Grid>
+
+          <TextBox x:Name="RadiosNfcInfo" Grid.Row="1" Style="{StaticResource Console}"
+                   ToolTip="The lines of dumpsys nfc that say what the NFC service is doing"/>
+        </Grid>
+      </Border>
+    </TabItem>
+  </TabControl>
+</Grid>

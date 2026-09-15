@@ -1,0 +1,102 @@
+<!--
+  Shell - a live adb shell with history, and the device log as it happens.
+  Both outputs take the page's spare room.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <TabControl x:Name="ShellTabs">
+
+    <!-- ===================================================== shell ===== -->
+    <TabItem Header="Shell">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*" MinHeight="80"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal">
+            <Button x:Name="ShellStart" Style="{StaticResource Primary}" Content="Start shell" Margin="0,0,8,0"
+                    ToolTip="Open a live adb shell on the first selected device"/>
+            <Button x:Name="ShellStop" Content="Stop" IsEnabled="False" Margin="0,0,8,0"
+                    ToolTip="Close the shell session"/>
+            <Button x:Name="ShellClear" Content="Clear" ToolTip="Empty the output"/>
+          </StackPanel>
+          <TextBlock x:Name="ShellStatus" Grid.Column="1" Text="not connected" Margin="14,0,12,0" VerticalAlignment="Center"
+                     Foreground="{StaticResource MutedText}" TextTrimming="CharacterEllipsis"/>
+          <ComboBox x:Name="ShellPreset" Grid.Column="2" Width="250"
+                    ToolTip="Put a common command in the box; Enter runs it"/>
+        </Grid>
+
+        <TextBox x:Name="ShellOut" Grid.Row="1" Style="{StaticResource Console}" IsUndoEnabled="False"/>
+
+        <Grid Grid.Row="2" Margin="0,8,0,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <TextBox x:Name="ShellInput" FontFamily="{StaticResource MonoFont}" IsUndoEnabled="False"
+                   ToolTip="A command for the phone's shell; Enter sends it, Up/Down browse the history"/>
+          <Button x:Name="ShellSend" Grid.Column="1" Content="Send" Margin="8,0,0,0" MinWidth="80" VerticalAlignment="Center"
+                  ToolTip="Send the line to the shell (Enter)"/>
+        </Grid>
+
+        <TextBlock x:Name="ShellHint" Grid.Row="3" Style="{StaticResource MutedLine}" Margin="2,6,0,0"
+                   Text="Enter runs the line, Up/Down browses history. The session keeps its state (cd, su, variables) on the first selected device."/>
+      </Grid>
+    </TabItem>
+
+    <!-- ==================================================== logcat ===== -->
+    <TabItem Header="Logcat">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*" MinHeight="80"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*" MinWidth="110"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Button x:Name="ShellLogcatStart" Style="{StaticResource Primary}" Content="Start" Margin="0,0,8,0"
+                    ToolTip="Stream adb logcat from the selected device"/>
+            <Button x:Name="ShellLogcatStop" Content="Stop" IsEnabled="False" Margin="0,0,8,0"
+                    ToolTip="Stop the stream; the lines stay"/>
+            <Button x:Name="ShellLogcatClear" Content="Clear"
+                    ToolTip="Clear the window; hold Shift to also clear the buffer on the phone"/>
+          </StackPanel>
+          <TextBlock Grid.Column="1" Text="Level" Style="{StaticResource FieldLabel}" Margin="16,0,6,0" VerticalAlignment="Center"/>
+          <ComboBox x:Name="ShellLogcatLevel" Grid.Column="2" Width="150" ToolTip="The lowest priority the phone will send"/>
+          <DockPanel Grid.Column="3" Margin="14,0,0,0">
+            <TextBlock Text="Contains" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+            <TextBox x:Name="ShellLogcatFilter" IsUndoEnabled="False"
+                     ToolTip="Only lines holding this text are shown; it filters here, the phone still sends everything"/>
+          </DockPanel>
+          <CheckBox x:Name="ShellLogcatFollow" Grid.Column="4" Content="follow" IsChecked="True" Margin="14,0,6,0"
+                    VerticalAlignment="Center" ToolTip="Keep scrolling to the newest line"/>
+          <Button x:Name="ShellLogcatSave" Grid.Column="5" Content="Save..." Margin="6,0,0,0" VerticalAlignment="Center"
+                  ToolTip="Save what the window shows to a file"/>
+        </Grid>
+
+        <TextBox x:Name="ShellLogcatText" Grid.Row="1" Style="{StaticResource Console}" IsUndoEnabled="False"/>
+
+        <TextBlock x:Name="ShellLogcatState" Grid.Row="2" Text="stopped" Style="{StaticResource MutedLine}" Margin="2,6,0,0"
+                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+      </Grid>
+    </TabItem>
+  </TabControl>
+</Grid>

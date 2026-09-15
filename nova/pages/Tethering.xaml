@@ -1,0 +1,140 @@
+<!--
+  Tethering - internet sharing in both directions, on two inner pages:
+  the PC's internet on the phone through gnirehtet, and the phone's data on
+  the PC through USB tethering or a proxy forwarded over adb.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <TabControl x:Name="TetheringTabs">
+
+    <!-- ================================================ PC -> Phone ===== -->
+    <TabItem Header="PC -&gt; Phone (gnirehtet)">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,6,0">
+
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="TUNNEL SETTINGS" Style="{StaticResource Caps}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="190"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="110"/>
+                  <ColumnDefinition Width="12"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="DNS" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="TetheringDns" IsEditable="True"
+                            ToolTip="The DNS server the phone uses through the tunnel; pick one or type your own"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="Port" Style="{StaticResource FieldLabel}"/>
+                  <TextBox x:Name="TetheringPort" Text="31416" ToolTip="The relay's TCP port on the PC (1024 - 65535)"/>
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                  <TextBlock Text="Routes" Style="{StaticResource FieldLabel}"/>
+                  <TextBox x:Name="TetheringRoutes"
+                           ToolTip="Optional, comma separated (e.g. 192.168.0.0/24). Empty = all traffic"/>
+                </StackPanel>
+              </Grid>
+              <WrapPanel Margin="0,12,0,0">
+                <CheckBox x:Name="TetheringWifiOff" Content="Turn Wi-Fi off while sharing"
+                          ToolTip="So the phone cannot fall back to its own network. Turned back on when sharing stops - only on a phone where it was on to begin with"/>
+                <CheckBox x:Name="TetheringReinstall" Content="Reinstall client APK"
+                          ToolTip="Push gnirehtet.apk again before starting"/>
+                <CheckBox x:Name="TetheringAutoTest" Content="Check internet after start" IsChecked="True"
+                          ToolTip="Run the connection test by itself once the tunnel is up"/>
+                <CheckBox x:Name="TetheringScrcpyAfter" Content="Open scrcpy after start"
+                          ToolTip="Start mirroring once the tunnel is up, with the Mirroring settings"/>
+              </WrapPanel>
+              <TextBlock Style="{StaticResource MutedLine}" Margin="0,8,0,0"
+                         Text="All devices in the device picker shares with every connected device (gnirehtet autorun) instead of the picked ones."/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CardPanel}">
+            <StackPanel>
+              <TextBlock Text="SHARING" Style="{StaticResource Caps}"/>
+              <WrapPanel>
+                <Button x:Name="TetheringStart" Style="{StaticResource Primary}" Content="Start sharing" Margin="0,0,8,8"
+                        ToolTip="Run the gnirehtet relay on the PC and the client on the phone"/>
+                <Button x:Name="TetheringStop" Content="Stop" IsEnabled="False" Margin="0,0,8,8"
+                        ToolTip="Stop the relay and the client, and turn Wi-Fi back on where it was turned off"/>
+                <Button x:Name="TetheringTest" Content="Test connection" Margin="0,0,8,8"
+                        ToolTip="curl, then netcat, then Android's own VALIDATED verdict - never ping"/>
+                <Button x:Name="TetheringRestart" Content="Restart" Margin="0,0,20,8"
+                        ToolTip="gnirehtet restart: stop and start again without touching the client"/>
+                <Button x:Name="TetheringInstallClient" Content="Install client" Margin="0,0,8,8"
+                        ToolTip="Install the gnirehtet client on the phone without starting the tunnel"/>
+                <Button x:Name="TetheringUninstallClient" Style="{StaticResource DangerButton}" Content="Uninstall client" Margin="0,0,8,8"
+                        ToolTip="Remove the gnirehtet client from the phone"/>
+              </WrapPanel>
+              <CheckBox x:Name="TetheringAutostart" Content="keep serving devices as they are plugged in" Margin="0,2,0,6"
+                        ToolTip="gnirehtet autostart instead of autorun (with All devices): every device that appears is served"/>
+              <TextBlock x:Name="TetheringState" Text="Sharing: off" FontWeight="Medium" Margin="0,4,0,4"
+                         Foreground="{StaticResource MutedText}" TextWrapping="Wrap"/>
+              <TextBlock x:Name="TetheringHint" Style="{StaticResource MutedLine}"
+                         Text="The phone routes its TCP/UDP traffic through the PC (no root needed). ICMP is not relayed, so ping fails even when it works."/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <!-- ================================================ Phone -> PC ===== -->
+    <TabItem Header="Phone -&gt; PC (tether / proxy)">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,6,0">
+
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="USB TETHERING  (THE PHONE SHARES ITS DATA OVER THE CABLE)" Style="{StaticResource Caps}" TextWrapping="Wrap"/>
+              <TextBlock Style="{StaticResource MutedLine}" Foreground="{StaticResource Ink}"
+                         Text="Opposite direction: the phone shares its mobile data with the PC over USB (RNDIS)."/>
+              <TextBlock Style="{StaticResource MutedLine}" Margin="0,2,0,10"
+                         Text="'Enable' uses svc usb setFunctions rndis; many phones block it without root, so use 'Open settings on phone' and tap USB tethering."/>
+              <WrapPanel>
+                <Button x:Name="TetheringUsbOn" Style="{StaticResource Primary}" Content="Enable USB tethering" Margin="0,0,8,8"
+                        ToolTip="svc usb setFunctions rndis, then look for the adapter on the PC"/>
+                <Button x:Name="TetheringUsbOff" Content="Disable" Margin="0,0,8,8"
+                        ToolTip="Reset the phone's USB functions to charging"/>
+                <Button x:Name="TetheringUsbSettings" Content="Open settings on phone" Margin="0,0,8,8"
+                        ToolTip="Open the tethering screen on the phone to flip USB tethering by hand"/>
+                <Button x:Name="TetheringAdapters" Content="Check PC adapters" Margin="0,0,8,8"
+                        ToolTip="Look for a Remote NDIS / Android / Tether / Internet Sharing adapter on this PC"/>
+              </WrapPanel>
+              <CheckBox x:Name="TetheringMetered" Content="After enabling, open Windows network settings to set the link as metered"
+                        Margin="0,2,0,6"/>
+              <TextBlock x:Name="TetheringUsbStatus" Text="PC side: not checked yet." Margin="0,4,0,0"
+                         Foreground="{StaticResource MutedText}" TextWrapping="Wrap"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CardPanel}">
+            <StackPanel>
+              <TextBlock Text="PROXY OVER ADB  (WHEN THE CABLE ROUTE IS BLOCKED)" Style="{StaticResource Caps}" TextWrapping="Wrap"/>
+              <TextBlock Style="{StaticResource MutedLine}" Foreground="{StaticResource Ink}" Margin="0,0,0,10"
+                         Text="Proxy over ADB - use the phone data on the PC when USB tethering is blocked:"/>
+              <WrapPanel>
+                <StackPanel Margin="0,0,12,8">
+                  <TextBlock Text="Proxy port" Style="{StaticResource FieldLabel}"/>
+                  <TextBox x:Name="TetheringProxyPort" Text="8080" Width="100"
+                           ToolTip="The port the proxy app on the phone listens on (1 - 65535)"/>
+                </StackPanel>
+                <Button x:Name="TetheringProxyOn" Style="{StaticResource Primary}" Content="Use phone proxy" Margin="0,0,8,8"
+                        VerticalAlignment="Bottom" ToolTip="adb forward + set the Windows proxy to 127.0.0.1:&lt;port&gt;"/>
+                <Button x:Name="TetheringProxyOff" Content="Stop proxy" IsEnabled="False" Margin="0,0,8,8"
+                        VerticalAlignment="Bottom" ToolTip="Put the Windows proxy back as it was and remove the forward"/>
+                <Button x:Name="TetheringProxyTest" Content="Test proxy" Margin="0,0,8,8"
+                        VerticalAlignment="Bottom" ToolTip="Ask for a page through 127.0.0.1:&lt;port&gt;"/>
+              </WrapPanel>
+              <TextBlock Style="{StaticResource MutedLine}" Margin="0,2,0,0"
+                         Text="Needs a proxy app running on the phone (Every Proxy, Drony, ...) listening on that port with HTTP proxy enabled."/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+  </TabControl>
+</Grid>

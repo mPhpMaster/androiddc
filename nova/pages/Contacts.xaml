@@ -1,0 +1,84 @@
+<!--
+  Contacts: the phone numbers in the contacts provider on the left, the dial
+  box with Call and End call on the right.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid.ColumnDefinitions>
+    <ColumnDefinition Width="*"/>
+    <ColumnDefinition Width="14"/>
+    <ColumnDefinition Width="250"/>
+  </Grid.ColumnDefinitions>
+
+  <!-- ================================================== the contacts == -->
+  <Border Grid.Column="0" Style="{StaticResource CardPanel}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <Grid Grid.Row="0" Margin="0,0,0,10">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*" MaxWidth="280"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="CONTACTS" Style="{StaticResource Caps}" Margin="0,0,14,0" VerticalAlignment="Center"/>
+        <Grid Grid.Column="1">
+          <TextBox x:Name="ContactsFilter" ToolTip="Filter by name or number (Enter reads the phone again)"/>
+          <TextBlock x:Name="ContactsFilterHint" Text="Filter by name or number" IsHitTestVisible="False"
+                     Foreground="{StaticResource MutedText}" Margin="11,0,0,0" VerticalAlignment="Center"/>
+        </Grid>
+        <Button x:Name="ContactsRefresh" Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                Margin="8,0,0,0" ToolTip="Refresh the contacts"/>
+        <TextBlock x:Name="ContactsCount" Grid.Column="3" Style="{StaticResource MutedLine}" Margin="12,0,0,0"
+                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+      </Grid>
+
+      <ListView x:Name="ContactsList" Grid.Row="1" SelectionMode="Extended">
+        <ListView.View>
+          <GridView>
+            <GridViewColumn Header="NAME" Width="250" DisplayMemberBinding="{Binding Name}"/>
+            <GridViewColumn Header="NUMBER" Width="180" DisplayMemberBinding="{Binding Number}"/>
+            <GridViewColumn Header="CONTACT ID" Width="96" DisplayMemberBinding="{Binding ContactId}"/>
+            <GridViewColumn Header="RAW ID" Width="80" DisplayMemberBinding="{Binding RawId}"/>
+          </GridView>
+        </ListView.View>
+      </ListView>
+
+      <WrapPanel Grid.Row="2" Margin="0,10,0,0">
+        <Button x:Name="ContactsAdd" Content="Add..." Margin="0,0,8,0" ToolTip="Add a contact"/>
+        <Button x:Name="ContactsEdit" Content="Edit..." Margin="0,0,8,0" ToolTip="Edit this contact"/>
+        <Button x:Name="ContactsCopy" Content="Copy" Margin="0,0,8,0" ToolTip="Copy the selected rows (name, number)"/>
+        <Button x:Name="ContactsExport" Content="Export all..." Margin="0,0,8,0"
+                ToolTip="Save the listed contacts to a CSV or vCard file on this PC"/>
+        <Button x:Name="ContactsDelete" Content="Delete" Style="{StaticResource DangerButton}"
+                ToolTip="Delete the selected contacts from the phone"/>
+      </WrapPanel>
+    </Grid>
+  </Border>
+
+  <!-- ======================================================= the dial == -->
+  <Border Grid.Column="2" Style="{StaticResource CardPanel}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel>
+        <TextBlock Text="DIAL" Style="{StaticResource Caps}"/>
+        <TextBlock Text="Number" Style="{StaticResource FieldLabel}"/>
+        <TextBox x:Name="ContactsDial" ToolTip="Type a number here to call it directly with the Call button"/>
+        <Button x:Name="ContactsCall" Style="{StaticResource Primary}" Margin="0,10,0,0"
+                ToolTip="Call the number in the box, after a confirmation">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="&#xE717;" Style="{StaticResource Glyph}"/>
+            <TextBlock Text="Call" Margin="8,0,0,0" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+        <Button x:Name="ContactsEndCall" Content="End call" Margin="0,8,0,0" ToolTip="Send the end-call key to the phone"/>
+        <TextBlock Style="{StaticResource MutedLine}" Margin="0,12,0,0"
+                   Text="Picking a contact puts its number here, so Call and the right mouse button use the row you picked."/>
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</Grid>

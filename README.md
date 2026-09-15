@@ -16,6 +16,19 @@ without leaving the keyboard.
 No agent is installed on the phone. Everything goes through the standard Android Debug
 Bridge, so the phone only ever does what USB debugging already allows.
 
+## Two windows, one tool
+
+AndroidDC comes with two windows over the same features, and you pick whichever you like:
+
+| Window | Start it with | What it looks like |
+|---|---|---|
+| **Classic** | `androiddc.vbs` | The original: tabs, dense, every control in view |
+| **Nova** | `androiddc-nova.vbs` | A newer design: a side navigation, a device card with battery, signal and screen, cards per task, and an activity log - see [`nova/`](nova/README.md) |
+
+Each window has a button that closes it and opens the other: **Open Nova window** on the
+classic *Device* tab, **Classic window** at the bottom of Nova's side navigation. They share
+the same adb, scrcpy and gnirehtet, and keep their settings apart.
+
 ## What is in it
 
 | Tab | What it does |
@@ -42,7 +55,7 @@ device list. Every list also carries its own actions on the right mouse button.
 3. Run **`get-upstream.ps1`** once. It downloads scrcpy and gnirehtet from their official
    GitHub releases, checks each archive against SHA256 and unpacks it here. The binaries are
    deliberately not committed — they belong to their own projects.
-4. Double-click **`androiddc.vbs`**.
+4. Double-click **`androiddc.vbs`** for the classic window, or **`androiddc-nova.vbs`** for Nova.
 
 If a tool turns out to be missing at startup, AndroidDC offers to fetch it for you and waits
 until the download is finished before opening.
@@ -68,8 +81,10 @@ until the download is finished before opening.
 
 | File | What it is |
 |---|---|
-| `androiddc.ps1` | The program. One PowerShell script, WinForms user interface |
-| `androiddc.vbs` | Starts it without a console window — **this is the one to double-click** |
+| `androiddc.ps1` | The classic window. One PowerShell script, WinForms user interface |
+| `androiddc.vbs` | Starts the classic window without a console — **double-click it** |
+| `androiddc-nova.vbs` | Starts the Nova window without a console — **or double-click this one** |
+| `nova/` | The Nova window: WPF in PowerShell, one file per page, its theme, fonts and tests |
 | `get-upstream.ps1` | Downloads and verifies scrcpy and gnirehtet |
 | `get-upstream.bat` | Double-click wrapper for the above |
 | `gnirehtet-share.ps1` | Reverse tethering from the command line, without the window |
@@ -79,7 +94,8 @@ until the download is finished before opening.
 | `CHANGELOG.md` | What each release changed |
 | `tests/` | Tests that run the real window, with or without a phone |
 
-Settings live in `%APPDATA%\AndroidDC\settings.json`, outside the repository.
+Settings live in `%APPDATA%\AndroidDC\settings.json` for the classic window and
+`nova-settings.json` next to it for Nova, outside the repository.
 
 ## Known limits
 
@@ -102,7 +118,8 @@ These are Android's rules, not bugs:
 
 ## Contributing
 
-Pull requests are welcome. The whole program is one PowerShell file, so:
+Pull requests are welcome. The classic window is one PowerShell file; Nova has its own rules
+in [`nova/CONTRACT.md`](nova/CONTRACT.md). For the classic window:
 
 * keep the layout functions the single place that positions controls — no absolute
   coordinates scattered through event handlers;
@@ -133,3 +150,6 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 scrcpy and gnirehtet are separate projects by [Genymobile](https://github.com/Genymobile),
 also Apache-2.0. AndroidDC downloads their official releases; it does not redistribute them.
+
+Nova's typefaces, DM Sans and Space Grotesk in `nova/fonts/`, are from Google Fonts under the
+SIL Open Font License 1.1; their license files are next to them.

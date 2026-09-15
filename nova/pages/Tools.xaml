@@ -1,0 +1,227 @@
+<!--
+  Tools: two inner pages.
+  Device tools - connection (pairing, mDNS, reconnect, bug report, wireless
+  adb, connect / disconnect, adb server, reverse tunnels), this device, private
+  DNS, keyboard (IME), hotspot and tethering.
+  Root & recovery - the eleven adb commands a retail phone mostly refuses,
+  each row marked against the phone that is selected. The rows are built by
+  New-RootAction in Tools.ps1 into the three row panels.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <TabControl x:Name="ToolsTabs">
+
+    <!-- ===================================================== device tools == -->
+    <TabItem x:Name="ToolsTabDevice" Header="Device tools" IsSelected="True">
+      <ScrollViewer x:Name="ToolsDeviceScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,8,4">
+
+          <!-- connection -->
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="CONNECTION" Style="{StaticResource Caps}"/>
+              <WrapPanel>
+                <Button x:Name="ToolsPair" Content="Pair over Wi-Fi..." Margin="0,0,8,8"
+                        ToolTip="Wireless debugging without a cable (Android 11 and newer)"/>
+                <Button x:Name="ToolsMdns" Content="Find devices" Margin="0,0,8,8"
+                        ToolTip="List the phones advertising wireless debugging on this network"/>
+                <Button x:Name="ToolsReconnect" Content="Reconnect" Margin="0,0,8,8"
+                        ToolTip="The usual cure for a device stuck as offline"/>
+                <Button x:Name="ToolsBugReport" Content="Bug report..." Margin="0,0,8,8"
+                        ToolTip="A full diagnostic zip from the phone; it takes a few minutes"/>
+              </WrapPanel>
+              <WrapPanel>
+                <Button x:Name="ToolsTcpip" Content="Wireless ADB (tcpip 5555)" Style="{StaticResource Primary}" Margin="0,0,8,8"
+                        ToolTip="Switch the selected USB device to TCP/IP and connect over Wi-Fi"/>
+                <TextBox x:Name="ToolsConnect" Width="190" VerticalAlignment="Top" Margin="0,0,8,8"
+                         ToolTip="ip:port, e.g. 192.168.1.20:5555"/>
+                <Button x:Name="ToolsConnectButton" Content="Connect" Margin="0,0,8,8"
+                        ToolTip="adb connect to the address in the box (port 5555 when none is given)"/>
+                <Button x:Name="ToolsDisconnect" Content="Disconnect all" Margin="0,0,8,8"
+                        ToolTip="adb disconnect: drops every device connected over TCP/IP"/>
+                <Button x:Name="ToolsRestartServer" Content="Restart ADB server" Margin="0,0,8,8"
+                        ToolTip="adb kill-server, then start-server: cures another adb version fighting over the server. Drops every connection and tunnel."/>
+              </WrapPanel>
+              <WrapPanel>
+                <Button x:Name="ToolsReverseList" Content="List reverse tunnels" Margin="0,0,8,0"
+                        ToolTip="adb reverse --list for the selected device"/>
+                <Button x:Name="ToolsKillRelays" Content="Kill stray relays" Margin="0,0,8,0"
+                        ToolTip="Kill gnirehtet.exe processes left over from previous runs"/>
+                <Button x:Name="ToolsRepairTunnel" Content="Repair tunnel" Margin="0,0,8,0"
+                        ToolTip="Re-create the adb reverse tunnel after an adb restart or an unplug/replug"/>
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- this device -->
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="THIS DEVICE" Style="{StaticResource Caps}"/>
+              <WrapPanel>
+                <Button x:Name="ToolsInstallApk" Content="Install APK..." Margin="0,0,8,8"
+                        ToolTip="One .apk, several splits of the same app, or an .xapk / .apks / .apkm bundle"/>
+                <Button x:Name="ToolsScreenshot" Content="Screenshot to PC" Margin="0,0,8,8"
+                        ToolTip="Saves a PNG of each selected phone's screen in Pictures"/>
+                <Button x:Name="ToolsScreenToggle" Content="Screen on/off" Margin="0,0,8,8"
+                        ToolTip="Sends the power key"/>
+                <Button x:Name="ToolsBattery" Content="Battery / network" Margin="0,0,8,8"
+                        ToolTip="Battery level, status and temperature, and the networks the phone uses"/>
+                <Button x:Name="ToolsDeviceInfo" Content="Device info" Margin="0,0,8,8"
+                        ToolTip="Model, brand, Android, SDK, ABI, screen size and density, Wi-Fi address"/>
+                <Button x:Name="ToolsReboot" Content="Reboot device" Style="{StaticResource DangerButton}" Margin="0,0,8,8"
+                        ToolTip="Restarts every selected device, after asking"/>
+              </WrapPanel>
+              <TextBlock Style="{StaticResource MutedLine}" Text="Every action here runs on all selected devices."/>
+            </StackPanel>
+          </Border>
+
+          <!-- private DNS -->
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="PRIVATE DNS" Style="{StaticResource Caps}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="Mode" Style="{StaticResource FieldLabel}"/>
+                  <ComboBox x:Name="ToolsDnsMode" Width="210"
+                            ToolTip="Android Private DNS: automatic upgrades to DNS-over-TLS when the resolver supports it"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                  <TextBlock Text="Hostname" Style="{StaticResource FieldLabel}"/>
+                  <TextBox x:Name="ToolsDnsHost"
+                           ToolTip="Provider hostname for custom mode, e.g. dns.google, dns.adguard.com, one.one.one.one"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="10,0,0,0">
+                  <Button x:Name="ToolsDnsRead" Content="Read DNS" Margin="0,0,8,0"
+                          ToolTip="Read the mode, the hostname and the resolvers in use from the selected device"/>
+                  <Button x:Name="ToolsDnsAdGuard" Content="AD" Margin="0,0,8,0" ToolTip="AdGuard"/>
+                  <Button x:Name="ToolsDnsApply" Content="Apply" Style="{StaticResource Primary}"
+                          ToolTip="Set the mode (and hostname) on the phone, then read it back"/>
+                </StackPanel>
+              </Grid>
+              <TextBlock Text="Resolvers in use" Style="{StaticResource FieldLabel}" Margin="0,12,0,5"/>
+              <TextBox x:Name="ToolsDnsState" Style="{StaticResource Console}" MinHeight="34" TextWrapping="Wrap"
+                       VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled"
+                       ToolTip="What the selected device resolves through right now"/>
+              <TextBlock Style="{StaticResource MutedLine}" Margin="0,8,0,0"
+                         Text="The line refreshes by itself when this page is opened or another device is picked."/>
+            </StackPanel>
+          </Border>
+
+          <!-- keyboard -->
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="KEYBOARD (IME)" Style="{StaticResource Caps}"/>
+              <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <ComboBox x:Name="ToolsIme" IsEditable="True"
+                          ToolTip="Input methods reported by the device (ime list -a -s)"/>
+                <Button x:Name="ToolsImeList" Grid.Column="1" Content="List" Margin="8,0,0,0"
+                        ToolTip="Read the input methods of the selected device"/>
+              </Grid>
+              <WrapPanel>
+                <Button x:Name="ToolsImeEnable" Content="Enable" Margin="0,0,8,0" ToolTip="ime enable &lt;id&gt;"/>
+                <Button x:Name="ToolsImeDisable" Content="Disable" Margin="0,0,8,0"
+                        ToolTip="ime disable &lt;id&gt; - hides the on-screen keyboard (handy with a scrcpy hardware keyboard)"/>
+                <Button x:Name="ToolsImeDefault" Content="Set as default" Margin="0,0,8,0" ToolTip="ime set &lt;id&gt;"/>
+                <Button x:Name="ToolsImeReset" Content="Reset IMEs" Margin="0,0,14,0"
+                        ToolTip="ime reset - brings back the keyboards you disabled"/>
+                <TextBlock x:Name="ToolsImeHint" Style="{StaticResource MutedLine}" VerticalAlignment="Center"
+                           Text="No IME enabled = no keyboard."/>
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- hotspot -->
+          <Border Style="{StaticResource CardPanel}">
+            <StackPanel>
+              <TextBlock Text="HOTSPOT AND TETHERING" Style="{StaticResource Caps}"/>
+              <WrapPanel>
+                <Button x:Name="ToolsHotspotOn" Content="Hotspot on" Margin="0,0,8,8"
+                        ToolTip="Android has no adb command for this: the button flips the switch on the phone settings page for you"/>
+                <Button x:Name="ToolsHotspotOff" Content="Hotspot off" Margin="0,0,8,8"
+                        ToolTip="Android has no adb command for this: the button flips the switch on the phone settings page for you"/>
+                <Button x:Name="ToolsHotspotState" Content="Hotspot status" Margin="0,0,8,8"
+                        ToolTip="Wi-Fi hotspot and USB tethering, as dumpsys tethering reports them"/>
+                <Button x:Name="ToolsHotspotInfo" Content="Wi-Fi name / password" Margin="0,0,8,8"
+                        ToolTip="Read the hotspot name, security and password from the phone settings page"/>
+                <Button x:Name="ToolsHotspotSettings" Content="Hotspot settings" Margin="0,0,8,8"
+                        ToolTip="Open the tethering settings screen on the phone"/>
+              </WrapPanel>
+              <WrapPanel>
+                <Button x:Name="ToolsUsbTetherOn" Content="USB tether on" Margin="0,0,8,8"
+                        ToolTip="Share the phone connection over the USB cable"/>
+                <Button x:Name="ToolsUsbTetherOff" Content="USB tether off" Margin="0,0,8,8"
+                        ToolTip="Stop sharing the phone connection over the USB cable"/>
+              </WrapPanel>
+              <TextBlock Style="{StaticResource MutedLine}"
+                         Text="The switches are pressed on the phone's settings page and confirmed from dumpsys tethering, so the phone must be unlocked; a second space cannot change them."/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+
+    <!-- =================================================== root / recovery == -->
+    <TabItem x:Name="ToolsTabRoot" Header="Root &amp; recovery">
+      <ScrollViewer x:Name="ToolsRootScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,8,4">
+
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="28"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="&#xE7BA;" Style="{StaticResource Glyph}" FontSize="16" VerticalAlignment="Top" Margin="0,1,0,0"
+                           Foreground="{StaticResource Warning}"/>
+                <TextBlock x:Name="ToolsRootWarn" Grid.Column="1" TextWrapping="Wrap" Foreground="{StaticResource Warning}" FontWeight="Medium"
+                           Text="Everything on this page needs root, a userdebug build, or the phone in recovery. On a normal retail phone none of it can work, so it is switched off."/>
+              </Grid>
+              <WrapPanel Margin="0,12,0,0">
+                <CheckBox x:Name="ToolsRootUnlock" Content="I understand - let me try anyway" VerticalAlignment="Center" Margin="0,0,18,0"
+                          ToolTip="Unlocks every row for a rooted or userdebug build; the phone still refuses what it refuses"/>
+                <Button x:Name="ToolsRootCheck" Content="Check this device" Style="{StaticResource Primary}"
+                        ToolTip="Read ro.build.type and friends, and mark what this phone would allow"/>
+              </WrapPanel>
+              <TextBlock x:Name="ToolsRootState" Text="not checked yet" Margin="0,10,0,0" TextWrapping="Wrap"
+                         FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{StaticResource MutedText}"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12" Padding="16,14,16,8">
+            <StackPanel>
+              <TextBlock Text="ADB AS ROOT" Style="{StaticResource Caps}" Margin="0,0,0,4"/>
+              <StackPanel x:Name="ToolsRootAdbRows"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12" Padding="16,14,16,8">
+            <StackPanel>
+              <TextBlock Text="SYSTEM IMAGE" Style="{StaticResource Caps}" Margin="0,0,0,4"/>
+              <StackPanel x:Name="ToolsRootImageRows"/>
+            </StackPanel>
+          </Border>
+
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12" Padding="16,14,16,8">
+            <StackPanel>
+              <TextBlock Text="RECOVERY, EMULATOR AND DEVELOPER PLUMBING" Style="{StaticResource Caps}" Margin="0,0,0,4"/>
+              <StackPanel x:Name="ToolsRootOtherRows"/>
+            </StackPanel>
+          </Border>
+
+          <TextBlock x:Name="ToolsRootNote" Style="{StaticResource MutedLine}" Margin="2,0,0,0"
+                     Text="scrcpy --v4l2-sink and --v4l2-buffer are Linux only and are not built into the Windows scrcpy at all, so they have no button here."/>
+        </StackPanel>
+      </ScrollViewer>
+    </TabItem>
+  </TabControl>
+</Grid>

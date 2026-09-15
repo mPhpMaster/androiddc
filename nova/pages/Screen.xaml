@@ -1,0 +1,126 @@
+<!--
+  The phone screen: the picture takes every pixel the page has on the left,
+  and the controls sit in a narrow column on the right that scrolls when the
+  window is small. Clicks on the picture become taps and swipes on the phone.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid.ColumnDefinitions>
+    <ColumnDefinition Width="*"/>
+    <ColumnDefinition Width="14"/>
+    <ColumnDefinition Width="316"/>
+  </Grid.ColumnDefinitions>
+
+  <!-- ===================================================== the picture == -->
+  <Border Grid.Column="0" Style="{StaticResource CardPanel}" Background="{StaticResource Muted}" Padding="8">
+    <Grid x:Name="ScreenArea" Background="Transparent" Cursor="Hand" ClipToBounds="True"
+          ToolTip="Click = tap, drag = swipe, hold = long press. Right = Back, thumb back = Recents, thumb forward = notifications"
+          ToolTipService.InitialShowDelay="1500">
+      <StackPanel x:Name="ScreenEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16">
+        <TextBlock Text="&#xE7F4;" Style="{StaticResource Glyph}" FontSize="30" HorizontalAlignment="Center"
+                   Foreground="{StaticResource MutedText}"/>
+        <TextBlock Text="No picture yet" Style="{StaticResource H2}" HorizontalAlignment="Center" Margin="0,10,0,4"/>
+        <TextBlock Text="Press Capture to see the phone screen here." Style="{StaticResource MutedLine}"
+                   TextAlignment="Center" HorizontalAlignment="Center"/>
+      </StackPanel>
+      <Image x:Name="ScreenPicture" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+    </Grid>
+  </Border>
+
+  <!-- ==================================================== the controls == -->
+  <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel>
+      <Border Style="{StaticResource CardPanel}">
+        <StackPanel>
+          <TextBlock Text="PICTURE" Style="{StaticResource Caps}"/>
+          <DockPanel>
+            <Button x:Name="ScreenClear" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;"
+                    Margin="6,0,0,0" ToolTip="Clear - drop the picture that is on screen right now"/>
+            <Button x:Name="ScreenSave" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE74E;"
+                    Margin="6,0,0,0" ToolTip="Save as... - write the picture on screen to a PNG file"/>
+            <Button x:Name="ScreenCapture" Style="{StaticResource Primary}"
+                    ToolTip="One screenshot, streamed straight out of adb exec-out screencap -p. No file is written (F5)">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE722;" Style="{StaticResource Glyph}"/>
+                <TextBlock Text="Capture" Margin="8,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+          </DockPanel>
+          <DockPanel Margin="0,12,0,0">
+            <TextBlock DockPanel.Dock="Right" Text="ms" VerticalAlignment="Center" Margin="8,0,0,0"
+                       Foreground="{StaticResource MutedText}"/>
+            <TextBox x:Name="ScreenInterval" DockPanel.Dock="Right" Width="72" Text="2000"
+                     ToolTip="Milliseconds between automatic captures (one capture costs about 1.4 s, so lower values just run continuously). 500 to 30000"/>
+            <CheckBox x:Name="ScreenAuto" Content="Auto every" VerticalAlignment="Center" Margin="0,4,8,4"
+                      ToolTip="Repeat the capture while this page is on screen"/>
+          </DockPanel>
+          <TextBlock x:Name="ScreenInfo" Style="{StaticResource MutedLine}" Margin="0,10,0,0" Text="no capture yet"
+                     ToolTip="Picture size, the phone it came from, and how many pictures so far"/>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource CardPanel}" Margin="0,12,0,0">
+        <StackPanel>
+          <TextBlock Text="PHONE KEYS" Style="{StaticResource Caps}"/>
+          <UniformGrid Columns="3" Margin="0,0,-6,-6">
+            <Button x:Name="ScreenKeyBack" Margin="0,0,6,6" Padding="4,0" ToolTip="Back (input keyevent 4)">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE72B;" Style="{StaticResource Glyph}" FontSize="12"/>
+                <TextBlock Text="Back" Margin="6,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+            <Button x:Name="ScreenKeyHome" Margin="0,0,6,6" Padding="4,0" ToolTip="Home (input keyevent 3)">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE80F;" Style="{StaticResource Glyph}" FontSize="12"/>
+                <TextBlock Text="Home" Margin="6,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+            <Button x:Name="ScreenKeyRecents" Margin="0,0,6,6" Padding="4,0" ToolTip="Recent apps (input keyevent 187)">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE8F9;" Style="{StaticResource Glyph}" FontSize="12"/>
+                <TextBlock Text="Recents" Margin="6,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+            <Button x:Name="ScreenKeyPower" Margin="0,0,6,6" Padding="4,0" ToolTip="Power (input keyevent 26)">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE7E8;" Style="{StaticResource Glyph}" FontSize="12"/>
+                <TextBlock Text="Power" Margin="6,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+            <Button x:Name="ScreenKeyVolUp" Margin="0,0,6,6" Padding="4,0" ToolTip="Volume up (input keyevent 24)">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE995;" Style="{StaticResource Glyph}" FontSize="12"/>
+                <TextBlock Text="Vol +" Margin="6,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+            <Button x:Name="ScreenKeyVolDown" Margin="0,0,6,6" Padding="4,0" ToolTip="Volume down (input keyevent 25)">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE993;" Style="{StaticResource Glyph}" FontSize="12"/>
+                <TextBlock Text="Vol -" Margin="6,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+          </UniformGrid>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource CardPanel}" Margin="0,12,0,0">
+        <StackPanel>
+          <TextBlock Text="TYPE ON THE PHONE" Style="{StaticResource Caps}"/>
+          <DockPanel>
+            <Button x:Name="ScreenSendText" DockPanel.Dock="Right" Style="{StaticResource Primary}" Content="Send text"
+                    Margin="8,0,0,0" ToolTip="Types the text on the phone, Arabic included (Enter in the box does the same)"/>
+            <TextBox x:Name="ScreenSendBox" ToolTip="Type here and press Send text to type on the phone"/>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource CardPanel}" Margin="0,12,0,0">
+        <StackPanel>
+          <TextBlock Text="ON THE PICTURE" Style="{StaticResource Caps}"/>
+          <TextBlock x:Name="ScreenHint" Style="{StaticResource MutedLine}" LineHeight="19"
+                     Text="Click = tap  |  drag = swipe  |  hold = long press&#x0a;Right = Back  |  thumb back = Recents  |  thumb forward = notifications"/>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</Grid>

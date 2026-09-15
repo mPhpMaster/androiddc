@@ -1,0 +1,82 @@
+<!--
+  Apps: everything installed on the selected phone, the name first. The filter,
+  system apps and the refresh are at the top of the card, the list takes the
+  room, and the actions sit under it - the one that removes an app last.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Border Style="{StaticResource CardPanel}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <Grid Margin="0,0,0,12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+          <TextBlock Text="INSTALLED APPS" Style="{StaticResource Caps}" Margin="0,0,0,3"/>
+          <TextBlock x:Name="AppsCount" Style="{StaticResource MutedLine}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                     Text="Refresh reads the apps of the selected phone"/>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <Grid Width="250" VerticalAlignment="Center">
+            <TextBox x:Name="AppsFilter"
+                     ToolTip="Type to filter the list by name or package - the text itself, not a pattern. Enter reads the list again."/>
+            <TextBlock Text="Filter by name or package" IsHitTestVisible="False" Margin="11,0,0,0" VerticalAlignment="Center"
+                       FontSize="13" Foreground="{StaticResource MutedText}">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Visibility" Value="Collapsed"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding Text, ElementName=AppsFilter}" Value="">
+                      <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </Grid>
+          <CheckBox x:Name="AppsSystem" Content="include system" Margin="14,0,10,0" VerticalAlignment="Center"
+                    ToolTip="List the apps that came with the phone too, not only the ones installed on it"/>
+          <Button x:Name="AppsRefresh" Style="{StaticResource IconButton}" Content="&#xE72C;"
+                  ToolTip="Refresh the app list (F5)"/>
+        </StackPanel>
+      </Grid>
+
+      <ListView x:Name="AppsList" Grid.Row="1" SelectionMode="Extended">
+        <ListView.View>
+          <GridView>
+            <!-- the name first: a package tells nobody which app it is -->
+            <GridViewColumn Header="NAME" Width="230" DisplayMemberBinding="{Binding Name}"/>
+            <GridViewColumn Header="PACKAGE" Width="300" DisplayMemberBinding="{Binding Package}"/>
+            <GridViewColumn Header="VERSION" Width="100" DisplayMemberBinding="{Binding Version}"/>
+            <GridViewColumn Header="TYPE" Width="80" DisplayMemberBinding="{Binding Type}"/>
+            <GridViewColumn Header="STATE" Width="90" DisplayMemberBinding="{Binding State}"/>
+          </GridView>
+        </ListView.View>
+      </ListView>
+
+      <WrapPanel Grid.Row="2" Margin="0,8,0,0">
+        <Button x:Name="AppsLaunch" Style="{StaticResource Primary}" Content="Launch" Margin="0,4,8,0"
+                ToolTip="Launch the app on the phone"/>
+        <Button x:Name="AppsNewDisplay" Content="Own scrcpy window" Margin="0,4,8,0"
+                ToolTip="scrcpy --new-display --start-app: the app runs on its own virtual screen"/>
+        <Button x:Name="AppsStop" Content="Force stop" Margin="0,4,8,0" ToolTip="am force-stop: close the app at once"/>
+        <Button x:Name="AppsInfo" Content="App info" Margin="0,4,8,0" ToolTip="App info on the phone"/>
+        <Border Width="1" Height="22" Background="{StaticResource Border}" Margin="4,4,12,0" VerticalAlignment="Center"/>
+        <Button x:Name="AppsInstall" Content="Install APK..." Margin="0,4,8,0"
+                ToolTip="Install - pick one package, or several splits of the same app (.apk, .apks, .xapk, .apkm)"/>
+        <Button x:Name="AppsExport" Content="Export list..." Margin="0,4,8,0"
+                ToolTip="Save the listed packages as CSV, the name as a last, quoted column"/>
+        <Border Width="1" Height="22" Background="{StaticResource Border}" Margin="4,4,12,0" VerticalAlignment="Center"/>
+        <Button x:Name="AppsUninstall" Style="{StaticResource DangerButton}" Content="Uninstall" Margin="0,4,8,0"
+                ToolTip="Uninstall the selected apps from the phone, after a question"/>
+      </WrapPanel>
+    </Grid>
+  </Border>
+</Grid>
