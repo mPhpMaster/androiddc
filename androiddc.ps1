@@ -127,6 +127,12 @@ function Install-UpstreamPackage {
 # running, which keeps the window alive and redrawing.
 $script:workRunspace = $null
 $script:busy = 0
+# what the busy strip under the pages names, and since when something runs
+$script:busyWhat = ''
+$script:busySince = $null
+# the serials and states adb reported last, so a plugged or pulled phone is noticed
+$script:deviceSignature = ''
+$script:devicesReadOnce = $false
 
 function Get-WorkRunspace {
     if ($null -eq $script:workRunspace -or $script:workRunspace.RunspaceStateInfo.State -ne 'Opened') {
@@ -146,6 +152,22 @@ function Wait-Pumped {
         [System.Windows.Forms.Application]::DoEvents()
         Start-Sleep -Milliseconds 10
     }
+}
+
+function Get-BusyText {
+    # what the busy strip says: the program and its arguments, without "-s
+    # serial", and a command sent over base64 shown as the command it is
+    param([string]$FilePath, [string[]]$ArgumentList)
+
+    $words = @($ArgumentList)
+    if ($words.Count -gt 2 -and $words[0] -eq '-s') { $words = $words[2..($words.Count - 1)] }
+    $text = $words -join ' '
+    if ($text -match '^shell echo (\S+) \| base64 -d \| sh$') {
+        try { $text = 'shell ' + [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Matches[1])) } catch { }
+    }
+    $text = ([IO.Path]::GetFileNameWithoutExtension($FilePath) + ' ' + $text).Trim()
+    if ($text.Length -gt 90) { $text = $text.Substring(0, 87) + '...' }
+    return $text
 }
 
 function Invoke-OffThread {
@@ -179,6 +201,7 @@ function Invoke-OffThread {
         [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Lines = $lines }
     }).AddArgument($FilePath).AddArgument($ArgumentList)
 
+    if ($script:busy -eq 0) { $script:busyWhat = Get-BusyText -FilePath $FilePath -ArgumentList $ArgumentList }
     $script:busy++
     try {
         $handle = $shell.BeginInvoke()
@@ -3458,15 +3481,36 @@ $script:logHeight = 0
 $script:logFolded = $false
 $script:logDrag = $null
 
+# "Stopped" alone read as the state of the whole program; it is the state of
+# the internet sharing only, so it says so
 $lblStatus = New-Object System.Windows.Forms.Label
-$lblStatus.Text = 'Stopped'
+$lblStatus.Text = 'Sharing: off'
 $lblStatus.TextAlign = 'MiddleRight'
+$lblStatus.AutoEllipsis = $true
 $lblStatus.ForeColor = [System.Drawing.Color]::DimGray
-$lblStatus.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+$lblStatus.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
 $lblStatus.Location = New-Object System.Drawing.Point(560, 644)
-$lblStatus.Size = New-Object System.Drawing.Size(342, 28)
+$lblStatus.Size = New-Object System.Drawing.Size(220, 28)
 $lblStatus.Anchor = 'Bottom, Right'
 $splitMain.Panel2.Controls.Add($lblStatus)
+$toolTip.SetToolTip($lblStatus, "Internet sharing from this PC to the phone (Tethering tab)")
+
+# Every adb call already runs off the window's thread and is counted in
+# $script:busy, but nothing on screen said so: a click that takes seconds
+# looked like a click that did nothing.
+$prgBusy = New-Object System.Windows.Forms.ProgressBar
+$prgBusy.Style = 'Marquee'
+$prgBusy.MarqueeAnimationSpeed = 30
+$prgBusy.Size = New-Object System.Drawing.Size(90, 12)
+$prgBusy.Visible = $false
+$splitMain.Panel2.Controls.Add($prgBusy)
+
+$lblBusy = New-Object System.Windows.Forms.Label
+$lblBusy.ForeColor = [System.Drawing.Color]::DimGray
+$lblBusy.AutoEllipsis = $true
+$lblBusy.Size = New-Object System.Drawing.Size(200, 20)
+$lblBusy.Visible = $false
+$splitMain.Panel2.Controls.Add($lblBusy)
 
 $txtLog = New-Object System.Windows.Forms.RichTextBox
 $txtLog.ReadOnly = $true
@@ -3534,7 +3578,10 @@ function Update-DeviceList {
     $lstDevices.BeginUpdate()
     try {
         $lstDevices.Items.Clear()
-        foreach ($device in @(Get-AdbDevices)) {
+        $found = @(Get-AdbDevices)
+        $script:deviceSignature = Get-DeviceSignature -Devices $found
+        $script:devicesReadOnce = $true
+        foreach ($device in $found) {
             $installed = '-'
             $release = '-'
             if ($device.State -eq 'device') {
@@ -3569,6 +3616,38 @@ function Update-DeviceList {
     }
 }
 
+function Get-DeviceSignature {
+    param($Devices)
+    return (@($Devices) | ForEach-Object { "$($_.Serial)=$($_.State)" } | Sort-Object) -join ';'
+}
+
+function Test-DeviceListChanged {
+    # a phone plugged in, pulled out, or one whose RSA prompt was just accepted
+    return ((Get-DeviceSignature -Devices @(Get-AdbDevices)) -ne $script:deviceSignature)
+}
+
+function Update-BusyIndicator {
+    if ($script:busy -gt 0) {
+        # a call that ends within 400 ms is not worth a flicker
+        if (-not $script:busySince) { $script:busySince = [DateTime]::Now; return }
+        if (([DateTime]::Now - $script:busySince).TotalMilliseconds -lt 400) { return }
+        $lblBusy.Text = if ($script:busyWhat) { $script:busyWhat } else { 'working ...' }
+        $toolTip.SetToolTip($lblBusy, $lblBusy.Text)
+        if (-not $prgBusy.Visible) {
+            $prgBusy.Visible = $true
+            $lblBusy.Visible = $true
+            $form.Cursor = [System.Windows.Forms.Cursors]::AppStarting
+        }
+    } else {
+        $script:busySince = $null
+        if ($prgBusy.Visible) {
+            $prgBusy.Visible = $false
+            $lblBusy.Visible = $false
+            $form.Cursor = [System.Windows.Forms.Cursors]::Default
+        }
+    }
+}
+
 function Set-Running {
     param([bool]$IsRunning, [string]$Target = '')
 
@@ -3578,10 +3657,10 @@ function Set-Running {
     $lstDevices.Enabled = -not $chkAll.Checked
 
     if ($IsRunning) {
-        $lblStatus.Text = "Sharing - $Target"
+        $lblStatus.Text = "Sharing: $Target"
         $lblStatus.ForeColor = [System.Drawing.Color]::ForestGreen
     } else {
-        $lblStatus.Text = 'Stopped'
+        $lblStatus.Text = 'Sharing: off'
         $lblStatus.ForeColor = [System.Drawing.Color]::DimGray
     }
 }
@@ -4330,11 +4409,10 @@ function Save-BugReport {
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
 
     Write-Log "Collecting a bug report from $serial. This takes a few minutes ..." $colorStep
-    $lblStatus.Text = 'bug report: the phone is collecting it ...'
-
+    # the busy strip names it while it runs; this label belongs to the sharing,
+    # and emptying it afterwards used to wipe what the sharing had put there
     $result = Invoke-OffThread -FilePath $script:adbPath `
         -ArgumentList @('-s', $serial, 'bugreport', $dialog.FileName) -TimeoutMs 900000
-    $lblStatus.Text = ''
 
     if (Test-Path -LiteralPath $dialog.FileName) {
         $size = (Get-Item -LiteralPath $dialog.FileName).Length
@@ -5166,25 +5244,98 @@ function Set-DeviceToggle {
     Show-ToggleStates
 }
 
+# what each toggle reads, in the order the log names them
+$script:toggleReads = [ordered]@{
+    rotation  = 'settings get system accelerometer_rotation'
+    location  = 'cmd location is-location-enabled'
+    bluetooth = 'settings get global bluetooth_on'
+    wifi      = 'settings get global wifi_on'
+    saver     = 'settings get global low_power'
+    ringvibe  = 'settings get system vibrate_when_ringing'
+    haptics   = 'settings get system haptic_feedback_enabled'
+    devopts   = 'settings get global development_settings_enabled'
+    showtaps  = 'settings get system show_touches'
+    stayawake = 'settings get global stay_on_while_plugged_in'
+}
+$script:toggleLit = [System.Drawing.Color]::FromArgb(204, 228, 247)
+$script:toggleSerial = $null
+
+function ConvertFrom-ToggleOutput {
+    # "name=value" lines into on / off / unknown ($null) per toggle
+    param([string]$Text)
+
+    $states = @{}
+    foreach ($line in ($Text -split "`r?`n")) {
+        if ($line -notmatch '^(\w+)=(.*)$') { continue }
+        $key = $Matches[1]
+        $value = $Matches[2].Trim()
+        $state = $null
+        if ($key -eq 'stayawake') {
+            # a bit mask of chargers: AC, USB, wireless; any of them means on
+            if ($value -match '^\d+$') { $state = ([int]$value -ne 0) }
+        } elseif ($value -eq '1' -or $value -eq 'true') {
+            $state = $true
+        } elseif ($value -eq '0' -or $value -eq 'false') {
+            $state = $false
+        }
+        $states[$key] = $state
+    }
+    return $states
+}
+
+function Set-ToggleMarks {
+    # The two buttons always looked the same, so the page never said whether
+    # Wi-Fi was on; that went to the log only. The one matching the phone is
+    # now tinted; a state the phone does not report tints neither.
+    param($States)
+
+    $pairs = @{
+        rotation = @($btnRotationOn, $btnRotationOff); location = @($btnLocationOn, $btnLocationOff)
+        bluetooth = @($btnBtOn, $btnBtOff); wifi = @($btnWifiOn, $btnWifiOff)
+        saver = @($btnSaverOn, $btnSaverOff); ringvibe = @($btnRingVibeOn, $btnRingVibeOff)
+        haptics = @($btnHapticsOn, $btnHapticsOff); devopts = @($btnDevOn, $btnDevOff)
+        showtaps = @($btnTapsOn, $btnTapsOff); stayawake = @($btnAwakeOn, $btnAwakeOff)
+    }
+    foreach ($key in $pairs.Keys) {
+        $state = $null
+        if ($States -and $States.ContainsKey($key)) { $state = $States[$key] }
+        for ($i = 0; $i -lt 2; $i++) {
+            $button = $pairs[$key][$i]
+            if ($null -ne $state -and $state -eq ($i -eq 0)) {
+                $button.BackColor = $script:toggleLit
+            } else {
+                $button.BackColor = [System.Drawing.SystemColors]::Control
+                $button.UseVisualStyleBackColor = $true
+            }
+        }
+    }
+}
+
 function Show-ToggleStates {
-    $serial = Get-TargetSerial
-    if (-not $serial) { return }
+    # -Quiet: read for the marks only, as the page opens or the phone changes
+    param([switch]$Quiet)
 
-    $rotation = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'system', 'accelerometer_rotation')).Text.Trim()
-    $location = (Invoke-DeviceShell -Serial $serial -CommandArguments @('cmd', 'location', 'is-location-enabled')).Text.Trim()
-    $bluetooth = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'global', 'bluetooth_on')).Text.Trim()
-    $wifi = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'global', 'wifi_on')).Text.Trim()
-    $saver = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'global', 'low_power')).Text.Trim()
-    $ringVibe = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'system', 'vibrate_when_ringing')).Text.Trim()
-    $haptics = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'system', 'haptic_feedback_enabled')).Text.Trim()
-    $devopts = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'global', 'development_settings_enabled')).Text.Trim()
-    $showTaps = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'system', 'show_touches')).Text.Trim()
-    $stayAwake = (Invoke-DeviceShell -Serial $serial -CommandArguments @('settings', 'get', 'global', 'stay_on_while_plugged_in')).Text.Trim()
+    $serial = if ($Quiet) { Get-SelectedSerial } else { Get-TargetSerial }
+    if (-not $serial -or $lstDevices.SelectedItems.Count -eq 0 -or
+        $lstDevices.SelectedItems[0].SubItems[4].Text -ne 'device') {
+        Set-ToggleMarks $null
+        $script:toggleSerial = $null
+        return
+    }
+
+    # one trip to the phone instead of ten
+    $command = @($script:toggleReads.GetEnumerator() | ForEach-Object {
+        'echo {0}=$({1} 2>/dev/null)' -f $_.Key, $_.Value }) -join '; '
+    $states = ConvertFrom-ToggleOutput (Invoke-DeviceShellText -Serial $serial -Command $command).Text
+    Set-ToggleMarks $states
+    $script:toggleSerial = $serial
+    if ($Quiet) { return }
+
     $torch = Get-TorchState -Serial $serial
-
-    Write-Log ("$serial : auto-rotate=$rotation  location=$location  bluetooth=$bluetooth  wifi=$wifi  " +
-        "battery-saver=$saver  ring-vibrate=$ringVibe  haptics=$haptics  torch=$torch  " +
-        "dev-options=$devopts  show-taps=$showTaps  stay-awake=$stayAwake") $colorInfo
+    $words = @($script:toggleReads.Keys | ForEach-Object {
+        $value = if ($null -eq $states[$_]) { '?' } elseif ($states[$_]) { 'on' } else { 'off' }
+        "$_=$value" })
+    Write-Log ("$serial : " + ($words -join '  ') + "  torch=$torch") $colorInfo
 }
 
 function Get-TorchState {
@@ -9087,7 +9238,9 @@ function Update-RightLayout {
     $btnClear.SetBounds(20, $rowTop, 96, 28)
     $btnSaveLog.SetBounds(124, $rowTop, 96, 28)
     $btnLogFold.SetBounds(228, $rowTop, 28, 28)
-    $lblStatus.SetBounds(($width - 348), $rowTop, 342, 28)
+    $lblStatus.SetBounds(($width - 226), $rowTop, 220, 28)
+    $prgBusy.SetBounds(266, ($rowTop + 8), 90, 12)
+    $lblBusy.SetBounds(364, ($rowTop + 5), [Math]::Max(40, ($width - 226 - 8 - 364)), 20)
     $pnlLogGrip.SetBounds(20, ($rowTop - 8), ($width - 26), 6)
     $tabs.SetBounds(20, $tabsTop, ($width - 26), ($rowTop - 8 - $tabsTop))
 
@@ -9543,6 +9696,18 @@ function Set-GroupedRow {
     return $x
 }
 
+function Invoke-ButtonClick {
+    # PerformClick is dropped when the button's tab is not the one on screen
+    # (the control is not created yet), so raise Click directly
+    param($Button)
+
+    $method = [System.Windows.Forms.Control].GetMethod('OnClick',
+        [System.Reflection.BindingFlags]'Instance,NonPublic')
+    $box = [object[]]::new(1)
+    $box[0] = [System.EventArgs]::Empty
+    $null = $method.Invoke($Button, $box)
+}
+
 function Add-ListContextMenu {
     # the same actions as the buttons under each list, on the right mouse button
     param($List, $Buttons)
@@ -9557,13 +9722,7 @@ function Add-ListContextMenu {
         $entry.Tag = $button
         $entry.Add_Click({
             param($sender, $eventArgs)
-            # PerformClick is dropped when the button's tab is not the one on
-            # screen (the control is not created yet), so raise Click directly
-            $method = [System.Windows.Forms.Control].GetMethod('OnClick',
-                [System.Reflection.BindingFlags]'Instance,NonPublic')
-            $box = [object[]]::new(1)
-            $box[0] = [System.EventArgs]::Empty
-            $null = $method.Invoke($sender.Tag, $box)
+            Invoke-ButtonClick -Button $sender.Tag
         })
     }
 
@@ -9587,6 +9746,48 @@ function Add-ListContextMenu {
 
     $List.ContextMenuStrip = $menu
     return $menu
+}
+
+function Get-PageRefreshButton {
+    # what F5 presses: the button that reads the page on screen again, and the
+    # device list where a page has nothing of its own to read
+    if ($tabs.SelectedTab -eq $tabDevice) { return $btnDeviceRefresh }
+    if ($tabs.SelectedTab -eq $tabApps) { return $btnAppsRefresh }
+    if ($tabs.SelectedTab -eq $tabContacts) { return $btnContactsRefresh }
+    if ($tabs.SelectedTab -eq $tabSms) { return $btnSmsRefresh }
+    if ($tabs.SelectedTab -eq $tabFiles) { return $btnFileGo }
+    if ($tabs.SelectedTab -eq $tabRunning) { return $btnRunningRefresh }
+    if ($tabs.SelectedTab -eq $tabUsers) { return $btnUsersRefresh }
+    if (Test-PageShown -Page $tabWifi) { return $btnWifiSaved }
+    if (Test-PageShown -Page $tabBt) { return $btnBtRefresh }
+    if (Test-PageShown -Page $tabNfc) { return $btnNfcRefresh }
+    if (Test-PageShown -Page $tabTools) { return $btnDnsRead }
+    if (Test-PageShown -Page $tabRoot) { return $btnRootCheck }
+    return $btnRefresh
+}
+
+function Invoke-WindowKey {
+    # keys that work wherever the focus is; true when the key was used
+    param([System.Windows.Forms.Keys]$KeyData)
+
+    $keys = [System.Windows.Forms.Keys]
+    if ($KeyData -eq $keys::F5) {
+        # never on top of a call still running: F5 held down would stack them
+        $button = Get-PageRefreshButton
+        if ($script:busy -eq 0 -and $button -and $button.Enabled) { Invoke-ButtonClick -Button $button }
+        return $true
+    }
+    $code = $KeyData -band $keys::KeyCode
+    if (($KeyData -band $keys::Modifiers) -eq $keys::Control -and $code -ge $keys::D1 -and $code -le $keys::D9) {
+        $index = [int]$code - [int]$keys::D1
+        if ($index -lt $tabs.TabCount) { $tabs.SelectedIndex = $index }
+        return $true
+    }
+    if ($KeyData -eq ($keys::Control -bor $keys::L)) {
+        $txtLog.Clear()
+        return $true
+    }
+    return $false
 }
 
 function Test-PageShown {
@@ -10608,7 +10809,38 @@ $statusTimer.Add_Tick({
     if ($selected -and $selected -ne $script:rootCheckedSerial) {
         if (Test-PageShown -Page $tabRoot) { Update-RootAvailability } else { Reset-RootAvailability }
     }
+    # the toggle marks belong to one phone as well
+    if ($selected -and $selected -ne $script:toggleSerial) {
+        if (Test-PageShown -Page $tabDevice) { Show-ToggleStates -Quiet }
+        else { Set-ToggleMarks $null; $script:toggleSerial = $null }
+    }
     Update-DeviceStatus
+})
+
+# --- timer: the busy strip under the pages -----------------------------------
+$busyTimer = New-Object System.Windows.Forms.Timer
+$busyTimer.Interval = 200
+$busyTimer.Add_Tick({ Update-BusyIndicator })
+
+# --- timer: a phone plugged in or pulled out ---------------------------------
+# The list only changed when Refresh was pressed. adb devices alone is cheap;
+# the list is read in full only when what it reports has changed. Not while
+# another window of this program is in front (a question is waiting there),
+# and not before the list has been read once at startup.
+$deviceWatchTimer = New-Object System.Windows.Forms.Timer
+$deviceWatchTimer.Interval = 2500
+$deviceWatchTimer.Add_Tick({
+    if ($script:busy -gt 0 -or -not $script:devicesReadOnce -or $script:logDrag) { return }
+    if ([System.Windows.Forms.Form]::ActiveForm -ne $form) { return }
+    $deviceWatchTimer.Stop()
+    try {
+        if (Test-DeviceListChanged) {
+            Write-Log 'The attached devices changed; reading the list again.' $colorStep
+            Update-DeviceList
+        }
+    } finally {
+        $deviceWatchTimer.Start()
+    }
 })
 
 $runningTimer = New-Object System.Windows.Forms.Timer
@@ -11158,12 +11390,25 @@ $tabs.Add_SelectedIndexChanged({
 
     # a freshly opened radio tab should already say what the phone is doing
     if ($script:busy -eq 0 -and (Get-TargetSerial)) {
-        if ($tabs.SelectedTab -eq $tabFiles) { Update-FileVolumes -Serial (Get-TargetSerial) }
+        if ($tabs.SelectedTab -eq $tabDevice) {
+            if ((Get-SelectedSerial) -ne $script:toggleSerial) { Show-ToggleStates -Quiet }
+        }
+        elseif ($tabs.SelectedTab -eq $tabFiles) { Update-FileVolumes -Serial (Get-TargetSerial) }
         elseif ($tabs.SelectedTab -eq $tabRadios) { Update-ShownRadio }
         elseif ($tabs.SelectedTab -eq $tabUsers -and $lstUsers.Items.Count -eq 0) { Update-UserList }
         elseif ($tabs.SelectedTab -eq $tabAdvanced -and $tabsAdvanced.SelectedTab -eq $tabRoot) {
             Update-RootAvailability
         }
+    }
+})
+
+# F5, Ctrl+1..9 and Ctrl+L reach the window before the control with the focus
+$form.KeyPreview = $true
+$form.Add_KeyDown({
+    param($sender, $eventArgs)
+    if (Invoke-WindowKey -KeyData $eventArgs.KeyData) {
+        $eventArgs.Handled = $true
+        $eventArgs.SuppressKeyPress = $true
     }
 })
 
@@ -11373,6 +11618,8 @@ $form.Add_FormClosing({
 
 $form.Add_Shown({
     Write-Log "AndroidDC $appVersion" $colorInfo
+    $busyTimer.Start()
+    $deviceWatchTimer.Start()
     Write-Log "adb:       $($script:adbPath)" $colorInfo
     Write-Log "gnirehtet: $($script:gnirehtetPath)" $colorInfo
     Write-Log ("scrcpy:    " + $(if ($script:scrcpyPath) { $script:scrcpyPath } else { 'not found' })) $colorInfo

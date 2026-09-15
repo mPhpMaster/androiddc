@@ -22,6 +22,7 @@ exit code is the number of tests that failed or did not finish.
 
 | Test | Needs a phone | What it checks |
 |---|---|---|
+| `window` | no | The sharing label, the busy strip and what it names, the toggle marks from a made-up answer, the device watch against a made-up adb, and F5, Ctrl+1..9 and Ctrl+L. With a phone, the toggle marks read from it too (reads only) |
 | `layout` | no | Every control inside its box and none on another, on every page, at the default and the smallest window size; every tab strip fits without scrolling, the device columns fit their list, the Files list shows six rows, and the log folds and drags without taking the pages' room |
 | `pane-resize` | no | The phone-screen pane follows the window at once, shrinking and growing, with no tab touched in between |
 | `screenshots` | no | Pictures of the pages at the smallest size, for a person to look at — the layout test cannot see text cut off inside a label |

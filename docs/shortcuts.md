@@ -81,10 +81,18 @@ selected picks it first.
 
 ## The window
 
+| Key | What it does, wherever the focus is |
+|---|---|
+| `F5` | Reads the page on screen again: the app, contact, SMS, file, process, Wi-Fi, Bluetooth, NFC or user list, the Device details, the DNS line or the root checks. On a page with nothing of its own to read, the device list. Ignored while a call is still running |
+| `Ctrl` + `1` … `9` | Opens the tab in that place: 1 Device, 2 Tethering, 3 Advanced, 4 Apps, 5 Contacts, 6 SMS, 7 Cam / Mic, 8 Files, 9 Running |
+| `Ctrl` + `L` | Empties the log |
+
 | Control | What it does |
 |---|---|
 | The slim strip at the left edge of the right pane | Folds the phone screen away and narrows the window; press again to restore both |
 | The splitter | Drag to give the picture more or less room |
+| The bar above the log's buttons | Drag to give the log more or less room; double-click to fold it |
+| ▼ / ▲ beside *Save log...* | Folds the log away, or brings it back |
 
 Multiple devices: `Ctrl` + click adds one device to the selection, `Shift` + click takes a
 range. Most buttons then act on all of them and the log names each device.

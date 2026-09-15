@@ -16,6 +16,17 @@
   scroll bar.
 * The battery and signal line stays on one line and ends in "..." when it does not fit; its
   tooltip holds the whole of it.
+* The quick toggles show what the phone is doing: the On or Off button that matches it is
+  tinted, read when the Device page opens, when another phone is picked and after each press.
+  The ten settings are read in one trip to the phone instead of ten.
+* A strip above the log names the adb call that is running, with a moving bar, once it takes
+  longer than a moment. Before, a click that took seconds looked like one that did nothing.
+* The label at the bottom right says **Sharing: off** instead of *Stopped*, which read as the
+  state of the whole program. A bug report no longer empties it when it finishes.
+* The device list follows the cable: a phone plugged in, pulled out or authorised is noticed
+  within a few seconds, without pressing refresh.
+* Keys that work anywhere in the window: `F5` reads the page on screen again, `Ctrl`+`1`…`9`
+  open a tab, `Ctrl`+`L` empties the log.
 
 ## 1.0.0
 

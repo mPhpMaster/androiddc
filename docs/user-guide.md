@@ -11,6 +11,13 @@ Every tab and every button. The window has three fixed parts:
   room, or fold it away with ▼ (double-clicking the bar does the same); the window remembers
   both.
 
+The row above the log says what is running: while an adb call takes longer than a moment, a
+moving bar and the command itself appear there, and the pointer shows it is working. On the
+right, **Sharing: off** or the phone being shared is the state of the internet sharing only.
+
+The device list follows the cable: plug a phone in, pull one out or accept its RSA prompt, and
+the list is read again within a few seconds, without pressing refresh.
+
 On a short window the device list shows two rows instead of four, and the line under it
 (battery, signal, screen) ends in "..." when it does not fit - hover it for the whole line.
 
@@ -48,9 +55,11 @@ session.
 
 **Quick toggles** — each row is a pair of On/Off buttons applied to every selected device:
 auto-rotate, location, Bluetooth, Wi-Fi, battery saver, vibrate on ring, touch haptics, show
-taps, stay awake, developer options. Below them: **Torch**, **Buzz** (one vibration),
-**Read states** (asks the phone what each of those is right now) and **Dev screen** (opens
-developer options on the phone).
+taps, stay awake, developer options. The button that matches the phone is tinted blue: the
+page reads them when it opens, when you pick another phone, and after every press. A setting
+the phone does not report tints neither button. With several phones selected, the tint is the
+first one's. Below them: **Torch**, **Buzz** (one vibration), **Read states** (reads them
+again and writes them to the log) and **Dev screen** (opens developer options on the phone).
 
 Torch has no supported adb switch on any Android version. AndroidDC opens the quick-settings
 panel, finds the torch tile with `uiautomator dump`, taps it, and then verifies the result —
