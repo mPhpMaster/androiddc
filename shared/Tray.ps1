@@ -34,37 +34,44 @@ $script:trayTold = $false
 $script:trayTitle = 'AndroidDC'
 $script:trayGetHandle = $null
 $script:trayOnExit = $null
+$script:trayOnOpenRules = $null
+$script:trayRulesItem = $null
+$script:trayShowItem = $null
+$script:trayHideItem = $null
 
 function Initialize-Tray {
     # Title: the icon's tooltip. GetHandle: returns the window's handle. OnExit:
-    # closes the window the normal way, so its settings are saved.
-    param([string]$Title, [string]$ProjectRoot, [scriptblock]$GetHandle, [scriptblock]$OnExit)
+    # closes the window the normal way, so its settings are saved. OnOpenRules:
+    # opens the page where the rules are set.
+    param([string]$Title, [string]$ProjectRoot, [scriptblock]$GetHandle, [scriptblock]$OnExit, [scriptblock]$OnOpenRules)
 
     $script:trayTitle = $Title
     $script:trayGetHandle = $GetHandle
     $script:trayOnExit = $OnExit
+    $script:trayOnOpenRules = $OnOpenRules
     try {
         $icon = New-Object System.Windows.Forms.NotifyIcon
         $file = if ($ProjectRoot) { Join-Path $ProjectRoot 'assets\androiddc.ico' } else { '' }
         $icon.Icon = if ($file -and (Test-Path -LiteralPath $file)) { New-Object System.Drawing.Icon($file) } else { [System.Drawing.SystemIcons]::Application }
-        # a tooltip longer than 63 characters throws
-        $icon.Text = if ($Title.Length -gt 63) { $Title.Substring(0, 63) } else { $Title }
+        $script:trayIcon = $icon
+        Update-TrayText
 
         $menu = New-Object System.Windows.Forms.ContextMenuStrip
-        $showItem = $menu.Items.Add('Show the window')
-        $hideItem = $menu.Items.Add('Hide to the tray')
+        # what is set, read from the rules file each time the menu opens: the
+        # other window may have changed it
+        $script:trayRulesItem = New-Object System.Windows.Forms.ToolStripMenuItem('Automation')
+        $null = $menu.Items.Add($script:trayRulesItem)
+        $null = $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+        $script:trayShowItem = $menu.Items.Add('Show the window')
+        $script:trayHideItem = $menu.Items.Add('Hide to the tray')
         $null = $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
         $exitItem = $menu.Items.Add('Exit')
-        $showItem.Font = New-Object System.Drawing.Font($showItem.Font, [System.Drawing.FontStyle]::Bold)
-        $showItem.Add_Click({ Show-TrayWindow })
-        $hideItem.Add_Click({ Hide-TrayWindow })
+        $script:trayShowItem.Font = New-Object System.Drawing.Font($script:trayShowItem.Font, [System.Drawing.FontStyle]::Bold)
+        $script:trayShowItem.Add_Click({ Show-TrayWindow })
+        $script:trayHideItem.Add_Click({ Hide-TrayWindow })
         $exitItem.Add_Click({ if ($script:trayOnExit) { Show-TrayWindow; & $script:trayOnExit } })
-        # only the one that does something now
-        $menu.Add_Opening({
-            param($sender, $eventArgs)
-            $sender.Items[0].Visible = $script:trayHidden
-            $sender.Items[1].Visible = -not $script:trayHidden
-        })
+        $menu.Add_Opening({ Update-TrayMenu })
+        Update-TrayMenu
         $icon.ContextMenuStrip = $menu
         $icon.Add_MouseClick({
             param($sender, $eventArgs)
@@ -76,6 +83,52 @@ function Initialize-Tray {
         $script:trayIcon = $null
         Write-Log ('The icon by the clock could not be added: ' + $_.Exception.Message) $colorWarn
     }
+}
+
+function Update-TrayText {
+    # the tooltip: the window, and how many rules are on
+    if (-not $script:trayIcon) { return }
+    $text = $script:trayTitle
+    if (Get-Command Get-AutomationOverview -ErrorAction SilentlyContinue) {
+        $overview = Get-AutomationOverview
+        $text += if ($overview.On -gt 0) { " - $($overview.On) automation rule(s) on" } else { ' - no automation rules on' }
+    }
+    # a tooltip longer than 63 characters throws
+    $script:trayIcon.Text = if ($text.Length -gt 63) { $text.Substring(0, 63) } else { $text }
+}
+
+function Update-TrayMenu {
+    # Show or Hide, whichever does something now, and the rules as they are set
+    if ($script:trayShowItem) { $script:trayShowItem.Visible = $script:trayHidden }
+    if ($script:trayHideItem) { $script:trayHideItem.Visible = -not $script:trayHidden }
+    $rulesItem = $script:trayRulesItem
+    if (-not $rulesItem) { return }
+    if (-not (Get-Command Get-AutomationOverview -ErrorAction SilentlyContinue)) { $rulesItem.Visible = $false; return }
+
+    $overview = Get-AutomationOverview
+    $rulesItem.Text = $overview.Title
+    $rulesItem.DropDownItems.Clear()
+    foreach ($line in $overview.Lines) {
+        $shown = if ($line.Length -gt 110) { $line.Substring(0, 107) + '...' } else { $line }
+        $entry = $rulesItem.DropDownItems.Add($shown)
+        $entry.ToolTipText = $line
+        $entry.Add_Click({ Open-TrayRules })
+    }
+    if ($overview.Count -eq 0) {
+        $none = $rulesItem.DropDownItems.Add('No phone has a rule yet')
+        $none.Enabled = $false
+    }
+    $null = $rulesItem.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+    $open = $rulesItem.DropDownItems.Add('Open the rules ...')
+    $open.Font = New-Object System.Drawing.Font($open.Font, [System.Drawing.FontStyle]::Bold)
+    $open.Add_Click({ Open-TrayRules })
+    Update-TrayText
+}
+
+function Open-TrayRules {
+    # the window on screen, at the page where the rules are set
+    Show-TrayWindow
+    if ($script:trayOnOpenRules) { & $script:trayOnOpenRules }
 }
 
 function Get-TrayHandle {

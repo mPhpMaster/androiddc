@@ -143,7 +143,34 @@ Wait-Pumped -Milliseconds 300
 Say ''
 Say '== the icon by the clock =='
 $handle = $form.Handle
-Say ("  there, with a menu of three and a separator   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 4)))
+Say ("  there, with Automation, Show, Hide and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 6)))
+
+Say ''
+Say '== the rules set before, seen without opening their tab =='
+Say ("  the log said so at startup   {0}" -f (Mark ($txtLog.Text -match 'Automation: no rules\. Does not start with Windows\.' -and $txtLog.Text -match 'set in Advanced > Automation')))
+$null = Save-AutomationRules -Rules @(
+    [PSCustomObject]@{ Serial = 'F6'; Name = 'Phone F'; Enabled = $true; Actions = @([PSCustomObject]@{ Id = 'usb-tether-on'; Value = '' }) },
+    [PSCustomObject]@{ Serial = 'G7'; Name = 'Phone G'; Enabled = $false; Actions = @([PSCustomObject]@{ Id = 'wake'; Value = '' }) })
+$overview = Get-AutomationOverview
+Say ("  '{0}'   {1}" -f $overview.Title, (Mark ($overview.Title -eq 'Automation: 2 rule(s), 1 on' -and $overview.Lines.Count -eq 3)))
+Say ("  '{0}'   {1}" -f $overview.Lines[1], (Mark ($overview.Lines[1] -match '^Phone F \(F6\) - on: Share the phone' -and $overview.Lines[2] -match '^Phone G \(G7\) - off: Wake the screen')))
+Update-TrayMenu
+$dropped = @($script:trayRulesItem.DropDownItems | ForEach-Object { $_.Text })
+Say ("  the icon's menu lists them: {0}   {1}" -f ($dropped -join ' | '),
+    (Mark ($script:trayRulesItem.Text -eq $overview.Title -and $dropped -contains 'Open the rules ...' -and @($dropped | Where-Object { $_ -match '^Phone [FG]' }).Count -eq 2)))
+Say ("  its tooltip: '{0}'   {1}" -f $script:trayIcon.Text, (Mark ($script:trayIcon.Text -eq 'AndroidDC - 1 automation rule(s) on')))
+Update-AutomationTab
+Say ("  the tab: '{0}'   {1}" -f $tabAutomation.Text, (Mark ($tabAutomation.Text -eq 'Automation (2)')))
+$tabs.SelectedTab = $tabDevice
+Open-TrayRules
+Wait-Pumped -Milliseconds 400
+Say ("  'Open the rules' opens Advanced > Automation   {0}" -f (Mark ((Test-PageShown -Page $tabAutomation))))
+$form.Location = New-Object System.Drawing.Point(-2400, -2000)
+$null = Save-AutomationRules -Rules @()
+Update-AutomationTab
+Say ("  no rules: the tab is plain again   {0}" -f (Mark ($tabAutomation.Text -eq 'Automation')))
+$tabs.SelectedTab = $tabDevice
+Wait-Pumped -Milliseconds 300
 $script:trayTold = $true   # no balloon on the user's screen from a test
 Hide-TrayWindow
 Wait-Pumped -Milliseconds 400

@@ -130,7 +130,7 @@ if (Get-Command Initialize-Automation -ErrorAction SilentlyContinue) {
 if (Get-Command Initialize-Tray -ErrorAction SilentlyContinue) {
     Initialize-Tray -Title $script:appName -ProjectRoot $script:toolsRoot `
         -GetHandle { (New-Object System.Windows.Interop.WindowInteropHelper($script:window)).EnsureHandle() } `
-        -OnExit { $script:window.Close() }
+        -OnExit { $script:window.Close() } -OnOpenRules { Show-Page -Page 'automation' }
     # minimized means into the tray: off the taskbar, still watching for phones
     $script:window.Add_StateChanged({
         if ($script:window.WindowState -eq 'Minimized' -and -not (Test-TrayHidden)) { Hide-TrayWindow }
@@ -156,6 +156,9 @@ $script:window.Add_ContentRendered({
     Write-Log "adb:       $($script:adbPath)" $colorInfo
     Write-Log ('gnirehtet: ' + $(if ($script:gnirehtetPath) { $script:gnirehtetPath } else { 'not found' })) $colorInfo
     Write-Log ('scrcpy:    ' + $(if ($script:scrcpyPath) { $script:scrcpyPath } else { 'not found' })) $colorInfo
+    # the rules set before, so they are known without opening their page
+    if (Get-Command Write-AutomationOverview -ErrorAction SilentlyContinue) { Write-AutomationOverview -Where 'the Automation page (System)' }
+    if (Get-Command Update-AutomationNavTitle -ErrorAction SilentlyContinue) { Update-AutomationNavTitle }
     $script:busyTimer.Start()
     $null = Invoke-Adb -CommandArguments @('start-server')
     Update-DeviceList

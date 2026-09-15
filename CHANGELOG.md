@@ -2,6 +2,19 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### The rules set before, seen without looking for them
+
+* At startup the log says what is set: how many rules, how many are on, each rule's phone
+  and actions, whether AndroidDC starts with Windows, and where that is set.
+* The icon by the clock has an **Automation** entry at the top of its menu. It lists the same
+  thing, read from the rules file each time the menu opens, so a change made in the other
+  window shows too. A click on a rule, or on *Open the rules ...*, shows the window at the
+  rules page. The icon's tooltip counts the rules that are on.
+* The classic *Advanced > Automation* tab and Nova's *Automation* entry in the side navigation
+  carry the number of rules, e.g. **Automation (2)**.
+
 ## 1.2.0
 
 ### Automation, in both windows

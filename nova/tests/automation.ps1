@@ -88,7 +88,30 @@ Say ("  no dialog is open, so the device watch runs   {0}" -f (Mark (-not (Test-
 Say ''
 Say '== the icon by the clock =='
 $handle = (New-Object System.Windows.Interop.WindowInteropHelper($script:window)).Handle
-Say ("  there, with a menu of three and a separator   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 4)))
+Say ("  there, with Automation, Show, Hide and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 6)))
+
+Say ''
+Say '== the rules set before, seen without opening their page =='
+$logText = Get-LogText
+Say ("  the log said so at startup   {0}" -f (Mark ($logText -match 'Automation: no rules\. Does not start with Windows\.' -and $logText -match 'set in the Automation page')))
+$null = Save-AutomationRules -Rules @(
+    [PSCustomObject]@{ Serial = 'F6'; Name = 'Phone F'; Enabled = $true; Actions = @([PSCustomObject]@{ Id = 'usb-tether-on'; Value = '' }) })
+Update-TrayMenu
+$dropped = @($script:trayRulesItem.DropDownItems | ForEach-Object { $_.Text })
+Say ("  the icon's menu: '{0}' - {1}   {2}" -f $script:trayRulesItem.Text, ($dropped -join ' | '),
+    (Mark ($script:trayRulesItem.Text -eq 'Automation: 1 rule(s), 1 on' -and @($dropped | Where-Object { $_ -match '^Phone F \(F6\) - on' }).Count -eq 1)))
+Say ("  its tooltip: '{0}'   {1}" -f $script:trayIcon.Text, (Mark ($script:trayIcon.Text -eq 'AndroidDC Nova - 1 automation rule(s) on')))
+Update-AutomationNavTitle
+Say ("  the side navigation: '{0}'   {1}" -f $automationPage.Nav.Content, (Mark ($automationPage.Nav.Content -eq 'Automation (1)')))
+Show-Page -Page 'overview'
+Open-TrayRules
+Wait-Pumped -Milliseconds 400
+Say ("  'Open the rules' opens the Automation page   {0}" -f (Mark (Test-PageShown -Key 'automation')))
+$script:window.Left = -4000
+$script:window.Top = -3000
+$null = Save-AutomationRules -Rules @()
+Update-AutomationNavTitle
+Say ("  no rules: plain again   {0}" -f (Mark ($automationPage.Nav.Content -eq 'Automation')))
 $script:trayTold = $true   # no balloon on the user's screen from a test
 Hide-TrayWindow
 Wait-Pumped -Milliseconds 500

@@ -33,7 +33,8 @@ Both can **start with Windows**, minimized, and both run the same **rules per ph
 chosen phone in and AndroidDC does what you picked for it - share the phone's internet with the
 PC, mirror the screen, turn Wi-Fi off, open an app, and more. Classic: *Advanced > Automation*;
 Nova: the *Automation* page. While it runs, AndroidDC has an icon by the clock: click it to hide
-the window or show it again. Minimizing hides it there too.
+the window or show it again. Minimizing hides it there too. Its menu, and the log at startup,
+list the rules you have set.
 
 ## What is in it
 

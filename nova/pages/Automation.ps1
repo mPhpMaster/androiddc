@@ -19,6 +19,14 @@ function Test-AutomationShared {
     return [bool](Get-Command Read-AutomationRules -ErrorAction SilentlyContinue)
 }
 
+function Update-AutomationNavTitle {
+    # the side navigation says how many rules there are, so they show from any page
+    param([int]$Count = -1)
+    if (-not (Test-AutomationShared) -or -not $automationPage.Nav) { return }
+    if ($Count -lt 0) { $Count = @(Read-AutomationRules).Count }
+    $automationPage.Nav.Content = if ($Count -gt 0) { "Automation ($Count)" } else { 'Automation' }
+}
+
 function Update-AutomationPage {
     # the rules as the file has them now, and whether AndroidDC starts with Windows
     if (-not (Test-AutomationShared)) {
@@ -35,6 +43,7 @@ function Update-AutomationPage {
         $script:automationRules = @(Read-AutomationRules)
         $problem = Get-AutomationReadError
         if ($problem) { Write-Log "Automation: the rules file could not be read: $problem" $colorBad }
+        Update-AutomationNavTitle -Count $script:automationRules.Count
 
         $script:automationRuleRows.Clear()
         foreach ($rule in $script:automationRules) {

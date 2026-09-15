@@ -224,6 +224,16 @@ phone*. Then tick what should happen each time that phone is plugged in:
 * The device list keeps following the cable while the window is minimized. It stops while one
   of AndroidDC's own questions is waiting.
 
+**Seeing what is set.** The rules you set before are shown in three places, so you do not have
+to open this page to find them:
+
+* The log, at startup: how many rules there are and how many are on, each phone with its
+  actions, and whether AndroidDC starts with Windows.
+* The icon by the clock: *Automation* at the top of its menu lists the same, read fresh each
+  time the menu opens. A click on a rule opens this page. Hover over the icon to see how many
+  rules are on.
+* The page's name carries the number: *Automation (2)*.
+
 **The icon by the clock.** While AndroidDC runs, in either window, its icon sits in the
 notification area next to the clock. If Windows tucks it away, it is under the ^ arrow.
 

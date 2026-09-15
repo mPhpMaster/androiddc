@@ -278,6 +278,8 @@ function Save-AutomationRules {
     $json = ConvertTo-Json -InputObject ([ordered]@{ Version = 1; Rules = $list }) -Depth 6
     try {
         [System.IO.File]::WriteAllText($script:automationFile, $json, (New-Object System.Text.UTF8Encoding($false)))
+        # the icon's tooltip counts the rules that are on
+        if (Get-Command Update-TrayText -ErrorAction SilentlyContinue) { Update-TrayText }
         return $true
     } catch {
         Write-Log ('Automation: the rules could not be saved: ' + $_.Exception.Message) $colorBad
@@ -304,6 +306,40 @@ function Get-AutomationRuleSummary {
     }
     if ($labels.Count -eq 0) { return 'nothing yet' }
     return ($labels -join '; ')
+}
+
+function Get-AutomationOverview {
+    # What is set, in words: a title, whether AndroidDC starts with Windows, and
+    # a line per rule. For the log at startup and the icon's menu, so the rules
+    # set before can be seen without opening their page.
+    $rules = @(Read-AutomationRules)
+    $problem = Get-AutomationReadError
+    $on = @($rules | Where-Object { $_.Enabled -and @($_.Actions).Count -gt 0 }).Count
+    $startup = Get-AutomationStartup
+
+    $title = if ($rules.Count -eq 0) { 'Automation: no rules' } else { "Automation: $($rules.Count) rule(s), $on on" }
+    $startLine = switch ($startup) {
+        'classic' { 'Starts with Windows, minimized, in the classic window' }
+        'nova' { 'Starts with Windows, minimized, in Nova' }
+        default { 'Does not start with Windows' }
+    }
+    $lines = @($startLine)
+    foreach ($rule in $rules) {
+        $state = if (-not $rule.Enabled) { 'off' } elseif (@($rule.Actions).Count -eq 0) { 'nothing to do yet' } else { 'on' }
+        $lines += "$($rule.Name) ($($rule.Serial)) - ${state}: " + (Get-AutomationRuleSummary -Rule $rule)
+    }
+    if ($problem) { $lines += "The rules file could not be read: $problem" }
+    return [PSCustomObject]@{ Title = $title; Count = $rules.Count; On = $on; Startup = $startup; Lines = $lines }
+}
+
+function Write-AutomationOverview {
+    # the rules and the start-up entry in the log; Where names the page they are set on
+    param([string]$Where)
+
+    $overview = Get-AutomationOverview
+    Write-Log ("$($overview.Title). $($overview.Lines[0]).") $(if ($overview.On -gt 0) { $colorStep } else { $colorInfo })
+    foreach ($line in @($overview.Lines | Select-Object -Skip 1)) { Write-Log "  $line" $colorInfo }
+    if ($Where) { Write-Log "  Rules and starting with Windows are set in $Where." $colorInfo }
 }
 
 # ------------------------------------------------------ start with Windows ----

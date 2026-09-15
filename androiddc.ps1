@@ -11794,6 +11794,8 @@ function Update-AutomationTab {
         $script:automationRules = @(Read-AutomationRules)
         $problem = Get-AutomationReadError
         if ($problem) { Write-Log "Automation: the rules file could not be read: $problem" $colorBad }
+        # the tab says how many rules there are, so they show from the Advanced tab too
+        $tabAutomation.Text = if ($script:automationRules.Count -gt 0) { "Automation ($($script:automationRules.Count))" } else { 'Automation' }
         $lstAutoRules.BeginUpdate()
         try {
             $lstAutoRules.Items.Clear()
@@ -12008,6 +12010,8 @@ $form.Add_Shown({
     Update-ToolsLayout
     if ($Minimized) { $form.WindowState = 'Minimized' }
     $null = Invoke-Adb -CommandArguments @('start-server')
+    # the rules set before, so they are known without opening their tab
+    Write-AutomationOverview -Where 'Advanced > Automation'
     Update-AutomationTab
     Update-DeviceList
 })
@@ -12053,7 +12057,8 @@ if (Test-Path -LiteralPath $localApk -PathType Leaf) {
 
 Restore-Settings
 Initialize-Automation -ProjectRoot $scriptRoot -CountPresent ([bool]$Minimized)
-Initialize-Tray -Title 'AndroidDC' -ProjectRoot $scriptRoot -GetHandle { $form.Handle } -OnExit { $form.Close() }
+Initialize-Tray -Title 'AndroidDC' -ProjectRoot $scriptRoot -GetHandle { $form.Handle } -OnExit { $form.Close() } `
+    -OnOpenRules { $tabs.SelectedTab = $tabAdvanced; $tabsAdvanced.SelectedTab = $tabAutomation }
 
 try {
     [void]$form.ShowDialog()
