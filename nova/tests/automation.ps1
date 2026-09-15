@@ -84,3 +84,25 @@ Say ("  off: the value is gone   {0}" -f (Mark ((Get-AutomationStartup) -eq ''))
 Remove-Item -LiteralPath 'HKCU:\Software\AndroidDC-tests' -Recurse -Force -ErrorAction SilentlyContinue
 Say ("  the real Run key was not touched   {0}" -f (Mark ((Get-RealRunValue) -eq $realBefore)))
 Say ("  no dialog is open, so the device watch runs   {0}" -f (Mark (-not (Test-DialogOpen))))
+
+Say ''
+Say '== the icon by the clock =='
+$handle = (New-Object System.Windows.Interop.WindowInteropHelper($script:window)).Handle
+Say ("  there, with a menu of three and a separator   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 4)))
+$script:trayTold = $true   # no balloon on the user's screen from a test
+Hide-TrayWindow
+Wait-Pumped -Milliseconds 500
+Say ("  hidden: off screen, and the window is still open   {0}" -f (Mark ((Test-TrayHidden) -and -not [AndroidDcTrayNative]::IsWindowVisible($handle) -and $script:window.IsLoaded)))
+Show-TrayWindow
+Wait-Pumped -Milliseconds 500
+Say ("  shown again   {0}" -f (Mark (-not (Test-TrayHidden) -and [AndroidDcTrayNative]::IsWindowVisible($handle))))
+$script:window.WindowState = 'Minimized'
+Wait-Pumped -Milliseconds 600
+Say ("  minimized goes into the tray   {0}" -f (Mark ((Test-TrayHidden) -and -not [AndroidDcTrayNative]::IsWindowVisible($handle))))
+Show-TrayWindow
+Wait-Pumped -Milliseconds 600
+Say ("  and comes back restored, not minimized   {0}" -f (Mark ($script:window.WindowState -eq 'Normal' -and [AndroidDcTrayNative]::IsWindowVisible($handle))))
+$pictureAfter = Save-WindowPicture -Name 'automation-after-tray'
+Say ("  it still draws after coming back: {0}   {1}" -f $pictureAfter, (Mark ((Get-Item -LiteralPath $pictureAfter).Length -gt 10000)))
+$script:window.Left = -4000
+$script:window.Top = -3000

@@ -32,7 +32,8 @@ the same adb, scrcpy and gnirehtet, and keep their settings apart.
 Both can **start with Windows**, minimized, and both run the same **rules per phone**: plug a
 chosen phone in and AndroidDC does what you picked for it - share the phone's internet with the
 PC, mirror the screen, turn Wi-Fi off, open an app, and more. Classic: *Advanced > Automation*;
-Nova: the *Automation* page.
+Nova: the *Automation* page. While it runs, AndroidDC has an icon by the clock: click it to hide
+the window or show it again. Minimizing hides it there too.
 
 ## What is in it
 

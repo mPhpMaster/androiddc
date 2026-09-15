@@ -224,6 +224,18 @@ phone*. Then tick what should happen each time that phone is plugged in:
 * The device list keeps following the cable while the window is minimized. It stops while one
   of AndroidDC's own questions is waiting.
 
+**The icon by the clock.** While AndroidDC runs, in either window, its icon sits in the
+notification area next to the clock. If Windows tucks it away, it is under the ^ arrow.
+
+* A click on the icon hides the window, and another click brings it back.
+* Minimizing the window hides it there too. It leaves the taskbar, but it keeps watching for
+  phones and running their rules.
+* Right-click the icon for *Show the window*, *Hide to the tray* and *Exit*. *Exit* closes the
+  program the normal way, so its settings are saved.
+* A window started with Windows opens hidden there. The first time a window hides, a
+  notification says AndroidDC is still running.
+* The window's close button still quits the program.
+
 ---
 
 ## Apps

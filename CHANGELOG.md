@@ -21,6 +21,11 @@
   by the other window's switch button, does not run the rules again for phones that were
   already plugged in; a window started with Windows does.
 * Classic: **Advanced > Automation**. Nova: the **Automation** page under System.
+* **An icon by the clock** while AndroidDC runs, in both windows. A click on it hides the window
+  or shows it again; its menu has *Show the window*, *Hide to the tray* and *Exit*. Minimizing
+  hides the window there too - off the taskbar, still watching for phones and running their
+  rules - and a window started with Windows starts there. The first time it hides, a
+  notification says it is still running. The close button still closes the program.
 * The device list now follows the cable while the window is minimized or behind other windows
   too - still not while one of its own questions is waiting.
 * Both launchers pass their arguments on to the script.

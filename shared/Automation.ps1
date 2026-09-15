@@ -178,6 +178,8 @@ function Show-AutomationNotice {
     # a balloon from the notification area; the icon stays until the window closes
     param([string]$Title, [string]$Text)
 
+    # from the window's own icon by the clock when there is one (shared\Tray.ps1)
+    if ((Get-Command Show-TrayBalloon -ErrorAction SilentlyContinue) -and (Show-TrayBalloon -Title $Title -Text $Text)) { return }
     try {
         if (-not $script:automationNotifier) {
             $notifier = New-Object System.Windows.Forms.NotifyIcon

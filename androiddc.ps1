@@ -45,8 +45,10 @@ $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
 
-# starting with Windows and the rules per phone, shared with the Nova window
+# starting with Windows and the rules per phone, and the icon by the clock,
+# shared with the Nova window
 . (Join-Path $scriptRoot 'shared\Automation.ps1')
+. (Join-Path $scriptRoot 'shared\Tray.ps1')
 
 $script:adbPath = $null
 $script:gnirehtetPath = $null
@@ -11965,10 +11967,16 @@ $rdoAutoNova.Add_CheckedChanged({ if ($rdoAutoNova.Checked -and $chkAutoStart.Ch
 $tabsAdvanced.Add_SelectedIndexChanged({ if (Test-PageShown -Page $tabAutomation) { Update-AutomationTab } })
 $tabs.Add_SelectedIndexChanged({ if (Test-PageShown -Page $tabAutomation) { Update-AutomationTab } })
 
+# minimized means into the tray: off the taskbar, still watching for phones
+$form.Add_Resize({
+    if ($form.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized -and -not (Test-TrayHidden)) { Hide-TrayWindow }
+})
+
 $form.Add_FormClosing({
     Save-Settings
     # the rules are free for the other window once this one is gone
     Close-Automation
+    Close-Tray
     if ($script:workRunspace) {
         try { $script:workRunspace.Close(); $script:workRunspace.Dispose() } catch { }
         $script:workRunspace = $null
@@ -12045,6 +12053,7 @@ if (Test-Path -LiteralPath $localApk -PathType Leaf) {
 
 Restore-Settings
 Initialize-Automation -ProjectRoot $scriptRoot -CountPresent ([bool]$Minimized)
+Initialize-Tray -Title 'AndroidDC' -ProjectRoot $scriptRoot -GetHandle { $form.Handle } -OnExit { $form.Close() }
 
 try {
     [void]$form.ShowDialog()

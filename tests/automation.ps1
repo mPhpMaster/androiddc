@@ -139,3 +139,25 @@ while ($script:deviceSignature -ne $real -and $watch.Elapsed.TotalSeconds -lt 15
 Say ("  and it really ticks: the list was read again after {0:N1} s   {1}" -f $watch.Elapsed.TotalSeconds, (Mark ($script:deviceSignature -eq $real)))
 $tabs.SelectedTab = $tabDevice
 Wait-Pumped -Milliseconds 300
+
+Say ''
+Say '== the icon by the clock =='
+$handle = $form.Handle
+Say ("  there, with a menu of three and a separator   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 4)))
+$script:trayTold = $true   # no balloon on the user's screen from a test
+Hide-TrayWindow
+Wait-Pumped -Milliseconds 400
+Say ("  hidden: off screen, and the window is still open   {0}" -f (Mark ((Test-TrayHidden) -and -not [AndroidDcTrayNative]::IsWindowVisible($handle) -and -not $form.IsDisposed)))
+Wait-Pumped -Milliseconds 800
+Say ("  the device watch goes on while hidden   {0}" -f (Mark ([AndroidDcNative]::IsWindowEnabled($handle))))
+Show-TrayWindow
+Wait-Pumped -Milliseconds 400
+Say ("  shown again   {0}" -f (Mark (-not (Test-TrayHidden) -and [AndroidDcTrayNative]::IsWindowVisible($handle))))
+$form.WindowState = 'Minimized'
+Wait-Pumped -Milliseconds 600
+Say ("  minimized goes into the tray   {0}" -f (Mark ((Test-TrayHidden) -and -not [AndroidDcTrayNative]::IsWindowVisible($handle))))
+Show-TrayWindow
+Wait-Pumped -Milliseconds 600
+Say ("  and comes back restored, not minimized   {0}" -f (Mark ($form.WindowState -eq 'Normal' -and [AndroidDcTrayNative]::IsWindowVisible($handle))))
+# the test window lives off screen; put it back there after SW_RESTORE
+$form.Location = New-Object System.Drawing.Point(-2400, -2000)

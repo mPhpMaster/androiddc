@@ -72,6 +72,9 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # Nova on its own, without the project folder, simply has no Automation page
 $automationScript = Join-Path $script:toolsRoot 'shared\Automation.ps1'
 if (Test-Path -LiteralPath $automationScript -PathType Leaf) { . $automationScript }
+# the icon by the clock, the same as the classic window's
+$trayScript = Join-Path $script:toolsRoot 'shared\Tray.ps1'
+if (Test-Path -LiteralPath $trayScript -PathType Leaf) { . $trayScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen
@@ -123,6 +126,15 @@ Restore-Settings
 Set-LogFolded -Folded $script:logFolded
 if (Get-Command Initialize-Automation -ErrorAction SilentlyContinue) {
     Initialize-Automation -ProjectRoot $script:toolsRoot -CountPresent ([bool]$Minimized)
+}
+if (Get-Command Initialize-Tray -ErrorAction SilentlyContinue) {
+    Initialize-Tray -Title $script:appName -ProjectRoot $script:toolsRoot `
+        -GetHandle { (New-Object System.Windows.Interop.WindowInteropHelper($script:window)).EnsureHandle() } `
+        -OnExit { $script:window.Close() }
+    # minimized means into the tray: off the taskbar, still watching for phones
+    $script:window.Add_StateChanged({
+        if ($script:window.WindowState -eq 'Minimized' -and -not (Test-TrayHidden)) { Hide-TrayWindow }
+    })
 }
 
 if ($OffScreen) {

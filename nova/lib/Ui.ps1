@@ -931,6 +931,7 @@ function Initialize-ShellEvents {
         Save-Settings
         # the rules are free for the other window once this one is gone
         if (Get-Command Close-Automation -ErrorAction SilentlyContinue) { Close-Automation }
+        if (Get-Command Close-Tray -ErrorAction SilentlyContinue) { Close-Tray }
         foreach ($timer in @($script:busyTimer, $script:deviceWatchTimer, $script:deviceChangeTimer, $script:toastTimer)) {
             try { $timer.Stop() } catch { }
         }
