@@ -2,7 +2,7 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.2.0
 
 ### Automation, in both windows
 
