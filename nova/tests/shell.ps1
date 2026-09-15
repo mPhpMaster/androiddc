@@ -56,6 +56,19 @@ $box.Text = 'abc'
 Say ("  and falls back to the default: {0}   {1}" -f (Get-NumberValue -Box $box -Default 5), (Mark ($box.Text -eq '5')))
 
 Say ''
+Say '== the page is remembered =='
+Show-Page -Page 'tools'
+$saved = (Get-Content -LiteralPath $script:settingsPath -Raw | ConvertFrom-Json).LastPage
+Say ("  opening Tools writes LastPage '{0}' at once, not only on close   {1}" -f $saved, (Mark ($saved -eq 'tools')))
+# a double click on a phone picks it and leaves the page alone; it used to open Overview
+$click = New-Object System.Windows.Input.MouseButtonEventArgs([System.Windows.Input.Mouse]::PrimaryDevice, 0, [System.Windows.Input.MouseButton]::Left)
+$click.RoutedEvent = [System.Windows.Controls.Control]::MouseDoubleClickEvent
+$ui.DeviceList.RaiseEvent($click)
+$null = Wait-Idle -Seconds 20
+Say ("  a double click on the device list stays on '{0}'   {1}" -f $script:currentPage.Key, (Mark ($script:currentPage.Key -eq 'tools')))
+Show-Page -Page 'overview'
+
+Say ''
 Say '== the picture =='
 foreach ($size in @('default', 'min')) {
     Set-WindowSize $size

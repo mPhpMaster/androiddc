@@ -52,6 +52,13 @@ Either launcher runs its PowerShell script with `-NoProfile -ExecutionPolicy Byp
 To change your mind later, **Open Nova window** on the classic *Device* tab, or **Classic
 window** at the bottom of Nova's side navigation, closes one and opens the other.
 
+**In the Start menu.** Double-click **`start-menu.vbs`** once. It adds *AndroidDC* and
+*AndroidDC Nova* to the Start menu with the AndroidDC icon, pointing at the two launchers in
+this folder. They appear under *All apps*. Windows does not let a program pin itself, so to
+keep one on the first page of Start, right-click it there and choose *Pin to Start*. After
+moving the folder, run it again so the shortcuts follow. **`start-menu-remove.vbs`** takes both
+out again (a pinned one goes with it), and touches nothing else.
+
 While either window runs, its icon sits by the clock: a click hides the window there and
 brings it back, and minimizing hides it too. To have AndroidDC start by itself when you sign in,
 and do something every time a particular phone is plugged in, see *Advanced > Automation* in

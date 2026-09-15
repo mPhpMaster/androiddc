@@ -30,7 +30,9 @@ does the reverse. If a tool is missing, the program offers to fetch it with the 
   (`..\shared\Automation.ps1`, `%APPDATA%\AndroidDC\automation.json`); see the user guide's
   *Advanced > Automation*.
 * **Device card** - the phone the pages act on, its battery, signal and screen. Click the name
-  to pick another, or several with `Ctrl`/`Shift`. The list follows the cable by itself.
+  to pick another, or several with `Ctrl`/`Shift`; a double-click picks one and closes the
+  list, on whatever page is open. The list follows the cable by itself.
+* The window opens on the page you used last, which is remembered as soon as you open it.
 * **Activity log** - every step, colour coded; drag its top edge, or fold it away. Above it, the
   command that is running and the state of the internet sharing.
 * `F5` reads the page on screen again. `Ctrl`+`L` empties the log.

@@ -21,6 +21,8 @@ $script:logHeight = 190.0
 $script:logFolded = $false
 $script:statusSerial = $null
 $script:restorePage = ''
+# true once the window has opened its first page; from then on a page change is saved
+$script:pageSaveReady = $false
 $script:keepWindowPlace = $true
 $script:lastBattery = $null
 $script:lastSignal = $null
@@ -195,8 +197,12 @@ function Show-Page {
     foreach ($entry in $script:pages) {
         $entry.Root.Visibility = if ([object]::ReferenceEquals($entry, $Page)) { 'Visible' } else { 'Collapsed' }
     }
+    $changed = -not [object]::ReferenceEquals($script:currentPage, $Page)
     $script:currentPage = $Page
     if ($Page.Nav -and -not $Page.Nav.IsChecked) { $Page.Nav.IsChecked = $true }
+    # Remembered at once, not only when the window closes: a window that Windows
+    # ends at sign-out never closes normally, and it reopened on an old page
+    if ($changed -and $script:pageSaveReady) { Save-Settings }
     if ($Page.OnShow -and $script:busy -eq 0) {
         try { & $Page.OnShow } catch { Write-Log ("$($Page.Title): " + $_.Exception.Message) $colorBad }
     }

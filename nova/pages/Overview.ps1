@@ -541,5 +541,7 @@ $ui.OverviewNumber.Add_KeyDown({
     if ($eventArgs.Key -eq [System.Windows.Input.Key]::Return) { $eventArgs.Handled = $true; Start-QuickCall }
 })
 
-# the device picker: a double click loads this page's details, as the original list did
-$ui.DeviceList.Add_MouseDoubleClick({ Show-DeviceTab })
+# No double click on the device picker here: it loaded this page's details as the
+# original list did, and so opened Overview from whatever page was on screen. A
+# double click now only picks the phone and closes the list (lib\Ui.ps1);
+# Load details reads the phone.

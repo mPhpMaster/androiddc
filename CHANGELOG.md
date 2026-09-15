@@ -2,6 +2,22 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+* **`start-menu.vbs`** puts both windows in the Start menu: *AndroidDC* and *AndroidDC Nova*,
+  with the AndroidDC icon, under *All apps*. Windows keeps *Pin to Start* for the user, so the
+  message it ends with says where that is. Run it again after moving the folder. CI checks it
+  points at both launchers.
+* **`start-menu-remove.vbs`** does the reverse: it removes those two shortcuts and touches
+  nothing else. `start-menu.vbs /remove` does the same. Both, their switches and their
+  messages are in *Command line*.
+* **Nova no longer jumps to Overview.** A double-click on a phone in the device list opened
+  Overview from whatever page was on screen; it now only picks the phone and closes the list.
+  *Load details* on Overview still reads the phone there.
+* **Nova remembers its page at once.** The page on screen was written only when the window
+  closed normally, so a window Windows ended at sign-out - one in the tray, say - opened again
+  on an older page. It is now written each time the page changes.
+
 ## 1.2.1
 
 ### The rules set before, seen without looking for them

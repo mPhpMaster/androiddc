@@ -24,6 +24,38 @@ its tests (`nova\tests\run.ps1`).
 
 ---
 
+## start-menu.vbs and start-menu-remove.vbs
+
+Put both windows in the Start menu, or take them out again. Double-click either one, or:
+
+```powershell
+.\start-menu.vbs [/remove] [/quiet] [/folder:<path>]
+.\start-menu-remove.vbs [/quiet] [/folder:<path>]
+```
+
+| Parameter | What it does |
+|---|---|
+| (none) | `start-menu.vbs` adds *AndroidDC* and *AndroidDC Nova* to the Start menu, or updates them; `start-menu-remove.vbs` removes them |
+| `/remove` | `start-menu.vbs` removes them instead, the same as `start-menu-remove.vbs` |
+| `/quiet` | No message at the end |
+| `/folder:<path>` | Another folder instead of the Start menu's *Programs* folder, for testing |
+
+The shortcuts are `%APPDATA%\Microsoft\Windows\Start Menu\Programs\AndroidDC.lnk` and
+`AndroidDC Nova.lnk`. Each runs `wscript.exe` on its launcher in this folder, uses
+`assets\androiddc.ico`, and starts in this folder. They show under *All apps*; Windows keeps
+*Pin to Start* for you. Removing touches nothing but those two files. After moving the folder,
+run `start-menu.vbs` again.
+
+The messages they show:
+
+| Script | Message |
+|---|---|
+| `start-menu.vbs` | *In the Start menu now, under All apps: AndroidDC, AndroidDC Nova. To keep one on the first page of Start, right-click it there and choose Pin to Start.* When a launcher is missing it adds *Not found in this folder, so not added:* and its name, and exits with code 1 |
+| `start-menu.vbs /remove` | *Removed from the Start menu:* and the names, or *AndroidDC was not in the Start menu.* |
+| `start-menu-remove.vbs` | *Removed from the Start menu:* and the names, then *start-menu.vbs puts them back.*, or *AndroidDC was not in the Start menu, so there was nothing to remove.* |
+
+---
+
 ## get-upstream.ps1
 
 Downloads the two upstream packages AndroidDC is built on, checks them and unpacks them.

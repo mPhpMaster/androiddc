@@ -167,6 +167,7 @@ $script:window.Add_ContentRendered({
     $opening = if ($script:restorePage) { Get-Page -Key $script:restorePage } else { $null }
     if (-not $opening -and $script:pages.Count -gt 0) { $opening = $script:pages[0] }
     if ($opening) { Show-Page -Page $opening }
+    $script:pageSaveReady = $true
 
     if ($TestScript) {
         try {

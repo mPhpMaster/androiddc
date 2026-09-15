@@ -1,6 +1,6 @@
 # AndroidDC - file index
 
-30 files at the top level, plus docs\, assets\, tests\, nova\ and shared\. `backups\` is deliberately left out of this index and is
+32 files at the top level, plus docs\, assets\, tests\, nova\ and shared\. `backups\` is deliberately left out of this index and is
 ignored by git (see `.gitignore`).
 
 The upstream half of this folder (scrcpy 4.1 and gnirehtet 2.5.1) can be fetched
@@ -17,10 +17,12 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 | `androiddc.ps1` | 517 KB, 12083 lines | 2026-09-15 | The main tool: a WinForms control panel for phones over ADB. Twelve tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery, automation), Apps, Contacts, SMS, Cam / Mic, Files, Running, Radios (Wi-Fi, Bluetooth, NFC), Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
 | `androiddc.vbs` | 561 B | 2026-09-15 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`, passing its own arguments on (`-Minimized` from the start-with-Windows entry). **This is the file to double-click.** |
 | `androiddc-nova.vbs` | 722 B | 2026-09-15 | Launcher for the Nova window (`nova\androiddc-nova.ps1`), hidden and in STA. Each window has a button that closes it and opens the other. |
+| `start-menu.vbs` | 3.2 KB | 2026-09-15 | Adds *AndroidDC* and *AndroidDC Nova* to the Start menu (All apps), with the AndroidDC icon, pointing at the two launchers in this folder. `/remove` takes them out, `/quiet` shows no message, `/folder:<path>` writes elsewhere (tests). Windows keeps *Pin to Start* for the user. |
+| `start-menu-remove.vbs` | 1.6 KB | 2026-09-15 | The reverse of the above: removes the two Start menu shortcuts, and nothing else. `/quiet`, `/folder:<path>` as above. |
 | `nova\` | 65 files | 2026-09-15 | AndroidDC Nova, the same tool in a newer design: WPF hosted in PowerShell 5.1. `lib\` (adb off the window's thread, the window's helpers), `ui\` (theme and shell), `pages\` (one `.ps1` + `.xaml` per page), `fonts\` (DM Sans, Space Grotesk, OFL), `tests\` (runner, audit, a test per page, a tour of every page), `CONTRACT.md` (how a page is built). |
 | `shared\` | 2 files | 2026-09-15 | Loaded by both windows. `Tray.ps1`: the icon by the clock (a click hides or shows the window, minimizing hides it there, Exit in its menu). `Automation.ps1`: starting with Windows (one `AndroidDC` value under the user's Run key, the launcher with `-Minimized`), the actions a rule can run, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone just plugged in from one already there, and the mutex that lets only one window run the rules. |
-| `README.md` | 9.3 KB | 2026-09-15 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
-| `CHANGELOG.md` | 9.5 KB | 2026-09-15 | What each release changed, starting with 1.0.0 and what the pre-release review fixed. The version is also `$appVersion` at the top of `androiddc.ps1`, and the log shows it at startup. |
+| `README.md` | 9.7 KB | 2026-09-15 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
+| `CHANGELOG.md` | 10 KB | 2026-09-15 | What each release changed, starting with 1.0.0 and what the pre-release review fixed. The version is also `$appVersion` at the top of `androiddc.ps1`, and the log shows it at startup. |
 | `docs\` | 9 pages | 2026-09-15 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
 | `assets\` | 10 files | 2026-09-10 | The logo: `androiddc.svg` (source), `wordmark.png` (README banner), `androiddc.ico` (window icon) and PNGs from 16 to 512 px. |
 | `LICENSE` | 12 KB | 2026-09-10 | Apache License 2.0 for AndroidDC itself. |
@@ -28,7 +30,7 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 | `gnirehtet-share.bat` | 118 B | 2026-09-07 | Launcher for the script above, adds `-PauseOnError` and forwards your arguments. |
 | `get-upstream.ps1` | 17 KB | 2026-09-11 | Downloads the two upstream packages below from the official GitHub releases, checks each archive against SHA256, unpacks it here and never touches the files above. `-OnlyMissing` fetches only what is absent - that is what the GUI runs when it finds a tool missing at startup. Also `-ScrcpyVersion` / `-GnirehtetVersion` / `-Destination` / `-Force` / `-SkipScrcpy` / `-SkipGnirehtet` / `-KeepArchives` / `-CacheFolder`. |
 | `get-upstream.bat` | 97 B | 2026-09-09 | Double-click launcher for the script above; passes any arguments straight through. |
-| `.github\` | 4 files | 2026-09-15 | CI. `workflows\check.yml` runs on every push and pull request: every `.ps1` parses, no variable is read before it is assigned (`audit-variables.ps1`), every control reaches the screen, every button has a handler and no control's name is reused (`audit-wiring.ps1`), both launchers point at a file that exists, Nova's own audit passes (`nova\tests\audit.ps1`), and no absolute developer path appears in a shipped file. `update-index.py` rewrites the numbers in this index. |
+| `.github\` | 4 files | 2026-09-15 | CI. `workflows\check.yml` runs on every push and pull request: every `.ps1` parses, no variable is read before it is assigned (`audit-variables.ps1`), every control reaches the screen, every button has a handler and no control's name is reused (`audit-wiring.ps1`), both launchers point at a file that exists, `start-menu.vbs` makes shortcuts to both and `start-menu-remove.vbs` removes the same two, Nova's own audit passes (`nova\tests\audit.ps1`), and no absolute developer path appears in a shipped file. `update-index.py` rewrites the numbers in this index. |
 | `tests\` | 15 files | 2026-09-15 | The test suite. `run.ps1` runs the real window off screen with a test spliced in, closes it normally and reads its report. Seven tests need no phone (automation - rules, arrivals and the start-up entry against test copies -, layout at both window sizes, the phone-screen pane, screenshots, the Files page's search hits and Compress, the Wi-Fi order, the busy strip, toggle marks, device watch and shortcuts) and six need one (audio, apps, root, logcat and the live shell, UTF-8, text arriving on the phone unchanged). How to run them: `tests\README.md`. |
 
 ## Reverse tethering (gnirehtet 2.5.1, upstream files)
@@ -85,7 +87,7 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
 3d6170dd68549c6f  avutil-60.dll
-da71a791eb9fdeca  CHANGELOG.md
+ae042f3a9883eab6  CHANGELOG.md
 e394873cd3e2cc3a  disconnected.png
 b5e5354ae222bd71  get-upstream.bat
 63f3fa6196d817aa  get-upstream.ps1
@@ -98,7 +100,7 @@ d5daefbb48143fbc  gnirehtet.exe
 9f125960b915c243  LICENSE
 01c12035bf35af37  LICENSE.txt
 843758795a84d0d0  open_a_terminal_here.bat
-aec34f3ac79a2d3a  README.md
+91dae5a06dc55986  README.md
 3ccda94c161f18ce  scrcpy-noconsole.vbs
 deacb991ed250971  scrcpy-server
 575ca1284345c7b3  scrcpy.exe

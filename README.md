@@ -63,6 +63,9 @@ device list. Every list also carries its own actions on the right mouse button.
    GitHub releases, checks each archive against SHA256 and unpacks it here. The binaries are
    deliberately not committed — they belong to their own projects.
 4. Double-click **`androiddc.vbs`** for the classic window, or **`androiddc-nova.vbs`** for Nova.
+5. Optional: double-click **`start-menu.vbs`** to put both in the Start menu, with the AndroidDC
+   icon. They appear under *All apps*; right-click one there and choose *Pin to Start* to keep
+   it on the first page. **`start-menu-remove.vbs`** takes them out again.
 
 If a tool turns out to be missing at startup, AndroidDC offers to fetch it for you and waits
 until the download is finished before opening.
@@ -91,6 +94,8 @@ until the download is finished before opening.
 | `androiddc.ps1` | The classic window. One PowerShell script, WinForms user interface |
 | `androiddc.vbs` | Starts the classic window without a console — **double-click it** |
 | `androiddc-nova.vbs` | Starts the Nova window without a console — **or double-click this one** |
+| `start-menu.vbs` | Adds both windows to the Start menu, with the AndroidDC icon |
+| `start-menu-remove.vbs` | Takes them out of the Start menu again |
 | `nova/` | The Nova window: WPF in PowerShell, one file per page, its theme, fonts and tests |
 | `shared/` | What both windows load: starting with Windows and the rules per phone |
 | `get-upstream.ps1` | Downloads and verifies scrcpy and gnirehtet |

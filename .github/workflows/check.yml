@@ -86,6 +86,19 @@ jobs:
             if (-not (Test-Path -LiteralPath $pair.Script)) { Write-Host "::error::$($pair.Script) is missing"; exit 1 }
             Write-Host "ok  $($pair.Vbs) -> $($pair.Script)"
           }
+          # the Start menu shortcuts point at both launchers by name
+          $menu = Get-Content -LiteralPath '.\start-menu.vbs' -Raw
+          foreach ($name in @('androiddc.vbs', 'androiddc-nova.vbs')) {
+            if ($menu -notmatch [regex]::Escape('"' + $name + '"')) { Write-Host "::error::start-menu.vbs does not make a shortcut to $name"; exit 1 }
+          }
+          Write-Host 'ok  start-menu.vbs -> both launchers'
+          # and its reverse removes the same two shortcuts it makes
+          $remove = Get-Content -LiteralPath '.\start-menu-remove.vbs' -Raw
+          if ($remove -notmatch [regex]::Escape('Array("AndroidDC", "AndroidDC Nova")') -or
+              $menu -notmatch [regex]::Escape('Array("AndroidDC", "AndroidDC Nova")')) {
+            Write-Host '::error::start-menu.vbs and start-menu-remove.vbs do not name the same two shortcuts'; exit 1
+          }
+          Write-Host 'ok  start-menu-remove.vbs removes what start-menu.vbs adds'
 
       - name: 'AndroidDC Nova: no function twice, XAML well-formed, names prefixed'
         shell: pwsh
