@@ -22,7 +22,11 @@
 #>
 
 [CmdletBinding()]
-param()
+param(
+    # started with Windows (Advanced > Automation): the window opens minimized,
+    # and a phone that is already plugged in runs its rule as if just plugged
+    [switch]$Minimized
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -40,6 +44,9 @@ $appVersion = '1.1.0'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
+
+# starting with Windows and the rules per phone, shared with the Nova window
+. (Join-Path $scriptRoot 'shared\Automation.ps1')
 
 $script:adbPath = $null
 $script:gnirehtetPath = $null
@@ -517,6 +524,11 @@ $tabTools.BackColor = [System.Drawing.SystemColors]::Control
 $tabTools.AutoScroll = $true
 $tabsAdvanced.TabPages.Add($tabTools)
 $tabsAdvanced.TabPages.Add($tabRoot)
+
+$tabAutomation = New-Object System.Windows.Forms.TabPage
+$tabAutomation.Text = 'Automation'
+$tabAutomation.BackColor = [System.Drawing.SystemColors]::Control
+$tabsAdvanced.TabPages.Add($tabAutomation)
 
 $tabApps = New-Object System.Windows.Forms.TabPage
 $tabApps.Text = 'Apps'
@@ -3553,6 +3565,141 @@ function Write-Log {
     $txtLog.ScrollToCaret()
 }
 
+# --- Advanced > Automation ---------------------------------------------------
+# Starting with Windows, and what happens when a given phone is plugged in. The
+# rules are kept in %APPDATA%\AndroidDC\automation.json and the start-up entry
+# under the user's Run key, both shared with the Nova window
+# (shared\Automation.ps1). Docked, not laid out by hand: the page is one list
+# and one checklist, and both simply take the room there is.
+$grpAutoRules = New-Object System.Windows.Forms.GroupBox
+$grpAutoRules.Text = 'When a phone is plugged in'
+$grpAutoRules.Dock = 'Fill'
+$tabAutomation.Controls.Add($grpAutoRules)
+
+# added after the Fill group, so it takes the top edge first
+$grpAutoStart = New-Object System.Windows.Forms.GroupBox
+$grpAutoStart.Text = 'Start with Windows'
+$grpAutoStart.Dock = 'Top'
+$grpAutoStart.Height = 56
+$tabAutomation.Controls.Add($grpAutoStart)
+
+$chkAutoStart = New-Object System.Windows.Forms.CheckBox
+$chkAutoStart.Text = 'Start minimized when I sign in, in the'
+$chkAutoStart.Location = New-Object System.Drawing.Point(12, 22)
+$chkAutoStart.Size = New-Object System.Drawing.Size(250, 24)
+$grpAutoStart.Controls.Add($chkAutoStart)
+$toolTip.SetToolTip($chkAutoStart, ('Adds AndroidDC to the programs that start when you sign in (your Run key). ' +
+    'The window opens minimized and runs the rules below for phones already plugged in.'))
+
+$rdoAutoClassic = New-Object System.Windows.Forms.RadioButton
+$rdoAutoClassic.Text = 'classic window'
+$rdoAutoClassic.Location = New-Object System.Drawing.Point(268, 22)
+$rdoAutoClassic.Size = New-Object System.Drawing.Size(120, 24)
+$rdoAutoClassic.Checked = $true
+$grpAutoStart.Controls.Add($rdoAutoClassic)
+
+$rdoAutoNova = New-Object System.Windows.Forms.RadioButton
+$rdoAutoNova.Text = 'Nova window'
+$rdoAutoNova.Location = New-Object System.Drawing.Point(392, 22)
+$rdoAutoNova.Size = New-Object System.Drawing.Size(110, 24)
+$grpAutoStart.Controls.Add($rdoAutoNova)
+
+$pnlAutoEdit = New-Object System.Windows.Forms.Panel
+$pnlAutoEdit.Dock = 'Fill'
+$pnlAutoEdit.Padding = New-Object System.Windows.Forms.Padding(10, 0, 0, 0)
+$grpAutoRules.Controls.Add($pnlAutoEdit)
+
+$pnlAutoList = New-Object System.Windows.Forms.Panel
+$pnlAutoList.Dock = 'Left'
+$pnlAutoList.Width = 330
+$grpAutoRules.Controls.Add($pnlAutoList)
+
+$lstAutoRules = New-Object System.Windows.Forms.ListView
+$lstAutoRules.Dock = 'Fill'
+$lstAutoRules.View = 'Details'
+$lstAutoRules.FullRowSelect = $true
+$lstAutoRules.HideSelection = $false
+$lstAutoRules.MultiSelect = $false
+$lstAutoRules.ShowItemToolTips = $true
+$null = $lstAutoRules.Columns.Add('On', 40)
+$null = $lstAutoRules.Columns.Add('Phone', 130)
+$null = $lstAutoRules.Columns.Add('Serial', 136)
+$pnlAutoList.Controls.Add($lstAutoRules)
+
+$pnlAutoButtons = New-Object System.Windows.Forms.Panel
+$pnlAutoButtons.Dock = 'Bottom'
+$pnlAutoButtons.Height = 34
+$pnlAutoList.Controls.Add($pnlAutoButtons)
+
+$btnAutoAdd = New-Object System.Windows.Forms.Button
+$btnAutoAdd.Text = 'Add the selected phone'
+$btnAutoAdd.Location = New-Object System.Drawing.Point(0, 5)
+$btnAutoAdd.Size = New-Object System.Drawing.Size(150, 26)
+$pnlAutoButtons.Controls.Add($btnAutoAdd)
+$toolTip.SetToolTip($btnAutoAdd, 'A rule for the phone selected in the device list')
+
+$btnAutoRun = New-Object System.Windows.Forms.Button
+$btnAutoRun.Text = 'Run now'
+$btnAutoRun.Location = New-Object System.Drawing.Point(156, 5)
+$btnAutoRun.Size = New-Object System.Drawing.Size(80, 26)
+$pnlAutoButtons.Controls.Add($btnAutoRun)
+$toolTip.SetToolTip($btnAutoRun, "Runs the rule's actions on its phone now, without plugging it in again")
+
+$btnAutoRemove = New-Object System.Windows.Forms.Button
+$btnAutoRemove.Text = 'Remove'
+$btnAutoRemove.Location = New-Object System.Drawing.Point(242, 5)
+$btnAutoRemove.Size = New-Object System.Drawing.Size(84, 26)
+$pnlAutoButtons.Controls.Add($btnAutoRemove)
+$toolTip.SetToolTip($btnAutoRemove, 'Removes the rule; the phone is not touched')
+
+$clbAutoActions = New-Object System.Windows.Forms.CheckedListBox
+$clbAutoActions.Dock = 'Fill'
+$clbAutoActions.CheckOnClick = $true
+$clbAutoActions.IntegralHeight = $false
+$pnlAutoEdit.Controls.Add($clbAutoActions)
+
+$pnlAutoTop = New-Object System.Windows.Forms.Panel
+$pnlAutoTop.Dock = 'Top'
+$pnlAutoTop.Height = 28
+$pnlAutoEdit.Controls.Add($pnlAutoTop)
+
+$lblAutoHint = New-Object System.Windows.Forms.Label
+$lblAutoHint.Dock = 'Fill'
+$lblAutoHint.TextAlign = 'MiddleLeft'
+$lblAutoHint.AutoEllipsis = $true
+$pnlAutoTop.Controls.Add($lblAutoHint)
+
+$chkAutoRuleOn = New-Object System.Windows.Forms.CheckBox
+$chkAutoRuleOn.Text = 'This rule is on'
+$chkAutoRuleOn.Dock = 'Left'
+$chkAutoRuleOn.Width = 130
+$pnlAutoTop.Controls.Add($chkAutoRuleOn)
+
+$pnlAutoApp = New-Object System.Windows.Forms.Panel
+$pnlAutoApp.Dock = 'Bottom'
+$pnlAutoApp.Height = 30
+$pnlAutoApp.Padding = New-Object System.Windows.Forms.Padding(0, 5, 0, 3)
+$pnlAutoEdit.Controls.Add($pnlAutoApp)
+
+$txtAutoApp = New-Object System.Windows.Forms.TextBox
+$txtAutoApp.Dock = 'Fill'
+$pnlAutoApp.Controls.Add($txtAutoApp)
+$toolTip.SetToolTip($txtAutoApp, 'For "Open an app": the package name, like com.whatsapp - the Apps tab lists them')
+
+$lblAutoApp = New-Object System.Windows.Forms.Label
+$lblAutoApp.Text = 'App package:'
+$lblAutoApp.Dock = 'Left'
+$lblAutoApp.Width = 90
+$lblAutoApp.TextAlign = 'MiddleLeft'
+$pnlAutoApp.Controls.Add($lblAutoApp)
+
+# one line per action, in the order a rule runs them; the ids say which is which
+$script:automationActionIds = @()
+foreach ($automationAction in @(Get-AutomationActionList)) {
+    $null = $clbAutoActions.Items.Add("$($automationAction.Group): $($automationAction.Label)")
+    $script:automationActionIds += $automationAction.Id
+}
+
 # ------------------------------------------------------------------ logic ----
 
 function Get-SelectedSerial {
@@ -3589,6 +3736,8 @@ function Update-DeviceList {
         $found = @(Get-AdbDevices)
         $script:deviceSignature = Get-DeviceSignature -Devices $found
         $script:devicesReadOnce = $true
+        # a phone that just became ready gets its rule queued (Advanced > Automation)
+        $null = Register-AutomationArrivals -Devices $found
         foreach ($device in $found) {
             $installed = '-'
             $release = '-'
@@ -10335,11 +10484,17 @@ function Write-Shell {
 # adb logcat never ends by itself, so it runs as a real process and its output
 # is drained on a timer. Nothing blocks the window, and Stop kills the process.
 
-# WM_SETREDRAW, so a burst of lines is painted once instead of line by line
+# WM_SETREDRAW, so a burst of lines is painted once instead of line by line.
+# IsWindowEnabled: the device watch waits while a question of this program is
+# open - a dialog or message box disables the window. Not Form.CanFocus: that
+# also asks IsWindowVisible, which is false for a window started from a hidden
+# process, and the watch then never ran.
 if (-not ('AndroidDcNative' -as [type])) {
     Add-Type -Namespace '' -Name 'AndroidDcNative' -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Auto)]
 public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")]
+public static extern bool IsWindowEnabled(IntPtr hWnd);
 '@
 }
 
@@ -10833,20 +10988,24 @@ $busyTimer.Add_Tick({ Update-BusyIndicator })
 
 # --- timer: a phone plugged in or pulled out ---------------------------------
 # The list only changed when Refresh was pressed. adb devices alone is cheap;
-# the list is read in full only when what it reports has changed. Not while
-# another window of this program is in front (a question is waiting there),
-# and not before the list has been read once at startup.
+# the list is read in full only when what it reports has changed. Not while a
+# question of this program is waiting (a dialog or message box disables the
+# window), and not before the list has been read once at startup. Minimized or
+# behind other windows it keeps watching: that is when a phone's rule is most
+# useful (Advanced > Automation).
 $deviceWatchTimer = New-Object System.Windows.Forms.Timer
 $deviceWatchTimer.Interval = 2500
 $deviceWatchTimer.Add_Tick({
     if ($script:busy -gt 0 -or -not $script:devicesReadOnce -or $script:logDrag) { return }
-    if ([System.Windows.Forms.Form]::ActiveForm -ne $form) { return }
+    if (-not [AndroidDcNative]::IsWindowEnabled($form.Handle)) { return }
     $deviceWatchTimer.Stop()
     try {
         if (Test-DeviceListChanged) {
             Write-Log 'The attached devices changed; reading the list again.' $colorStep
             Update-DeviceList
         }
+        Invoke-AutomationQueue -Enter { param($Serial) Enter-AutomationDevice -Serial $Serial } `
+            -Leave { param($State) Exit-AutomationDevice -State $State }
     } finally {
         $deviceWatchTimer.Start()
     }
@@ -11620,8 +11779,196 @@ $txtShellIn.Add_KeyDown({
     }
 })
 
+# ------------------------------------------------------------- automation ----
+
+$script:automationRules = @()
+$script:automationLoading = $false
+
+function Update-AutomationTab {
+    # the rules as the file has them now, and whether AndroidDC starts with Windows
+    $script:automationLoading = $true
+    try {
+        $keep = if ($lstAutoRules.SelectedItems.Count -gt 0) { "$($lstAutoRules.SelectedItems[0].Tag)" } else { '' }
+        $script:automationRules = @(Read-AutomationRules)
+        $problem = Get-AutomationReadError
+        if ($problem) { Write-Log "Automation: the rules file could not be read: $problem" $colorBad }
+        $lstAutoRules.BeginUpdate()
+        try {
+            $lstAutoRules.Items.Clear()
+            foreach ($rule in $script:automationRules) {
+                $item = New-Object System.Windows.Forms.ListViewItem($(if ($rule.Enabled) { 'on' } else { 'off' }))
+                $null = $item.SubItems.Add($rule.Name)
+                $null = $item.SubItems.Add($rule.Serial)
+                $item.Tag = $rule.Serial
+                $item.ToolTipText = Get-AutomationRuleSummary -Rule $rule
+                $null = $lstAutoRules.Items.Add($item)
+            }
+        } finally {
+            $lstAutoRules.EndUpdate()
+        }
+        foreach ($item in $lstAutoRules.Items) { if ("$($item.Tag)" -eq $keep) { $item.Selected = $true } }
+        if ($lstAutoRules.SelectedItems.Count -eq 0 -and $lstAutoRules.Items.Count -gt 0) { $lstAutoRules.Items[0].Selected = $true }
+
+        $startup = Get-AutomationStartup
+        $chkAutoStart.Checked = [bool]$startup
+        if ($startup -eq 'nova') { $rdoAutoNova.Checked = $true } elseif ($startup -eq 'classic') { $rdoAutoClassic.Checked = $true }
+    } finally {
+        $script:automationLoading = $false
+    }
+    Show-AutomationRule
+}
+
+function Get-AutomationSelectedRule {
+    if ($lstAutoRules.SelectedItems.Count -eq 0) { return $null }
+    return (Get-AutomationRule -Rules $script:automationRules -Serial "$($lstAutoRules.SelectedItems[0].Tag)")
+}
+
+function Show-AutomationRule {
+    # the selected rule's actions ticked; nothing to tick without a rule
+    $was = $script:automationLoading
+    $script:automationLoading = $true
+    try {
+        $rule = Get-AutomationSelectedRule
+        $ids = @()
+        $app = ''
+        if ($rule) {
+            foreach ($entry in @($rule.Actions)) {
+                $ids += $entry.Id
+                if ($entry.Id -eq 'app') { $app = $entry.Value }
+            }
+        }
+        for ($i = 0; $i -lt $clbAutoActions.Items.Count; $i++) {
+            $clbAutoActions.SetItemChecked($i, ($ids -contains $script:automationActionIds[$i]))
+        }
+        $txtAutoApp.Text = $app
+        $chkAutoRuleOn.Checked = ($null -ne $rule -and $rule.Enabled)
+        foreach ($control in @($clbAutoActions, $txtAutoApp, $chkAutoRuleOn, $btnAutoRun, $btnAutoRemove)) {
+            $control.Enabled = ($null -ne $rule)
+        }
+        $lblAutoHint.Text = if ($rule) { "$($rule.Name): " + (Get-AutomationRuleSummary -Rule $rule) } else {
+            'Select a phone in the device list, then "Add the selected phone".' }
+        $toolTip.SetToolTip($lblAutoHint, $lblAutoHint.Text)
+    } finally {
+        $script:automationLoading = $was
+    }
+}
+
+function Save-AutomationTabRule {
+    # ItemCheck comes before the tick changes, so the item being changed is passed in
+    param([int]$ChangedIndex = -1, [bool]$ChangedValue = $false)
+
+    if ($script:automationLoading) { return }
+    $rule = Get-AutomationSelectedRule
+    if (-not $rule) { return }
+
+    $actions = @()
+    for ($i = 0; $i -lt $clbAutoActions.Items.Count; $i++) {
+        $ticked = if ($i -eq $ChangedIndex) { $ChangedValue } else { $clbAutoActions.GetItemChecked($i) }
+        if (-not $ticked) { continue }
+        $id = $script:automationActionIds[$i]
+        $actions += [PSCustomObject]@{ Id = $id; Value = $(if ($id -eq 'app') { $txtAutoApp.Text.Trim() } else { '' }) }
+    }
+    $rule.Actions = $actions
+    $rule.Enabled = $chkAutoRuleOn.Checked
+    if (Save-AutomationRules -Rules $script:automationRules) {
+        $item = $lstAutoRules.SelectedItems[0]
+        $item.Text = if ($rule.Enabled) { 'on' } else { 'off' }
+        $item.ToolTipText = Get-AutomationRuleSummary -Rule $rule
+        $lblAutoHint.Text = "$($rule.Name): " + $item.ToolTipText
+        $toolTip.SetToolTip($lblAutoHint, $lblAutoHint.Text)
+    }
+}
+
+function Add-AutomationTabRule {
+    # a rule for the phone selected in the device list, or that phone's rule selected
+    $serial = Get-SelectedSerial
+    if (-not $serial) { Write-Log 'Select a device first.' $colorWarn; return }
+
+    $rules = @(Read-AutomationRules)
+    $problem = Get-AutomationReadError
+    if ($problem) { Write-Log "Automation: the rules file could not be read: $problem" $colorBad; return }
+    if (-not (Get-AutomationRule -Rules $rules -Serial $serial)) {
+        $model = $lstDevices.SelectedItems[0].SubItems[2].Text -replace '_', ' '
+        $name = if ($model -and $model -ne '-') { $model } else { $serial }
+        $rules += [PSCustomObject]@{ Serial = $serial; Name = $name; Enabled = $true; Actions = @() }
+        if (-not (Save-AutomationRules -Rules $rules)) { return }
+        Write-Log "Automation: a rule for $name ($serial). Tick what should happen when it is plugged in." $colorGood
+    }
+    Update-AutomationTab
+    foreach ($item in $lstAutoRules.Items) { $item.Selected = ("$($item.Tag)" -eq $serial) }
+}
+
+function Remove-AutomationTabRule {
+    $rule = Get-AutomationSelectedRule
+    if (-not $rule) { return }
+    $rules = @($script:automationRules | Where-Object { $_.Serial -ne $rule.Serial })
+    if (Save-AutomationRules -Rules $rules) { Write-Log "Automation: removed the rule for $($rule.Name)." $colorInfo }
+    Update-AutomationTab
+}
+
+function Invoke-AutomationTabRule {
+    $rule = Get-AutomationSelectedRule
+    if (-not $rule) { return }
+    if (@($rule.Actions).Count -eq 0) { Write-Log 'Automation: this rule has no actions yet.' $colorWarn; return }
+    if ($script:busy -gt 0) { Write-Log 'Wait for the running command to finish.' $colorWarn; return }
+    Invoke-AutomationRule -Rule $rule -Enter { param($Serial) Enter-AutomationDevice -Serial $Serial } `
+        -Leave { param($State) Exit-AutomationDevice -State $State }
+}
+
+function Set-AutomationTabStartup {
+    if ($script:automationLoading) { return }
+    $window = if (-not $chkAutoStart.Checked) { '' } elseif ($rdoAutoNova.Checked) { 'nova' } else { 'classic' }
+    if (-not (Set-AutomationStartup -Window $window)) {
+        # show what is really there, not what was asked for
+        $script:automationLoading = $true
+        $chkAutoStart.Checked = [bool](Get-AutomationStartup)
+        $script:automationLoading = $false
+    }
+}
+
+function Enter-AutomationDevice {
+    # selects the rule's phone so the actions act on it alone; $false when that
+    # phone is not ready in the list. Returns what Exit-AutomationDevice puts back.
+    param([string]$Serial)
+
+    $found = $false
+    foreach ($item in $lstDevices.Items) {
+        if ($item.Text -eq $Serial -and $item.SubItems[4].Text -eq 'device') { $found = $true }
+    }
+    if (-not $found) { return $false }
+    $state = [PSCustomObject]@{ All = $chkAll.Checked }
+    $chkAll.Checked = $false
+    foreach ($item in $lstDevices.Items) { $item.Selected = ($item.Text -eq $Serial) }
+    Wait-Pumped -Milliseconds 300
+    return $state
+}
+
+function Exit-AutomationDevice {
+    param($State)
+    if ($null -ne $State -and $State -isnot [bool]) { $chkAll.Checked = $State.All }
+}
+
+$lstAutoRules.Add_SelectedIndexChanged({ if (-not $script:automationLoading) { Show-AutomationRule } })
+$clbAutoActions.Add_ItemCheck({
+    param($sender, $eventArgs)
+    Save-AutomationTabRule -ChangedIndex $eventArgs.Index -ChangedValue ($eventArgs.NewValue -eq [System.Windows.Forms.CheckState]::Checked)
+})
+$chkAutoRuleOn.Add_CheckedChanged({ Save-AutomationTabRule })
+$txtAutoApp.Add_TextChanged({ Save-AutomationTabRule })
+$btnAutoAdd.Add_Click({ Add-AutomationTabRule })
+$btnAutoRemove.Add_Click({ Remove-AutomationTabRule })
+$btnAutoRun.Add_Click({ Invoke-AutomationTabRule })
+$chkAutoStart.Add_CheckedChanged({ Set-AutomationTabStartup })
+# the one that was picked; the one that was left calls too, and is not checked
+$rdoAutoClassic.Add_CheckedChanged({ if ($rdoAutoClassic.Checked -and $chkAutoStart.Checked) { Set-AutomationTabStartup } })
+$rdoAutoNova.Add_CheckedChanged({ if ($rdoAutoNova.Checked -and $chkAutoStart.Checked) { Set-AutomationTabStartup } })
+$tabsAdvanced.Add_SelectedIndexChanged({ if (Test-PageShown -Page $tabAutomation) { Update-AutomationTab } })
+$tabs.Add_SelectedIndexChanged({ if (Test-PageShown -Page $tabAutomation) { Update-AutomationTab } })
+
 $form.Add_FormClosing({
     Save-Settings
+    # the rules are free for the other window once this one is gone
+    Close-Automation
     if ($script:workRunspace) {
         try { $script:workRunspace.Close(); $script:workRunspace.Dispose() } catch { }
         $script:workRunspace = $null
@@ -11643,7 +11990,7 @@ $form.Add_Shown({
     Write-Log "adb:       $($script:adbPath)" $colorInfo
     Write-Log "gnirehtet: $($script:gnirehtetPath)" $colorInfo
     Write-Log ("scrcpy:    " + $(if ($script:scrcpyPath) { $script:scrcpyPath } else { 'not found' })) $colorInfo
-    $null = Invoke-Adb -CommandArguments @('start-server')
+    # laid out at its real size first: a minimized window has no size to lay out by
     try { $splitMain.SplitterDistance = [int]($form.ClientSize.Width * 0.32) } catch { }
     Convert-WindowToIcons
     Update-RightLayout
@@ -11651,6 +11998,9 @@ $form.Add_Shown({
     Update-ShellLayout
     Update-LogcatLayout
     Update-ToolsLayout
+    if ($Minimized) { $form.WindowState = 'Minimized' }
+    $null = Invoke-Adb -CommandArguments @('start-server')
+    Update-AutomationTab
     Update-DeviceList
 })
 
@@ -11694,6 +12044,7 @@ if (Test-Path -LiteralPath $localApk -PathType Leaf) {
 }
 
 Restore-Settings
+Initialize-Automation -ProjectRoot $scriptRoot -CountPresent ([bool]$Minimized)
 
 try {
     [void]$form.ShowDialog()

@@ -89,6 +89,10 @@ public class TestWindow {
 }
 
 $realSettings = Join-Path $env:APPDATA 'AndroidDC\settings.json'
+# the window inherits these: its rules, its start-with-Windows entry and its
+# claim to run rules are the test's own, never the user's
+$env:ANDROIDDC_RUN_KEY = 'HKCU:\Software\AndroidDC-tests\Run'
+$env:ANDROIDDC_AUTOMATION_MUTEX = 'Local\AndroidDC.Automation.tests'
 $program = Get-Content -LiteralPath $source -Raw
 $results = @()
 
@@ -108,6 +112,8 @@ foreach ($name in $Test) {
     $copy = Join-Path $output "run-$name.ps1"
 
     if (Test-Path -LiteralPath $report) { Remove-Item -LiteralPath $report -Force }
+    $env:ANDROIDDC_AUTOMATION_FILE = Join-Path $output "automation-$name.json"
+    if (Test-Path -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE) { Remove-Item -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE -Force }
     if (Test-Path -LiteralPath $realSettings) { Copy-Item -LiteralPath $realSettings -Destination $settings -Force }
     elseif (Test-Path -LiteralPath $settings) { Remove-Item -LiteralPath $settings -Force }
 

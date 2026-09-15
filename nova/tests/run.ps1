@@ -43,8 +43,15 @@ foreach ($name in $Test) {
     if ($available -notcontains $name) { throw "no test called '$name' - there are: $($available -join ', ')" }
 }
 
+# the program inherits these: its rules, its start-with-Windows entry and its
+# claim to run rules are the test's own, never the user's
+$env:ANDROIDDC_RUN_KEY = 'HKCU:\Software\AndroidDC-tests\Run'
+$env:ANDROIDDC_AUTOMATION_MUTEX = 'Local\AndroidDC.Automation.tests'
+
 $results = @()
 foreach ($name in $Test) {
+    $env:ANDROIDDC_AUTOMATION_FILE = Join-Path $work "automation-$name.json"
+    if (Test-Path -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE) { Remove-Item -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE -Force }
     $wrapper = Join-Path $work "run-$name.ps1"
     $common = (Join-Path $PSScriptRoot 'common.ps1').Replace("'", "''")
     $body = (Join-Path $PSScriptRoot "$name.ps1").Replace("'", "''")

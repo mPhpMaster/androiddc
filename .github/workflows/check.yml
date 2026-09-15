@@ -100,7 +100,7 @@ jobs:
           $targets = @('.\*.ps1', '.\.github\*.ps1', '.\.github\*.py', '.\tests\*.ps1', '.\tests\*.md',
             '.\*.vbs', '.\*.bat', '.\docs\*.md', '.\README.md',
             '.\nova\*.ps1', '.\nova\*.md', '.\nova\lib\*.ps1', '.\nova\pages\*.ps1', '.\nova\pages\*.xaml',
-            '.\nova\ui\*.xaml', '.\nova\tests\*.ps1')
+            '.\nova\ui\*.xaml', '.\nova\tests\*.ps1', '.\shared\*.ps1')
 
           # A check that reads no files passes exactly as quietly as a clean
           # tree, and SilentlyContinue hides a bad pattern the same way. So

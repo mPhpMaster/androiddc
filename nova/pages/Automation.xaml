@@ -1,0 +1,77 @@
+<!--
+  Automation: starting with Windows, and what happens when a given phone is
+  plugged in. Shared with the classic window through ..\shared\Automation.ps1.
+  Top: the start-up switch and which window. Below: the phones with a rule on
+  the left, what that phone's rule does on the right.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid.RowDefinitions>
+    <RowDefinition Height="Auto"/>
+    <RowDefinition Height="*"/>
+  </Grid.RowDefinitions>
+
+  <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+    <StackPanel>
+      <TextBlock Text="START WITH WINDOWS" Style="{StaticResource Caps}" Margin="0,0,0,8"/>
+      <WrapPanel>
+        <CheckBox x:Name="AutomationStartup" Content="Start minimized when I sign in to Windows" VerticalAlignment="Center" Margin="0,4,16,4"
+                  ToolTip="Adds AndroidDC to the programs that start when you sign in (your Run key). The window opens minimized and runs the rules below for phones already plugged in."/>
+        <Border Background="{StaticResource Surface}" CornerRadius="10" Padding="3" Margin="0,2,0,2">
+          <StackPanel Orientation="Horizontal">
+            <RadioButton x:Name="AutomationStartClassic" Style="{StaticResource Segment}" GroupName="AutomationStart" Content="Classic window"/>
+            <RadioButton x:Name="AutomationStartNova" Style="{StaticResource Segment}" GroupName="AutomationStart" Content="Nova window" IsChecked="True"/>
+          </StackPanel>
+        </Border>
+      </WrapPanel>
+    </StackPanel>
+  </Border>
+
+  <Border Grid.Row="1" Style="{StaticResource CardPanel}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="340"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <StackPanel Grid.ColumnSpan="2" Margin="0,0,0,10">
+        <TextBlock Text="WHEN A PHONE IS PLUGGED IN" Style="{StaticResource Caps}" Margin="0,0,0,3"/>
+        <TextBlock x:Name="AutomationHint" Style="{StaticResource MutedLine}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+      </StackPanel>
+
+      <DockPanel Grid.Row="1">
+        <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+          <Button x:Name="AutomationAdd" Style="{StaticResource Primary}" Content="Add the selected phone" Margin="0,4,8,0"
+                  ToolTip="A rule for the phone selected in the device list"/>
+          <Button x:Name="AutomationRun" Content="Run now" Margin="0,4,8,0"
+                  ToolTip="Runs the rule's actions on its phone now, without plugging it in again"/>
+          <Button x:Name="AutomationRemove" Content="Remove" Margin="0,4,8,0" ToolTip="Removes the rule; the phone is not touched"/>
+        </WrapPanel>
+        <ListView x:Name="AutomationRules" SelectionMode="Single">
+          <ListView.View>
+            <GridView>
+              <GridViewColumn Header="ON" Width="50" DisplayMemberBinding="{Binding On}"/>
+              <GridViewColumn Header="PHONE" Width="140" DisplayMemberBinding="{Binding Name}"/>
+              <GridViewColumn Header="SERIAL" Width="130" DisplayMemberBinding="{Binding Serial}"/>
+            </GridView>
+          </ListView.View>
+        </ListView>
+      </DockPanel>
+
+      <DockPanel Grid.Row="1" Grid.Column="1" Margin="16,0,0,0">
+        <CheckBox x:Name="AutomationEnabled" DockPanel.Dock="Top" Content="This rule is on" Margin="0,0,0,8"/>
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+          <TextBlock Text="App package, for Open an app" Style="{StaticResource FieldLabel}"/>
+          <TextBox x:Name="AutomationApp" ToolTip="The package name, like com.whatsapp - the Apps page lists them"/>
+        </StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel x:Name="AutomationActions"/>
+        </ScrollViewer>
+      </DockPanel>
+    </Grid>
+  </Border>
+</Grid>

@@ -308,6 +308,10 @@ function Update-DeviceList {
     $found = @(Get-AdbDevices)
     $script:deviceSignature = Get-DeviceSignature -Devices $found
     $script:devicesReadOnce = $true
+    # a phone that just became ready gets its rule queued (the Automation page)
+    if (Get-Command Register-AutomationArrivals -ErrorAction SilentlyContinue) {
+        $null = Register-AutomationArrivals -Devices $found
+    }
 
     $rows = @()
     foreach ($device in $found) {
@@ -810,6 +814,40 @@ function Invoke-WindowKey {
     return $false
 }
 
+# ------------------------------------------------------------ automation ----
+
+function Test-DialogOpen {
+    # one of this program's dialogs is on screen (a question is waiting there)
+    foreach ($other in $script:app.Windows) {
+        if (-not [object]::ReferenceEquals($other, $script:window) -and $other.IsVisible) { return $true }
+    }
+    return $false
+}
+
+function Enter-AutomationDevice {
+    # selects a rule's phone so the actions act on it alone; $false when that
+    # phone is not ready in the list. Returns what Exit-AutomationDevice puts back.
+    param([string]$Serial)
+
+    $target = $null
+    foreach ($row in $script:deviceRows) { if ($row.Serial -eq $Serial -and $row.State -eq 'device') { $target = $row } }
+    if ($null -eq $target) { return $false }
+    $state = [PSCustomObject]@{ All = [bool]$ui.AllDevices.IsChecked }
+    $ui.AllDevices.IsChecked = $false
+    $ui.DeviceList.SelectedItems.Clear()
+    $null = $ui.DeviceList.SelectedItems.Add($target)
+    Wait-Pumped -Milliseconds 300
+    return $state
+}
+
+function Exit-AutomationDevice {
+    param($State)
+    if ($null -ne $State -and $State -isnot [bool]) {
+        $ui.AllDevices.IsChecked = $State.All
+        Update-DeviceHeader
+    }
+}
+
 # ---------------------------------------------------------- shell events ----
 
 function Initialize-ShellEvents {
@@ -843,16 +881,22 @@ function Initialize-ShellEvents {
     $ui.DeviceList.Add_MouseDoubleClick({ $ui.DevicePickerToggle.IsChecked = $false })
 
     # the list follows the cable: adb devices is cheap, the full read happens
-    # only when what it reports has changed; not while a dialog is in front
+    # only when what it reports has changed. Not while one of this program's
+    # dialogs is open - but minimized or behind other windows it keeps watching,
+    # so a phone's rule runs when it is plugged in (the Automation page).
     $script:deviceWatchTimer = New-Object System.Windows.Threading.DispatcherTimer
     $script:deviceWatchTimer.Interval = [TimeSpan]::FromMilliseconds(2500)
     $script:deviceWatchTimer.Add_Tick({
-        if ($script:busy -gt 0 -or -not $script:devicesReadOnce -or -not $script:window.IsActive) { return }
+        if ($script:busy -gt 0 -or -not $script:devicesReadOnce -or (Test-DialogOpen)) { return }
         $script:deviceWatchTimer.Stop()
         try {
             if (Test-DeviceListChanged) {
                 Write-Log 'The attached devices changed; reading the list again.' $colorStep
                 Update-DeviceList
+            }
+            if (Get-Command Invoke-AutomationQueue -ErrorAction SilentlyContinue) {
+                Invoke-AutomationQueue -Enter { param($Serial) Enter-AutomationDevice -Serial $Serial } `
+                    -Leave { param($State) Exit-AutomationDevice -State $State }
             }
         } finally {
             $script:deviceWatchTimer.Start()
@@ -885,6 +929,8 @@ function Initialize-ShellEvents {
     $script:window.Add_Closing({
         foreach ($action in @($script:cleanups)) { try { & $action } catch { } }
         Save-Settings
+        # the rules are free for the other window once this one is gone
+        if (Get-Command Close-Automation -ErrorAction SilentlyContinue) { Close-Automation }
         foreach ($timer in @($script:busyTimer, $script:deviceWatchTimer, $script:deviceChangeTimer, $script:toastTimer)) {
             try { $timer.Stop() } catch { }
         }

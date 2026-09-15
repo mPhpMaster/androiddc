@@ -51,7 +51,10 @@ param(
     # the page registry - and its [string[]] type turned the registry into a
     # fixed-size array the first time a page was added.
     [Alias('Pages')]
-    [string[]]$PageNames
+    [string[]]$PageNames,
+    # started with Windows (the Automation page): the window opens minimized,
+    # and a phone that is already plugged in runs its rule as if just plugged
+    [switch]$Minimized
 )
 
 Set-StrictMode -Version Latest
@@ -65,6 +68,10 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . (Join-Path $scriptRoot 'lib\Core.ps1')
 . (Join-Path $scriptRoot 'lib\Ui.ps1')
+# starting with Windows and the rules per phone, shared with the classic window;
+# Nova on its own, without the project folder, simply has no Automation page
+$automationScript = Join-Path $script:toolsRoot 'shared\Automation.ps1'
+if (Test-Path -LiteralPath $automationScript -PathType Leaf) { . $automationScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen
@@ -74,7 +81,7 @@ Initialize-Ui
 # The pages, in the order the side navigation lists them within each section.
 # A page that is not written yet is simply not there.
 foreach ($pageName in @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Media',
-        'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell')) {
+        'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation')) {
     # "-Pages a,b" through -File arrives as one string
     $onlyPages = @($PageNames | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     if ($onlyPages.Count -gt 0 -and $onlyPages -notcontains $pageName) { continue }
@@ -114,6 +121,9 @@ if (Test-Path -LiteralPath $localApk -PathType Leaf) { $env:GNIREHTET_APK = (Res
 
 Restore-Settings
 Set-LogFolded -Folded $script:logFolded
+if (Get-Command Initialize-Automation -ErrorAction SilentlyContinue) {
+    Initialize-Automation -ProjectRoot $script:toolsRoot -CountPresent ([bool]$Minimized)
+}
 
 if ($OffScreen) {
     $script:window.WindowStartupLocation = 'Manual'
@@ -127,6 +137,8 @@ $script:started = $false
 $script:window.Add_ContentRendered({
     if ($script:started) { return }
     $script:started = $true
+    # after the first render, not before: a window shown minimized may never render
+    if ($Minimized) { $script:window.WindowState = 'Minimized' }
 
     Write-Log "$($script:appName) $($script:appVersion)" $colorInfo
     Write-Log "adb:       $($script:adbPath)" $colorInfo

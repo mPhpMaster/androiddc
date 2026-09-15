@@ -24,7 +24,11 @@ does the reverse. If a tool is missing, the program offers to fetch it with the 
 
 * **Side navigation** - the pages, grouped: *Workspace* (Overview, Screen, Mirroring, Apps,
   Files, Camera & mic), *Personal* (Messages, Contacts), *Connect* (Tethering, Radios) and
-  *System* (Tools, Running, Users, Shell). `Ctrl`+`1`...`9` open the first nine.
+  *System* (Tools, Running, Users, Shell, Automation). `Ctrl`+`1`...`9` open the first nine.
+* **Automation** - start with Windows, minimized, and what a given phone does each time it is
+  plugged in. The rules and the start-up entry are the classic window's too
+  (`..\shared\Automation.ps1`, `%APPDATA%\AndroidDC\automation.json`); see the user guide's
+  *Advanced > Automation*.
 * **Device card** - the phone the pages act on, its battery, signal and screen. Click the name
   to pick another, or several with `Ctrl`/`Shift`. The list follows the cable by itself.
 * **Activity log** - every step, colour coded; drag its top edge, or fold it away. Above it, the
@@ -45,6 +49,7 @@ window's `settings.json`, so switching never mixes them.
 | `ui\Theme.xaml` | Every colour, font and control style |
 | `ui\Shell.xaml` | The window around the pages |
 | `pages\` | One page each: `<Page>.ps1` and `<Page>.xaml` |
+| `..\shared\Automation.ps1` | Start with Windows and the rules per phone, loaded by both windows |
 | `tests\` | `run.ps1` runs the real program off screen with a test inside; `audit.ps1` checks the files without starting it |
 | `CONTRACT.md` | How a page is built, and which page owns what |
 | `fonts\` | The design's typefaces from Google Fonts, under the SIL Open Font License (`OFL-*.txt`): DM Sans 400 / 500 / 600 for text, Space Grotesk 500 / 600 / 700 for titles. Without the folder, Segoe UI takes their place |

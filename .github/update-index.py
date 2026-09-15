@@ -71,7 +71,7 @@ def newest_date(folder):
     return datetime.date.fromtimestamp(max(stamps)).isoformat() if stamps else None
 
 
-for folder in ('docs', 'assets', '.github', 'tests', 'nova'):
+for folder in ('docs', 'assets', '.github', 'tests', 'nova', 'shared'):
     date = newest_date(folder)
     if date:
         s = re.sub(r'(\| `' + re.escape(folder) + r'\\?` \| [^|]+ \| )[0-9]{4}-[0-9]{2}-[0-9]{2}( \|)',
@@ -79,7 +79,7 @@ for folder in ('docs', 'assets', '.github', 'tests', 'nova'):
 
 docs_count = len([f for f in os.listdir(os.path.join(root, 'docs')) if f.endswith('.md')])
 s = re.sub(r'(\| `docs\\?` \| )[0-9]+ pages', lambda m: '%s%d pages' % (m.group(1), docs_count), s)
-for folder, recursive in (('assets', False), ('.github', True), ('tests', False), ('nova', True)):
+for folder, recursive in (('assets', False), ('.github', True), ('tests', False), ('nova', True), ('shared', False)):
     count = files_in(folder, recursive)
     s = re.sub(r'(\| `' + re.escape(folder) + r'\\?` \| )[0-9]+ files', lambda m: '%s%d files' % (m.group(1), count), s)
 

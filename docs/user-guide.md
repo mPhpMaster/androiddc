@@ -115,7 +115,7 @@ The opposite direction, for when the PC has no internet.
 
 ## Advanced
 
-Four inner pages holding everything you do not need every day.
+Five inner pages holding everything you do not need every day.
 
 ### Mirroring (scrcpy)
 
@@ -186,6 +186,43 @@ so after either one the page waits for the phone to come back and reads it again
 
 scrcpy's `--v4l2-sink` is Linux only and is not in the Windows build at all, so it has a note
 there instead of a dead button.
+
+### Automation
+
+Two things that happen without a click. Nova has the same page, under *System*, and the two
+windows share both.
+
+**Start with Windows.** Tick *Start minimized when I sign in* and pick the classic window or
+Nova. That writes one value, `AndroidDC`, under your own Run key
+(`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`): the launcher with `-Minimized`. Untick
+it and that value is removed; nothing else there is touched.
+
+**When a phone is plugged in.** Select the phone in the device list and press *Add the selected
+phone*. Then tick what should happen each time that phone is plugged in:
+
+| Group | Actions |
+|---|---|
+| Screen | wake the screen, mirror it (with the Mirroring page's options), back or front camera, the phone's sound on the PC, a screenshot to Pictures |
+| Internet | share the phone's internet with the PC (USB tethering on) or turn it off, share the PC's internet with the phone (gnirehtet), the adb proxy, the Wi-Fi hotspot on or off, adb over Wi-Fi |
+| Radios | Wi-Fi, Bluetooth, NFC - on or off |
+| Settings | stay awake while charging, auto-rotate, location, battery saver - on or off |
+| Other | open an app (type its package name, e.g. `com.whatsapp`), vibrate, start logcat, a Windows notification |
+
+* The ticks are saved at once to `%APPDATA%\AndroidDC\automation.json`.
+* The actions run one after another, in the order of the list, on that phone alone. The other
+  phones stay as they were, and so does *All devices*.
+* *Wake the screen* comes first on purpose. Many phones refuse to switch USB tethering or the
+  hotspot from adb, and AndroidDC then taps the switch in the phone's settings. That needs the
+  screen on and the phone unlocked.
+* A failing action is logged, and the ones after it still run.
+* *This rule is on* pauses a rule without losing its ticks. *Run now* runs it straight away, to
+  try it. *Remove* deletes the rule; the phone itself is not touched.
+* A rule runs when its phone becomes ready: plugged in, or its RSA prompt accepted. A window
+  that was started with Windows also runs the rules for phones already plugged in. A window you
+  open yourself does not, and neither does the one the other window's switch button opens.
+* Only one window runs the rules, the first one open, so a phone is never served twice.
+* The device list keeps following the cable while the window is minimized. It stops while one
+  of AndroidDC's own questions is waiting.
 
 ---
 

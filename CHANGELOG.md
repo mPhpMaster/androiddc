@@ -2,6 +2,32 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### Automation, in both windows
+
+* **Start with Windows**: AndroidDC can start when you sign in, minimized, in the classic window
+  or in Nova. It is one value under your own Run key (`HKCU\...\Run`, named `AndroidDC`),
+  pointing at the launcher with `-Minimized`; switching it off removes that value and nothing
+  else.
+* **Rules per phone**: pick a phone, switch on what should happen when it is plugged in - share
+  the phone's internet with the PC (USB tethering), share the PC's with the phone, the adb
+  proxy, the hotspot, adb over Wi-Fi, mirroring, a camera, the phone's sound, a screenshot,
+  waking the screen, Wi-Fi / Bluetooth / NFC, stay awake, auto-rotate, location, battery saver,
+  vibrate, open an app, logcat, a Windows notification. The actions run in that order, on that
+  phone only, one after another, and **Run now** tries a rule without unplugging.
+* The rules are kept in `%APPDATA%\AndroidDC\automation.json` and written at once, so both
+  windows see the same rules. Only one window runs them at a time. A window opened by hand, or
+  by the other window's switch button, does not run the rules again for phones that were
+  already plugged in; a window started with Windows does.
+* Classic: **Advanced > Automation**. Nova: the **Automation** page under System.
+* The device list now follows the cable while the window is minimized or behind other windows
+  too - still not while one of its own questions is waiting.
+* Both launchers pass their arguments on to the script.
+* `tests/automation.ps1` and `nova/tests/automation.ps1`: the rules file (a one-rule list stays a
+  list, a broken file is not overwritten), plugged in versus already there, the start-up entry
+  against a test key - the real Run key and rules are never touched.
+
 ## 1.1.0
 
 ### A second window: Nova

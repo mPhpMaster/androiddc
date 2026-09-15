@@ -29,13 +29,18 @@ Each window has a button that closes it and opens the other: **Open Nova window*
 classic *Device* tab, **Classic window** at the bottom of Nova's side navigation. They share
 the same adb, scrcpy and gnirehtet, and keep their settings apart.
 
+Both can **start with Windows**, minimized, and both run the same **rules per phone**: plug a
+chosen phone in and AndroidDC does what you picked for it - share the phone's internet with the
+PC, mirror the screen, turn Wi-Fi off, open an app, and more. Classic: *Advanced > Automation*;
+Nova: the *Automation* page.
+
 ## What is in it
 
 | Tab | What it does |
 |---|---|
 | **Device** | Details of the selected phone, live screenshot with click-to-tap, quick toggles (Wi-Fi, Bluetooth, location, rotation, torch, battery saver, haptics, show taps, stay awake, developer options), call / SMS / USSD, and one-click mirroring |
 | **Tethering** | PC → phone with [gnirehtet](https://github.com/Genymobile/gnirehtet) (reverse tethering), and phone → PC over USB or a proxy |
-| **Advanced** | Four pages: every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, input modes), more of them (recording format and time limit, orientation, window placement, shortcut keys), the adb tools (wireless pairing, mDNS discovery, bug report, private DNS, IME, hotspot), and a Root / recovery page that shows what your device cannot do and says why |
+| **Advanced** | Five pages: every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, input modes), more of them (recording format and time limit, orientation, window placement, shortcut keys), the adb tools (wireless pairing, mDNS discovery, bug report, private DNS, IME, hotspot), a Root / recovery page that shows what your device cannot do and says why, and Automation (start with Windows, and what each phone does when it is plugged in) |
 | **Apps** | What is installed, by name as well as package, launch, force stop, uninstall, open in its own scrcpy window, and install `.apk` or a split `.xapk` / `.apks` / `.apkm` |
 | **Contacts / SMS** | Read, add, edit, delete, call, send |
 | **Cam / Mic** | Front and rear camera as a video source with zoom, and the phone microphone or output streamed or recorded on the PC, with the codec, encoder and bit rate read from the phone |
@@ -85,6 +90,7 @@ until the download is finished before opening.
 | `androiddc.vbs` | Starts the classic window without a console — **double-click it** |
 | `androiddc-nova.vbs` | Starts the Nova window without a console — **or double-click this one** |
 | `nova/` | The Nova window: WPF in PowerShell, one file per page, its theme, fonts and tests |
+| `shared/` | What both windows load: starting with Windows and the rules per phone |
 | `get-upstream.ps1` | Downloads and verifies scrcpy and gnirehtet |
 | `get-upstream.bat` | Double-click wrapper for the above |
 | `gnirehtet-share.ps1` | Reverse tethering from the command line, without the window |
@@ -95,7 +101,8 @@ until the download is finished before opening.
 | `tests/` | Tests that run the real window, with or without a phone |
 
 Settings live in `%APPDATA%\AndroidDC\settings.json` for the classic window and
-`nova-settings.json` next to it for Nova, outside the repository.
+`nova-settings.json` next to it for Nova, outside the repository. The rules per phone are
+`automation.json` in the same folder, read and written by both.
 
 ## Known limits
 
