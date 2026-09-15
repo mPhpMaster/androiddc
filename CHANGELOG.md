@@ -2,7 +2,7 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.2.2
 
 * **`start-menu.vbs`** puts both windows in the Start menu: *AndroidDC* and *AndroidDC Nova*,
   with the AndroidDC icon, under *All apps*. Windows keeps *Pin to Start* for the user, so the
