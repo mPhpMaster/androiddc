@@ -186,6 +186,19 @@ $saved = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
 Say ("  saved {0}x{1} at {2},{3}   {4}" -f $saved.WindowWidth, $saved.WindowHeight, $saved.WindowLeft, $saved.WindowTop,
     (Mark ($saved.WindowWidth -eq 1240 -and $saved.WindowHeight -eq 780 -and $saved.WindowLeft -eq 60 -and $saved.WindowTop -eq 40)))
 Say ("  and whether it was maximized   {0}" -f (Mark ($null -ne $saved.WindowMaximized)))
+# and read back: the window takes that size and place again
+$form.Bounds = New-Object System.Drawing.Rectangle 0, 0, 1300, 820
+Restore-Settings
+Say ("  reopened at {0}x{1}   {2}" -f $form.Width, $form.Height,
+    (Mark ($form.Width -eq 1240 -and $form.Height -eq 780)))
+# a place on a screen this PC does not have is refused, not obeyed
+$saved.WindowLeft = -30000
+$saved.WindowTop = -30000
+$saved | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+$form.Bounds = New-Object System.Drawing.Rectangle 100, 100, 1300, 820
+Restore-Settings
+Say ("  a place off every screen is refused: still at {0},{1}   {2}" -f $form.Left, $form.Top,
+    (Mark ($form.Left -eq 100 -and $form.Top -eq 100)))
 $form.Location = New-Object System.Drawing.Point(-2400, -2000)
 
 Say ''
