@@ -62,7 +62,8 @@ function Invoke-LayoutAudit {
     foreach ($entry in $containers) {
         $path = $entry[0]
         $box = $entry[1]
-        $kids = @($box.Controls)
+        # a list's empty-state line sits on the list on purpose (Tag listhint)
+        $kids = @($box.Controls | Where-Object { "$($_.Tag)" -ne 'listhint' })
         for ($i = 0; $i -lt $kids.Count; $i++) {
             for ($j = $i + 1; $j -lt $kids.Count; $j++) {
                 # a docked control legitimately covers the whole client area

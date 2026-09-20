@@ -421,7 +421,8 @@ $null = $lstDevices.Columns.Add('Link', 55)
 $null = $lstDevices.Columns.Add('Model', 150)
 $null = $lstDevices.Columns.Add('Android', 70)
 $null = $lstDevices.Columns.Add('State', 85)
-$null = $lstDevices.Columns.Add('Client', 70)
+# not "Client": the word said nothing. The column is about one app
+$null = $lstDevices.Columns.Add('gnirehtet', 70)
 $grpDevices.Controls.Add($lstDevices)
 
 $btnRefresh = New-Object System.Windows.Forms.Button
@@ -484,13 +485,13 @@ $tabsTethering.Dock = 'Fill'
 $tabTethering.Controls.Add($tabsTethering)
 
 $tabShare = New-Object System.Windows.Forms.TabPage
-$tabShare.Text = 'PC -> Phone (gnirehtet)'
+$tabShare.Text = 'PC -> Phone'
 $tabShare.BackColor = [System.Drawing.SystemColors]::Control
 $tabShare.AutoScroll = $true
 $tabsTethering.TabPages.Add($tabShare)
 
 $tabTether = New-Object System.Windows.Forms.TabPage
-$tabTether.Text = 'Phone -> PC (tether / proxy)'
+$tabTether.Text = 'Phone -> PC'
 $tabTether.BackColor = [System.Drawing.SystemColors]::Control
 $tabTether.AutoScroll = $true
 $tabsTethering.TabPages.Add($tabTether)
@@ -505,13 +506,13 @@ $tabsAdvanced.Dock = 'Fill'
 $tabAdvanced.Controls.Add($tabsAdvanced)
 
 $tabScrcpy = New-Object System.Windows.Forms.TabPage
-$tabScrcpy.Text = 'Mirroring (scrcpy)'
+$tabScrcpy.Text = 'Mirroring'
 $tabScrcpy.BackColor = [System.Drawing.SystemColors]::Control
 $tabScrcpy.AutoScroll = $true
 $tabsAdvanced.TabPages.Add($tabScrcpy)
 
 $tabMore = New-Object System.Windows.Forms.TabPage
-$tabMore.Text = 'More scrcpy options'
+$tabMore.Text = 'More options'
 $tabMore.BackColor = [System.Drawing.SystemColors]::Control
 $tabMore.AutoScroll = $true
 $tabsAdvanced.TabPages.Add($tabMore)
@@ -522,7 +523,7 @@ $tabRoot.BackColor = [System.Drawing.SystemColors]::Control
 $tabRoot.AutoScroll = $true
 
 $tabTools = New-Object System.Windows.Forms.TabPage
-$tabTools.Text = 'Device tools (adb)'
+$tabTools.Text = 'Device tools'
 $tabTools.BackColor = [System.Drawing.SystemColors]::Control
 $tabTools.AutoScroll = $true
 $tabsAdvanced.TabPages.Add($tabTools)
@@ -705,6 +706,9 @@ $txtDeviceInfo.BackColor = [System.Drawing.Color]::FromArgb(250, 250, 250)
 $txtDeviceInfo.Font = New-Object System.Drawing.Font('Consolas', 9)
 $txtDeviceInfo.Location = New-Object System.Drawing.Point(14, 46)
 $txtDeviceInfo.Size = New-Object System.Drawing.Size(820, 240)
+# a big empty box says nothing about what fills it
+$txtDeviceInfo.Text = 'Press "Load details + screenshot", or double-click the phone in the list above.'
+$txtDeviceInfo.ForeColor = [System.Drawing.Color]::FromArgb(120, 120, 120)
 $tabDevice.Controls.Add($txtDeviceInfo)
 
 # --- tab 1: gnirehtet --------------------------------------------------------
@@ -1955,6 +1959,12 @@ $grpConnect = New-Object System.Windows.Forms.GroupBox
 $grpConnect.Text = 'Connection'
 $tabTools.Controls.Add($grpConnect)
 
+# The Connection box had twelve controls in it and read as a wall. The three
+# that are only reached for when something is stuck have their own box now.
+$grpUnstick = New-Object System.Windows.Forms.GroupBox
+$grpUnstick.Text = 'When something is stuck'
+$tabTools.Controls.Add($grpUnstick)
+
 $grpDeviceActions = New-Object System.Windows.Forms.GroupBox
 $grpDeviceActions.Text = 'This device'
 $tabTools.Controls.Add($grpDeviceActions)
@@ -1973,7 +1983,8 @@ $tabTools.Controls.Add($grpHotspotBox)
 
 foreach ($entry in @(
         @($grpConnect, @($btnPair, $btnMdns, $btnReconnect, $btnBugReport, $btnTcpip, $txtConnect,
-            $btnConnect, $btnDisconnect, $btnRestartServer, $btnReverseList, $btnKillRelays, $btnRepairTunnel)),
+            $btnConnect, $btnDisconnect, $btnRestartServer)),
+        @($grpUnstick, @($btnReverseList, $btnKillRelays, $btnRepairTunnel)),
         @($grpDeviceActions, @($btnInstallApk, $btnScreenshot, $btnScreenToggle, $btnReboot, $btnBattery)),
         @($grpDnsBox, @($lblDns, $cmbDnsMode, $txtDnsHost, $btnDnsRead, $btnDnsAdGuard, $btnDnsApply, $txtDnsState)),
         @($grpImeBox, @($lblIme, $cmbIme, $btnImeList, $btnImeDisable, $btnImeEnable, $btnImeDefault,
@@ -3492,6 +3503,18 @@ $splitMain.Panel2.Controls.Add($btnSaveLog)
 # The log took a fixed share of the height, and at the smallest window that
 # left the Files list about 40 px - not one row. It can now be dragged taller
 # or shorter by the bar above its buttons, or folded away.
+# The log holds everything the program did, and there was no way to look
+# through it. This box shows only the lines that hold what is typed; the lines
+# themselves are kept, so clearing the box brings them all back.
+$txtLogFind = New-Object System.Windows.Forms.TextBox
+$splitMain.Panel2.Controls.Add($txtLogFind)
+$toolTip.SetToolTip($txtLogFind, 'Shows only the log lines holding this text. Empty shows everything again.')
+
+$lblLogFind = New-Object System.Windows.Forms.Label
+$lblLogFind.Text = 'Find:'
+$lblLogFind.TextAlign = 'MiddleRight'
+$splitMain.Panel2.Controls.Add($lblLogFind)
+
 $btnLogFold = New-Object System.Windows.Forms.Button
 $btnLogFold.Text = [char]0x25BC
 $btnLogFold.Font = New-Object System.Drawing.Font('Segoe UI', 7)
@@ -3556,20 +3579,64 @@ $colorGood = [System.Drawing.Color]::FromArgb(126, 211, 33)
 $colorWarn = [System.Drawing.Color]::FromArgb(240, 173, 78)
 $colorBad = [System.Drawing.Color]::FromArgb(232, 96, 96)
 
+# Every line the program has written this session, so the find box can show a
+# few of them and then give all of them back. Capped, like the box itself.
+$script:logLines = New-Object System.Collections.Generic.List[object]
+
+function Add-LogLineToBox {
+    param([string]$Stamp, [string]$Text, [System.Drawing.Color]$Color)
+
+    $txtLog.SelectionStart = $txtLog.TextLength
+    $txtLog.SelectionLength = 0
+    $txtLog.SelectionColor = $Color
+    $txtLog.AppendText($Stamp + '  ' + $Text + [Environment]::NewLine)
+    $txtLog.SelectionColor = $txtLog.ForeColor
+}
+
+function Test-LogLineShown {
+    param([string]$Text)
+
+    $find = ''
+    if ($txtLogFind) { $find = $txtLogFind.Text.Trim() }
+    if (-not $find) { return $true }
+    return ($Text.IndexOf($find, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+}
+
+function Clear-Log {
+    # the lines as well as the box: otherwise the find box would bring back
+    # everything a moment after it was cleared
+    $script:logLines.Clear()
+    $txtLog.Clear()
+}
+
+function Update-LogView {
+    # the box built again from the lines that match what is typed
+    $txtLog.SuspendLayout()
+    try {
+        $txtLog.Clear()
+        foreach ($line in $script:logLines) {
+            if (Test-LogLineShown -Text $line.Text) { Add-LogLineToBox -Stamp $line.Stamp -Text $line.Text -Color $line.Color }
+        }
+    } finally {
+        $txtLog.ResumeLayout()
+    }
+    $txtLog.ScrollToCaret()
+}
+
 function Write-Log {
     param(
         [string]$Message,
         [System.Drawing.Color]$Color = [System.Drawing.Color]::Gainsboro
     )
 
+    $stamp = Get-Date -Format 'HH:mm:ss'
     foreach ($line in ($Message -split "`r?`n")) {
         if ($line.Trim() -eq '') { continue }
-        $txtLog.SelectionStart = $txtLog.TextLength
-        $txtLog.SelectionLength = 0
-        $txtLog.SelectionColor = $Color
-        $txtLog.AppendText((Get-Date -Format 'HH:mm:ss') + '  ' + $line + [Environment]::NewLine)
+        $script:logLines.Add([PSCustomObject]@{ Stamp = $stamp; Text = $line; Color = $Color })
+        # the oldest go first, so a long session cannot grow without end
+        while ($script:logLines.Count -gt 3000) { $script:logLines.RemoveAt(0) }
+        if (Test-LogLineShown -Text $line) { Add-LogLineToBox -Stamp $stamp -Text $line -Color $Color }
     }
-    $txtLog.SelectionColor = $txtLog.ForeColor
     $txtLog.ScrollToCaret()
 }
 
@@ -3844,6 +3911,44 @@ $btnBackupOpenFolder.Size = New-Object System.Drawing.Size(110, 26)
 $pnlBackupButtons.Controls.Add($btnBackupOpenFolder)
 $toolTip.SetToolTip($btnBackupOpenFolder, 'Opens the backup folder in Explorer')
 
+# --- what an empty list says --------------------------------------------------
+# A list that has never been read looks exactly like a list with nothing in it,
+# and both look like a program that did nothing. Each one gets a line over it,
+# shown only while it is empty, saying which button fills it. The line sits on
+# the list on purpose, so the layout audit is told to expect it (Tag).
+$script:listHints = @()
+# where the log's find box begins, so the busy strip can stop short of it
+$script:logFindLeft = 0
+
+function Add-ListHint {
+    param($List, [string]$Text)
+
+    $label = New-Object System.Windows.Forms.Label
+    $label.Text = $Text
+    $label.TextAlign = 'MiddleCenter'
+    $label.ForeColor = [System.Drawing.Color]::FromArgb(120, 120, 120)
+    $label.AutoSize = $false
+    $label.Visible = $false
+    $label.Tag = 'listhint'
+    $List.Parent.Controls.Add($label)
+    $script:listHints += [PSCustomObject]@{ List = $List; Label = $label }
+}
+
+function Update-ListHints {
+    foreach ($hint in $script:listHints) {
+        $list = $hint.List
+        $label = $hint.Label
+        $show = ($list.Items.Count -eq 0 -and $list.Visible)
+        if ($label.Visible -ne $show) { $label.Visible = $show }
+        if (-not $show) { continue }
+        $box = $list.Bounds
+        if ($box.Width -lt 80 -or $box.Height -lt 40) { continue }
+        $label.SetBounds(($box.X + 8), ($box.Y + [Math]::Max(8, [int]($box.Height / 2) - 18)),
+            ($box.Width - 16), 36)
+        $label.BringToFront()
+    }
+}
+
 # ------------------------------------------------------------------ logic ----
 
 function Get-SelectedSerial {
@@ -3878,6 +3983,7 @@ function Update-DeviceList {
     try {
         $lstDevices.Items.Clear()
         $found = @(Get-AdbDevices)
+        $readIndex = 0
         $script:deviceSignature = Get-DeviceSignature -Devices $found
         $script:devicesReadOnce = $true
         # a phone that just became ready gets its rule queued (Advanced > Automation)
@@ -3886,6 +3992,9 @@ function Update-DeviceList {
             $installed = '-'
             $release = '-'
             if ($device.State -eq 'device') {
+                # the strip says which phone of how many, not just "working"
+                $readIndex++
+                if ($found.Count -gt 1) { $script:busyWhat = "reading phone $readIndex of $($found.Count)" }
                 $check = Invoke-DeviceShell -Serial $device.Serial -CommandArguments @('pm', 'list', 'packages', $packageName)
                 $installed = if ($check.Text -match [regex]::Escape("package:$packageName")) { 'yes' } else { 'no' }
                 $release = (Invoke-DeviceShell -Serial $device.Serial -CommandArguments @('getprop', 'ro.build.version.release')).Text.Trim()
@@ -5082,6 +5191,7 @@ function Show-DeviceTab {
     if (-not $serial) { return }
 
     $tabs.SelectedTab = $tabDevice
+    $txtDeviceInfo.ForeColor = [System.Drawing.Color]::Black
     $txtDeviceInfo.Text = "reading $serial ..."
     $form.Refresh()
 
@@ -9223,14 +9333,18 @@ function Update-ToolsLayout {
     $grow = $next - 54
     $txtConnect.SetBounds(12, (56 + $grow), 180, 24)
     $null = Set-ButtonRowLeft -Left 200 -Top (54 + $grow) -Buttons @($btnConnect, $btnDisconnect, $btnRestartServer)
-    $null = Set-ButtonRowLeft -Left 12 -Top (90 + $grow) -Buttons @($btnReverseList, $btnKillRelays, $btnRepairTunnel)
-    $grpConnect.SetBounds(12, 6, $inner, (130 + $grow))
+    $grpConnect.SetBounds(12, 6, $inner, (96 + $grow))
 
-    $grpDeviceActions.SetBounds(12, (142 + $grow), $inner, 62)
+    # the three that are only reached for when something is stuck sit in their
+    # own group: the Connection group had twelve controls and read as a wall
+    $grpUnstick.SetBounds(12, (108 + $grow), $inner, 62)
+    $null = Set-ButtonRowLeft -Left 12 -Top 24 -Buttons @($btnReverseList, $btnKillRelays, $btnRepairTunnel)
+
+    $grpDeviceActions.SetBounds(12, (176 + $grow), $inner, 62)
     $null = Set-ButtonRowLeft -Left 12 -Top 24 -Buttons @($btnInstallApk, $btnScreenshot, $btnScreenToggle,
         $btnReboot, $btnBattery)
 
-    $grpDnsBox.SetBounds(12, (210 + $grow), $inner, 86)
+    $grpDnsBox.SetBounds(12, (244 + $grow), $inner, 86)
     $lblDns.SetBounds(12, 28, 34, 20)
     $cmbDnsMode.SetBounds(50, 24, 180, 24)
     # the host box gives up width so its three buttons stay inside the group
@@ -9242,7 +9356,7 @@ function Update-ToolsLayout {
     $null = Set-ButtonRowLeft -Left (238 + $hostWidth + 8) -Top 23 -Buttons $dnsButtons
     $txtDnsState.SetBounds(12, 56, [Math]::Max(200, $inner - 24), 20)
 
-    $grpImeBox.SetBounds(12, (302 + $grow), $inner, 92)
+    $grpImeBox.SetBounds(12, (336 + $grow), $inner, 92)
     $lblIme.SetBounds(12, 28, 92, 20)
     # likewise the keyboard list for its three buttons
     $imeButtons = @($btnImeList, $btnImeDisable, $btnImeEnable)
@@ -9254,13 +9368,13 @@ function Update-ToolsLayout {
     $null = Set-ButtonRowLeft -Left 12 -Top 55 -Buttons @($btnImeDefault, $btnImeReset)
     $lblImeHint.SetBounds(($btnImeReset.Bounds.Right + 12), 60, [Math]::Max(80, $inner - $btnImeReset.Bounds.Right - 24), 20)
 
-    $grpHotspotBox.SetBounds(12, (400 + $grow), $inner, 96)
+    $grpHotspotBox.SetBounds(12, (434 + $grow), $inner, 96)
     $lblHotspot.SetBounds(12, 28, 60, 20)
     $null = Set-ButtonRowLeft -Left 76 -Top 24 -Buttons @($btnHotspotOn, $btnHotspotOff, $btnHotspotState,
         $btnHotspotSettings, $btnHotspotInfo)
     $null = Set-ButtonRowLeft -Left 76 -Top 58 -Buttons @($btnUsbTetherOn, $btnUsbTetherOff)
 
-    $lblToolsHint.SetBounds(12, (502 + $grow), [Math]::Max(80, $inner), 20)
+    $lblToolsHint.SetBounds(12, (536 + $grow), [Math]::Max(80, $inner), 20)
 }
 
 function Update-ScreenLayout {
@@ -9541,8 +9655,31 @@ function Update-RightLayout {
     $btnSaveLog.SetBounds(124, $rowTop, 96, 28)
     $btnLogFold.SetBounds(228, $rowTop, 28, 28)
     $lblStatus.SetBounds(($width - 226), $rowTop, 220, 28)
+    # the find box sits at the right end of the row, just left of the sharing
+    # line; the busy strip below stops where the box begins, and both step
+    # aside when the window is too narrow to hold them side by side
+    $findWidth = [Math]::Min(200, [Math]::Max(90, [int](($width - 640) / 2)))
+    $findLeft = ($width - 234) - $findWidth
+    $script:logFindLeft = $findLeft
+    # 364 is where the busy line starts; it keeps at least 140 px to name what
+    # is running, and the find box only appears with what is left over
+    $enoughRoom = (($findLeft - 50) - 364) -ge 140
+    $lblLogFind.Visible = $enoughRoom
+    $txtLogFind.Visible = $enoughRoom
+    if ($enoughRoom) {
+        $lblLogFind.SetBounds(($findLeft - 42), $rowTop, 38, 26)
+        $txtLogFind.SetBounds($findLeft, ($rowTop + 2), $findWidth, 24)
+    } else {
+        # hidden is not enough: a control keeps its bounds while it is hidden,
+        # and the layout audit rightly counts those. Park the pair in the gap
+        # before the sharing line, where they sit on nothing.
+        $lblLogFind.SetBounds(($width - 233), $rowTop, 1, 1)
+        $txtLogFind.SetBounds(($width - 232), $rowTop, 1, 1)
+    }
     $prgBusy.SetBounds(266, ($rowTop + 8), 90, 12)
-    $lblBusy.SetBounds(364, ($rowTop + 5), [Math]::Max(40, ($width - 226 - 8 - 364)), 20)
+    # what is running is named up to where the find box starts
+    $busyRight = if ($txtLogFind.Visible) { $script:logFindLeft - 50 } else { $width - 234 }
+    $lblBusy.SetBounds(364, ($rowTop + 5), [Math]::Max(40, ($busyRight - 364)), 20)
     $pnlLogGrip.SetBounds(20, ($rowTop - 8), ($width - 26), 6)
     $tabs.SetBounds(20, $tabsTop, ($width - 26), ($rowTop - 8 - $tabsTop))
 
@@ -10068,6 +10205,51 @@ function Get-PageRefreshButton {
     return $btnRefresh
 }
 
+function Set-TabOrder {
+    <#
+        Tab moved between controls in the order they happened to be created -
+        which, on a window built by hand, is the order someone wrote the code,
+        not the order anyone reads. This walks a page and numbers its controls
+        the way they sit: down the page, and left to right within a row.
+
+        Rows are found by rounding the top edge: controls within 12 px of each
+        other are one row, so a row of buttons is walked across, not down.
+    #>
+    param($Container, [int]$Start = 0)
+
+    $index = $Start
+    $children = @($Container.Controls | Where-Object { "$($_.Tag)" -ne 'listhint' })
+    foreach ($child in ($children | Sort-Object @{ Expression = { [int]([Math]::Round($_.Top / 12)) } }, @{ Expression = { $_.Left } })) {
+        $child.TabIndex = $index
+        $index++
+        if ($child.Controls.Count -gt 0) { $index = Set-TabOrder -Container $child -Start $index }
+    }
+    return $index
+}
+
+function Set-PageEnterKey {
+    <#
+        Enter on a page does that page's reading action - refresh the list, go
+        to the folder. Only reads: Enter is pressed by accident often enough
+        that it must never start, install, delete or send anything.
+    #>
+    $page = $tabs.SelectedTab
+    $button = $null
+    if ($page -eq $tabDevice) { $button = $btnDeviceRefresh }
+    elseif ($page -eq $tabApps) { $button = $btnAppsRefresh }
+    elseif ($page -eq $tabContacts) { $button = $btnContactsRefresh }
+    elseif ($page -eq $tabSms) { $button = $btnSmsRefresh }
+    elseif ($page -eq $tabFiles) { $button = $btnFileGo }
+    elseif ($page -eq $tabRunning) { $button = $btnRunningRefresh }
+    elseif ($page -eq $tabUsers) { $button = $btnUsersRefresh }
+    elseif ($page -eq $tabRadios) {
+        if ($tabsRadios.SelectedTab -eq $tabWifi) { $button = $btnWifiScan }
+        elseif ($tabsRadios.SelectedTab -eq $tabBt) { $button = $btnBtRefresh }
+        elseif ($tabsRadios.SelectedTab -eq $tabNfc) { $button = $btnNfcRefresh }
+    }
+    $form.AcceptButton = $button
+}
+
 function Invoke-WindowKey {
     # keys that work wherever the focus is; true when the key was used
     param([System.Windows.Forms.Keys]$KeyData)
@@ -10080,13 +10262,25 @@ function Invoke-WindowKey {
         return $true
     }
     $code = $KeyData -band $keys::KeyCode
-    if (($KeyData -band $keys::Modifiers) -eq $keys::Control -and $code -ge $keys::D1 -and $code -le $keys::D9) {
+    $modifiers = $KeyData -band $keys::Modifiers
+    if ($modifiers -eq $keys::Control -and $code -ge $keys::D1 -and $code -le $keys::D9) {
         $index = [int]$code - [int]$keys::D1
         if ($index -lt $tabs.TabCount) { $tabs.SelectedIndex = $index }
         return $true
     }
+    # Ctrl+0 is the tenth tab, and Ctrl+Shift+1..9 carries on from there, so
+    # the last tabs are reachable too - they had no key of their own at all
+    if ($modifiers -eq $keys::Control -and $code -eq $keys::D0) {
+        if ($tabs.TabCount -ge 10) { $tabs.SelectedIndex = 9 }
+        return $true
+    }
+    if ($modifiers -eq ($keys::Control -bor $keys::Shift) -and $code -ge $keys::D1 -and $code -le $keys::D9) {
+        $index = 10 + [int]$code - [int]$keys::D1
+        if ($index -lt $tabs.TabCount) { $tabs.SelectedIndex = $index }
+        return $true
+    }
     if ($KeyData -eq ($keys::Control -bor $keys::L)) {
-        $txtLog.Clear()
+        Clear-Log
         return $true
     }
     return $false
@@ -10949,6 +11143,7 @@ function Save-Settings {
             $null = New-Item -ItemType Directory -Path $folder -Force
         }
 
+        $place = if ($form.WindowState -eq [System.Windows.Forms.FormWindowState]::Normal) { $form.Bounds } else { $form.RestoreBounds }
         $data = [ordered]@{
             Dns            = $cmbDns.Text
             Port           = [int]$numPort.Value
@@ -10996,6 +11191,11 @@ function Save-Settings {
             Mouse          = "$($cmbMouse.SelectedItem)"
             Gamepad        = "$($cmbGamepad.SelectedItem)"
             Connect        = $txtConnect.Text
+            WindowWidth    = [int]$place.Width
+            WindowHeight   = [int]$place.Height
+            WindowLeft     = [int]$place.X
+            WindowTop      = [int]$place.Y
+            WindowMaximized = ($form.WindowState -eq [System.Windows.Forms.FormWindowState]::Maximized)
             LogHeight      = [int]$script:logHeight
             LogFolded      = [bool]$script:logFolded
         }
@@ -11075,6 +11275,34 @@ function Restore-Settings {
     $value = Get-Setting 'Connect';        if ($null -ne $value) { $txtConnect.Text = $value }
     $value = Get-Setting 'LogHeight';      if ($value) { try { $script:logHeight = [int]$value } catch { } }
     $value = Get-Setting 'LogFolded';      if ($null -ne $value) { $script:logFolded = [bool]$value }
+
+    # The window opens where it was left, at the size it was left. A saved place
+    # is only used while it is still on a screen this PC has: a window restored
+    # onto a monitor that has since been unplugged cannot be reached, and
+    # dragging it back is not something a person should have to know how to do.
+    $width = Get-Setting 'WindowWidth'
+    $height = Get-Setting 'WindowHeight'
+    $left = Get-Setting 'WindowLeft'
+    $top = Get-Setting 'WindowTop'
+    if ($null -ne $width -and $null -ne $height -and $null -ne $left -and $null -ne $top) {
+        try {
+            $wanted = New-Object System.Drawing.Rectangle ([int]$left), ([int]$top), ([int]$width), ([int]$height)
+            if ($wanted.Width -ge $form.MinimumSize.Width -and $wanted.Height -ge $form.MinimumSize.Height) {
+                $reachable = $false
+                foreach ($screen in [System.Windows.Forms.Screen]::AllScreens) {
+                    # enough of the window must land on a screen to be grabbed
+                    $shared = [System.Drawing.Rectangle]::Intersect($screen.WorkingArea, $wanted)
+                    if ($shared.Width -ge 200 -and $shared.Height -ge 100) { $reachable = $true; break }
+                }
+                if ($reachable) {
+                    $form.StartPosition = 'Manual'
+                    $form.Bounds = $wanted
+                }
+            }
+        } catch { }
+    }
+    $value = Get-Setting 'WindowMaximized'
+    if ($null -ne $value -and [bool]$value) { $form.WindowState = [System.Windows.Forms.FormWindowState]::Maximized }
 }
 
 # --- timer: pump the relay output and watch for an unexpected exit ----------
@@ -11126,9 +11354,19 @@ $statusTimer.Add_Tick({
 })
 
 # --- timer: the busy strip under the pages -----------------------------------
+$logFindTimer = New-Object System.Windows.Forms.Timer
+$logFindTimer.Interval = 250
+$logFindTimer.Add_Tick({
+    $logFindTimer.Stop()
+    Update-LogView
+})
+
 $busyTimer = New-Object System.Windows.Forms.Timer
 $busyTimer.Interval = 200
-$busyTimer.Add_Tick({ Update-BusyIndicator })
+$busyTimer.Add_Tick({
+    Update-BusyIndicator
+    Update-ListHints
+})
 
 # --- timer: a phone plugged in or pulled out ---------------------------------
 # The list only changed when Refresh was pressed. adb devices alone is cheap;
@@ -11191,7 +11429,10 @@ $btnInfo.Add_Click({ Show-DeviceInfo })
 $btnStart.Add_Click({ Start-Sharing })
 $btnStop.Add_Click({ Stop-Sharing })
 $btnTest.Add_Click({ Test-Connectivity })
-$btnClear.Add_Click({ $txtLog.Clear() })
+$btnClear.Add_Click({ Clear-Log })
+# typed into, the box shows only the lines that hold it - after a short pause,
+# so a word typed letter by letter does not rebuild the box five times
+$txtLogFind.Add_TextChanged({ $logFindTimer.Stop(); $logFindTimer.Start() })
 $chkAll.Add_CheckedChanged({ $lstDevices.Enabled = -not $chkAll.Checked })
 $lstDevices.Add_DoubleClick({ Show-DeviceTab })
 $btnDeviceRefresh.Add_Click({ Show-DeviceTab })
@@ -11503,6 +11744,7 @@ function Update-ShownRadio {
     elseif ($tabsRadios.SelectedTab -eq $tabNfc) { Update-NfcState }
 }
 $tabsRadios.Add_SelectedIndexChanged({
+    Set-PageEnterKey
     Update-RightLayout
     Update-ShownRadio
 })
@@ -11697,6 +11939,9 @@ $splitMain.Add_SplitterMoved({
 })
 $tabShell.Add_Resize({ Update-ShellLayout })
 $tabs.Add_SelectedIndexChanged({
+    # the page's own reading action answers Enter, and Tab walks it in order
+    Set-PageEnterKey
+    $null = Set-TabOrder -Container $tabs.SelectedTab
     # a page that was never on screen reports its design size, so its layout
     # function bailed out at startup: run the whole pass now that it is real
     Update-RightLayout
@@ -12293,6 +12538,151 @@ $btnRestoreApps.Add_Click({ Start-RestoreApps })
 $btnRestoreContacts.Add_Click({ Start-RestoreContacts })
 $btnBackupOpenFolder.Add_Click({ Show-BackupInExplorer })
 
+# --- what every button does, on hover ----------------------------------------
+# A button whose words cannot say the whole thing says it here: what it acts
+# on, what the phone may refuse, and the key that does the same. Written in
+# one place so the wording stays of a piece, and so a new button is easy to
+# spot as missing.
+
+$toolTip.SetToolTip($btnRefresh, 'Reads the device list again (F5)')
+$toolTip.SetToolTip($btnInfo, 'Writes what this phone says about itself to the log')
+$toolTip.SetToolTip($btnDeviceCopy, 'Copies the details box to the clipboard')
+$toolTip.SetToolTip($btnReadToggles, 'Asks the phone how each of these is set right now')
+$toolTip.SetToolTip($btnPhoneCall, 'Dials the number in the box on the phone')
+$toolTip.SetToolTip($btnPhoneEnd, 'Ends the call on the phone')
+$toolTip.SetToolTip($btnPhoneSms, 'Opens the phone own SMS app with this number; the phone sends it')
+$toolTip.SetToolTip($btnStart, 'Gives the selected phone this PC internet, over the cable')
+$toolTip.SetToolTip($btnStop, 'Stops the relay and removes the tunnel from the phone')
+$toolTip.SetToolTip($btnTest, 'Asks the phone to fetch something, to see whether the tunnel carries traffic. Ping never works through it')
+$toolTip.SetToolTip($btnInstallClient, 'Installs the gnirehtet app on the phone; sharing installs it by itself the first time')
+$toolTip.SetToolTip($btnUninstallClient, 'Removes the gnirehtet app from the phone')
+$toolTip.SetToolTip($btnTetherOn, 'The phone shares its mobile data with this PC. Many phones refuse this from adb, and then the phone settings page is opened instead')
+$toolTip.SetToolTip($btnTetherOff, 'Turns USB tethering off again')
+$toolTip.SetToolTip($btnTetherSettings, 'Opens the tethering page on the phone screen')
+$toolTip.SetToolTip($btnAdapters, 'Lists the network adapters this PC has from the phone (RNDIS), to see whether tethering arrived')
+$toolTip.SetToolTip($btnProxyOff, 'Stops the proxy and puts the Windows proxy setting back as it was')
+$toolTip.SetToolTip($btnProxyTest, 'Checks that something really answers on that port through the phone')
+$toolTip.SetToolTip($btnListDisplays, 'Lists the displays scrcpy can see on this phone')
+$toolTip.SetToolTip($btnBrowseRecord, 'Chooses the file a recording is written to')
+$toolTip.SetToolTip($btnListenStop, 'Stops playing the phone sound on this PC')
+$toolTip.SetToolTip($btnScrcpy, 'Opens a mirror window for every selected phone, with the options above')
+$toolTip.SetToolTip($btnScrcpyShare, 'Starts the internet sharing and the mirror together, in that order')
+$toolTip.SetToolTip($btnOtg, 'Drives the phone as a USB keyboard and mouse, with no screen. It restarts the adb server, which drops a running tunnel')
+$toolTip.SetToolTip($btnScrcpyClose, 'Closes every scrcpy window this program opened')
+$toolTip.SetToolTip($btnShowCommand, 'Writes the exact scrcpy command line to the log, to copy and reuse')
+$toolTip.SetToolTip($btnConnect, 'Connects to the address in the box, for a phone on Wi-Fi')
+$toolTip.SetToolTip($btnDisconnect, 'Disconnects every phone connected over Wi-Fi')
+$toolTip.SetToolTip($btnRestartServer, 'Restarts the adb server: the usual cure when another adb fights over it')
+$toolTip.SetToolTip($btnInstallApk, 'Installs an .apk, or a split bundle (.apks, .xapk, .apkm)')
+$toolTip.SetToolTip($btnScreenshot, 'Saves a picture of the phone screen into your Pictures folder')
+$toolTip.SetToolTip($btnScreenToggle, 'Presses the power key: the screen goes on, or off')
+$toolTip.SetToolTip($btnReboot, 'Restarts the phone, after asking')
+$toolTip.SetToolTip($btnBattery, 'Writes the battery and network lines to the log')
+$toolTip.SetToolTip($btnReverseList, 'Lists the adb reverse tunnels that exist at this moment')
+$toolTip.SetToolTip($btnImeList, 'Lists the keyboards installed on the phone')
+$toolTip.SetToolTip($btnImeEnable, 'Allows the chosen keyboard to be used')
+$toolTip.SetToolTip($btnImeDefault, 'Makes the chosen keyboard the one the phone types with')
+$toolTip.SetToolTip($btnDnsRead, 'Reads the private DNS setting, and the resolvers actually in use')
+$toolTip.SetToolTip($btnDnsApply, 'Writes the chosen private DNS mode to the phone')
+$toolTip.SetToolTip($btnHotspotOff, 'Turns the Wi-Fi hotspot off')
+$toolTip.SetToolTip($btnHotspotState, 'Reads whether the hotspot and USB tethering are on')
+$toolTip.SetToolTip($btnHotspotSettings, 'Opens the hotspot page on the phone screen')
+$toolTip.SetToolTip($btnUsbTetherOff, 'Turns USB tethering off, through the phone own settings page')
+$toolTip.SetToolTip($btnCapture, 'Takes a fresh picture of the phone screen')
+$toolTip.SetToolTip($btnSaveShot, 'Saves the picture on screen to a file')
+$toolTip.SetToolTip($btnKeyBack, 'Presses Back on every selected phone')
+$toolTip.SetToolTip($btnKeyHome, 'Presses Home on every selected phone')
+$toolTip.SetToolTip($btnKeyRecents, 'Opens the recent apps on every selected phone')
+$toolTip.SetToolTip($btnKeyPower, 'Presses the power key: the screen goes on, or off')
+$toolTip.SetToolTip($btnKeyVolUp, 'Volume up on every selected phone')
+$toolTip.SetToolTip($btnKeyVolDown, 'Volume down on every selected phone')
+$toolTip.SetToolTip($btnSendText, 'Types the text in the box on the phone, Arabic included')
+$toolTip.SetToolTip($btnAppsRefresh, 'Reads the installed apps again (F5)')
+$toolTip.SetToolTip($btnAppLaunch, 'Opens the selected app on the phone')
+$toolTip.SetToolTip($btnAppStop, 'Force stops the selected app')
+$toolTip.SetToolTip($btnAppInfo, 'Opens the app details page on the phone')
+$toolTip.SetToolTip($btnAppUninstall, 'Removes the selected app from the phone, after asking')
+$toolTip.SetToolTip($btnAppInstall, 'Installs an .apk, or a split bundle (.apks, .xapk, .apkm)')
+$toolTip.SetToolTip($btnAppExport, 'Saves this list as a file on the PC')
+$toolTip.SetToolTip($btnContactsRefresh, 'Reads the contacts again (F5)')
+$toolTip.SetToolTip($btnContactAdd, 'Adds a contact to the phone')
+$toolTip.SetToolTip($btnContactEdit, 'Changes the name or number of the selected contact')
+$toolTip.SetToolTip($btnContactDelete, 'Deletes the selected contact from the phone, after asking')
+$toolTip.SetToolTip($btnContactCall, 'Dials the selected contact on the phone')
+$toolTip.SetToolTip($btnContactEndCall, 'Ends the call on the phone')
+$toolTip.SetToolTip($btnContactCopy, 'Copies the selected rows to the clipboard')
+$toolTip.SetToolTip($btnContactExport, 'Saves every contact as a file on the PC')
+$toolTip.SetToolTip($btnSmsRefresh, 'Reads the messages again (F5)')
+$toolTip.SetToolTip($btnSmsSend, 'Hands the message to the phone own SMS app, which sends it. Android has no way for adb to send one itself')
+$toolTip.SetToolTip($btnSmsCopy, 'Copies the selected messages to the clipboard')
+$toolTip.SetToolTip($btnSmsDelete, 'Deletes the selected message from the phone, after asking')
+$toolTip.SetToolTip($btnSmsEdit, 'Changes the text kept for this message on the phone')
+$toolTip.SetToolTip($btnSmsExport, 'Saves every message as a file on the PC')
+$toolTip.SetToolTip($btnCameraList, 'Asks the phone which cameras it has, and fills the list')
+$toolTip.SetToolTip($btnCameraBrowse, 'Chooses the file a camera recording is written to')
+$toolTip.SetToolTip($btnCameraStart, 'Opens a window showing the phone camera, with the options here')
+$toolTip.SetToolTip($btnCameraFront, 'Opens the front camera in a window')
+$toolTip.SetToolTip($btnCameraBack, 'Opens the back camera in a window')
+$toolTip.SetToolTip($btnCameraStop, 'Closes the camera window')
+$toolTip.SetToolTip($btnCameraCommand, 'Writes the exact scrcpy camera command to the log')
+$toolTip.SetToolTip($btnFileUp, 'Goes up one folder (Backspace)')
+$toolTip.SetToolTip($btnFileGo, 'Opens the folder typed in the path box (Enter)')
+$toolTip.SetToolTip($btnFileSearchClear, 'Clears the search and shows the folder again')
+$toolTip.SetToolTip($btnFileLocalBrowse, 'Chooses the PC folder that downloads land in')
+$toolTip.SetToolTip($btnFileOpenLocal, 'Opens that PC folder in Explorer')
+$toolTip.SetToolTip($btnFileUpload, 'Sends files from the PC into the folder open here')
+$toolTip.SetToolTip($btnFileNewDir, 'Makes a new folder on the phone')
+$toolTip.SetToolTip($btnFileRename, 'Renames the selected file or folder on the phone')
+$toolTip.SetToolTip($btnFileDelete, 'Deletes what is selected from the phone, after asking')
+$toolTip.SetToolTip($btnFileOpenPhone, 'Opens the selected file on the phone itself')
+$toolTip.SetToolTip($btnFileCopyPath, 'Copies the full path on the phone to the clipboard')
+$toolTip.SetToolTip($btnWifiOnTab, 'Turns the phone Wi-Fi on')
+$toolTip.SetToolTip($btnWifiOffTab, 'Turns the phone Wi-Fi off')
+$toolTip.SetToolTip($btnWifiSaved, 'Lists the networks the phone has saved, instead of what it can see')
+$toolTip.SetToolTip($btnWifiConnect, 'Joins the selected network, with the password in the box')
+$toolTip.SetToolTip($btnWifiStatus, 'Writes the current Wi-Fi connection to the log')
+$toolTip.SetToolTip($btnBtOnTab, 'Turns the phone Bluetooth on')
+$toolTip.SetToolTip($btnBtOffTab, 'Turns the phone Bluetooth off')
+$toolTip.SetToolTip($btnBtRefresh, 'Reads the paired devices again (F5)')
+$toolTip.SetToolTip($btnBtCopy, 'Copies the selected rows to the clipboard')
+$toolTip.SetToolTip($btnNfcOn, 'Turns NFC on')
+$toolTip.SetToolTip($btnNfcOff, 'Turns NFC off')
+$toolTip.SetToolTip($btnNfcRefresh, 'Reads the NFC state again (F5)')
+$toolTip.SetToolTip($btnNfcSettings, 'Opens the NFC page on the phone screen')
+$toolTip.SetToolTip($btnUsersRefresh, 'Reads the users again (F5)')
+$toolTip.SetToolTip($btnUserAdd, 'Adds a user to the phone')
+$toolTip.SetToolTip($btnUserRename, 'Renames the selected user. Android usually refuses this from adb')
+$toolTip.SetToolTip($btnUserRemove, 'Deletes the selected user and everything in it, after asking')
+$toolTip.SetToolTip($btnUserSwitcherOn, 'Shows the user switcher on the phone; the users themselves are kept')
+$toolTip.SetToolTip($btnUserSettings, 'Opens the users page on the phone screen')
+$toolTip.SetToolTip($btnRunningRefresh, 'Reads the running processes again (F5)')
+$toolTip.SetToolTip($btnRunningStop, 'Force stops the selected process, after asking')
+$toolTip.SetToolTip($btnRunningInfo, 'Opens the app details page on the phone')
+$toolTip.SetToolTip($btnRunningCopy, 'Copies the selected rows to the clipboard')
+$toolTip.SetToolTip($btnRunningExport, 'Saves this list as a file on the PC')
+$toolTip.SetToolTip($btnLogcatStop, 'Stops reading the phone log')
+$toolTip.SetToolTip($btnLogcatSave, 'Saves what is on screen to a file')
+$toolTip.SetToolTip($btnShellStart, 'Opens a live shell on the phone; it stays open for command after command')
+$toolTip.SetToolTip($btnShellStop, 'Closes the live shell')
+$toolTip.SetToolTip($btnShellClear, 'Empties this box; nothing on the phone changes')
+$toolTip.SetToolTip($btnShellSend, 'Sends the typed line to the phone (Enter)')
+$toolTip.SetToolTip($btnClear, 'Empties the log (Ctrl+L)')
+$toolTip.SetToolTip($btnSaveLog, 'Saves everything in the log to a file')
+$toolTip.SetToolTip($btnRestoreApps, 'Installs the apps ticked in the list, splits included')
+
+# every list says which button fills it while it is empty
+Add-ListHint -List $lstDevices -Text 'No phone yet. Plug one in with USB debugging on, then press Refresh.'
+Add-ListHint -List $lstApps -Text 'No apps read yet - press Refresh (F5).'
+Add-ListHint -List $lstFiles -Text 'Nothing read yet - pick a phone and press Go.'
+Add-ListHint -List $lstContacts -Text 'No contacts read yet - press Refresh (F5).'
+Add-ListHint -List $lstSms -Text 'No messages read yet - press Refresh (F5).'
+Add-ListHint -List $lstRunning -Text 'No processes read yet - press Refresh (F5).'
+Add-ListHint -List $lstWifi -Text 'No networks yet - press Scan, or Saved networks.'
+Add-ListHint -List $lstBt -Text 'No paired devices read yet - press Refresh (F5).'
+Add-ListHint -List $lstUsers -Text 'No users read yet - press Refresh (F5).'
+Add-ListHint -List $lstAutoRules -Text 'No rules yet - pick a phone above, then "Add the selected phone".'
+Add-ListHint -List $clbBackupApps -Text 'Open a backup to see the apps in it.'
+
 $form.Add_FormClosing({
     Save-Settings
     # the rules are free for the other window once this one is gone
@@ -12332,6 +12722,9 @@ $form.Add_Shown({
     # the rules set before, so they are known without opening their tab
     Write-AutomationOverview -Where 'Advanced > Automation'
     Update-AutomationTab
+    # Tab walks the page as it is laid out, and Enter reads the page again
+    $null = Set-TabOrder -Container $splitMain.Panel2
+    Set-PageEnterKey
     Update-DeviceList
 })
 

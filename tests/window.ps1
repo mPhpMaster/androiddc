@@ -102,10 +102,98 @@ $tabs.SelectedTab = $tabDevice
 Wait-Pumped -Milliseconds 300
 
 Say ''
+Say '== every button says what it does =='
+$allButtons = New-Object System.Collections.Generic.List[object]
+function Add-Buttons {
+    param($Parent)
+    foreach ($child in $Parent.Controls) {
+        if ($child -is [System.Windows.Forms.Button]) { $allButtons.Add($child) }
+        if ($child.Controls.Count -gt 0) { Add-Buttons -Parent $child }
+    }
+}
+Add-Buttons -Parent $form
+$silent = @($allButtons | Where-Object { -not $toolTip.GetToolTip($_) })
+Say ("  {0} buttons, {1} without hover text{2}   {3}" -f $allButtons.Count, $silent.Count,
+    $(if ($silent) { ' - ' + (($silent | ForEach-Object { $_.Text }) -join ', ') } else { '' }),
+    (Mark ($silent.Count -eq 0)))
+
+Say ''
+Say '== an empty list says which button fills it =='
+# a hint is drawn over its list, so the page has to be the one on screen
+$tabs.SelectedTab = $tabApps
+Wait-Pumped -Milliseconds 300
+Update-ListHints
+$appsHint = @($script:listHints | Where-Object { $_.List -eq $lstApps })[0]
+Say ("  the apps list is empty, so its line shows: '{0}'   {1}" -f $appsHint.Label.Text,
+    (Mark ($lstApps.Items.Count -eq 0 -and $appsHint.Label.Visible -and $appsHint.Label.Text -match 'Refresh')))
+$row = New-Object System.Windows.Forms.ListViewItem('com.example')
+$null = $lstApps.Items.Add($row)
+Update-ListHints
+Say ("  one row in it, and the line steps aside   {0}" -f (Mark (-not $appsHint.Label.Visible)))
+$lstApps.Items.Clear()
+Update-ListHints
+Say ("  emptied again, and it is back   {0}" -f (Mark $appsHint.Label.Visible))
+
+Say ''
+Say '== the log keeps its lines, and the find box picks from them =='
+Clear-Log
+Write-Log 'a line about apples'
+Write-Log 'a line about oranges'
+Write-Log 'apples again'
+Say ("  three written, three shown   {0}" -f (Mark ($script:logLines.Count -eq 3 -and $txtLog.Lines.Length -ge 3)))
+$txtLogFind.Text = 'oranges'
+Update-LogView
+$shown = @($txtLog.Lines | Where-Object { $_.Trim() })
+Say ("  looking for oranges shows {0} line(s)   {1}" -f $shown.Count,
+    (Mark ($shown.Count -eq 1 -and $shown[0] -match 'oranges' -and $script:logLines.Count -eq 3)))
+Write-Log 'a new line about apples'
+$shown = @($txtLog.Lines | Where-Object { $_.Trim() })
+Say ("  a new line that does not match stays out of the box   {0}" -f (Mark ($shown.Count -eq 1)))
+$txtLogFind.Text = ''
+Update-LogView
+$shown = @($txtLog.Lines | Where-Object { $_.Trim() })
+Say ("  emptying the box gives all {0} back   {1}" -f $shown.Count, (Mark ($shown.Count -eq 4)))
+Clear-Log
+Say ("  Clear empties the lines as well, so nothing comes back   {0}" -f (Mark (
+    $script:logLines.Count -eq 0 -and $txtLog.TextLength -eq 0)))
+
+Say ''
+Say '== the keyboard =='
+$keys = [System.Windows.Forms.Keys]
+$null = Invoke-WindowKey -KeyData ($keys::Control -bor $keys::D0)
+Say ("  Ctrl+0 opens the tenth tab, '{0}'   {1}" -f $tabs.SelectedTab.Text, (Mark ($tabs.SelectedIndex -eq 9)))
+$null = Invoke-WindowKey -KeyData ($keys::Control -bor $keys::Shift -bor $keys::D2)
+Say ("  Ctrl+Shift+2 opens the twelfth, '{0}'   {1}" -f $tabs.SelectedTab.Text, (Mark ($tabs.SelectedIndex -eq 11)))
+$tabs.SelectedTab = $tabFiles
+Wait-Pumped -Milliseconds 200
+Say ("  on Files, Enter means Go   {0}" -f (Mark ($form.AcceptButton -eq $btnFileGo)))
+$tabs.SelectedTab = $tabShellHost
+Wait-Pumped -Milliseconds 200
+Say ("  on a page with nothing to read, Enter does nothing   {0}" -f (Mark ($null -eq $form.AcceptButton)))
+$tabs.SelectedTab = $tabDevice
+Wait-Pumped -Milliseconds 300
+$null = Set-TabOrder -Container $tabDevice
+$ordered = @($tabDevice.Controls | Sort-Object TabIndex | ForEach-Object { $_.Bounds.Y })
+$downThePage = $true
+for ($i = 1; $i -lt $ordered.Count; $i++) { if ($ordered[$i] -lt $ordered[$i - 1] - 12) { $downThePage = $false } }
+Say ("  Tab walks the Device page down the page, not in build order   {0}" -f (Mark $downThePage))
+
+Say ''
+Say '== the window remembers itself =='
+$form.Bounds = New-Object System.Drawing.Rectangle 60, 40, 1240, 780
+Save-Settings
+$saved = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+Say ("  saved {0}x{1} at {2},{3}   {4}" -f $saved.WindowWidth, $saved.WindowHeight, $saved.WindowLeft, $saved.WindowTop,
+    (Mark ($saved.WindowWidth -eq 1240 -and $saved.WindowHeight -eq 780 -and $saved.WindowLeft -eq 60 -and $saved.WindowTop -eq 40)))
+Say ("  and whether it was maximized   {0}" -f (Mark ($null -ne $saved.WindowMaximized)))
+$form.Location = New-Object System.Drawing.Point(-2400, -2000)
+
+Say ''
 Say '== the toggle marks, from a phone =='
 # no "return" here: it would skip the end marker the harness waits for
-if (-not $TestSerial) {
-    Say 'SKIPPED - no phone given'
+$attached = @(Get-AdbDevices | Where-Object { $_.Serial -eq $TestSerial -and $_.State -eq 'device' }).Count -gt 0
+if (-not $TestSerial -or -not $attached) {
+    Say 'SKIPPED - no phone attached right now'
 } else {
     Select-TestPhone
     Show-ToggleStates -Quiet

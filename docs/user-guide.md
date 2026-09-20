@@ -42,6 +42,16 @@ Clicking the picture sends a tap at the matching point on the phone; dragging se
 holding still for more than half a second sends a long press. See [Shortcuts](shortcuts.md)
 for the mouse buttons.
 
+## The log, and finding things in it
+
+Everything the program does is written at the bottom right, with the time. The **Find** box
+beside *Clear log* shows only the lines holding what you type - a package name, a serial, the
+word `refused` - and emptying the box brings them all back. The lines are kept whatever the box
+says; *Clear log*, or `Ctrl`+`L`, is what throws them away.
+
+A list that has never been read says which button fills it, rather than looking like a list
+with nothing in it.
+
 ---
 
 ## Device

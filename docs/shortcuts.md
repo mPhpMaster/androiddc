@@ -85,7 +85,11 @@ selected picks it first.
 |---|---|
 | `F5` | Reads the page on screen again: the app, contact, SMS, file, process, Wi-Fi, Bluetooth, NFC or user list, the Device details, the DNS line or the root checks. On a page with nothing of its own to read, the device list. Ignored while a call is still running |
 | `Ctrl` + `1` … `9` | Opens the tab in that place: 1 Device, 2 Tethering, 3 Advanced, 4 Apps, 5 Contacts, 6 SMS, 7 Cam / Mic, 8 Files, 9 Running |
-| `Ctrl` + `L` | Empties the log |
+| `Ctrl` + `0` | Opens the tenth tab, Radios |
+| `Ctrl` + `Shift` + `1` … `9` | Opens the eleventh tab onward: 1 Users, 2 Shell |
+| `Enter` | Does the page's reading action - refresh that list, or go to the typed folder. It never starts, installs, deletes or sends anything |
+| `Tab` | Walks the page as it is laid out: down the page, and across within a row |
+| `Ctrl` + `L` | Empties the log, and the lines kept behind it |
 
 | Control | What it does |
 |---|---|

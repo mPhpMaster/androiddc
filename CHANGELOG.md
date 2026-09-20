@@ -2,6 +2,36 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### The classic window, made easier to live with
+
+* **It opens where you left it**, at the size you left it, maximized if it was. A saved place
+  is used only while it still lands on a screen this PC has, so a window cannot come back onto
+  a monitor that has been unplugged.
+* **Every button says what it does on hover.** 125 of the 190 had nothing; now all of them do,
+  and they say what the button acts on, what the phone may refuse, and the key that does the
+  same. A test fails if a button ever ships without it.
+* **An empty list says which button fills it** instead of sitting there blank - the device
+  list, apps, files, contacts, messages, processes, Wi-Fi, Bluetooth, users, the automation
+  rules and a backup's apps.
+* **The log has a find box.** Type in it and only the lines holding that text are shown; empty
+  it and they all come back. The lines themselves are kept either way, and *Clear log* (Ctrl+L)
+  empties both.
+* **The keyboard reaches more.** `Ctrl`+`0` opens the tenth tab and `Ctrl`+`Shift`+`1`...`9`
+  the ones after it, so every tab has a key. `Enter` does the page's reading action - refresh
+  the list, go to the folder - and never anything that starts, installs, deletes or sends.
+  `Tab` now walks a page the way the page is laid out, down and across, instead of in the
+  order the controls happened to be written.
+* **The device list's `Client` column is called `gnirehtet`**, which is what it is about.
+* **The Connection box on Device tools was twelve controls deep.** The three that are only
+  reached for when something is stuck - list reverse tunnels, kill stray relays, repair
+  tunnel - are their own box now, *When something is stuck*.
+* **Shorter tab captions**: *Mirroring*, *More options*, *Device tools*, *PC -> Phone*,
+  *Phone -> PC*. The words in brackets repeated what each page says in its first line, and the
+  strip was the first thing to run out of room on a small window.
+* Reading several phones at once says which phone of how many in the busy strip.
+
 ## 1.3.0
 
 ### A backup of the phone, and putting one back
