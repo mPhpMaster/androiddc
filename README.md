@@ -49,6 +49,7 @@ list the rules you have set.
 | **Files** | Browse, search, sort, rename, upload, download, move, compress, extract, preview pictures and text without saving them, free space of the current volume |
 | **Running** | Live process list with memory and state, stop anything |
 | **Wi-Fi / Bluetooth / NFC** | Radios on and off, scan, join or forget a network, paired devices |
+| **Backup** | A copy of the phone on this PC - files, the apps' APK files, contacts, messages, the call log, settings - and putting one back |
 | **Users** | Multi-user: list, switch, add, remove, turn the user switcher on or off |
 | **Shell** | A live adb shell, and a logcat viewer with a level, a filter and save |
 

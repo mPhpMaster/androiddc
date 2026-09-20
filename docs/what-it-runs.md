@@ -148,6 +148,23 @@ the page is unlocked. The page reads `getprop ro.build.type`, `ro.debuggable`, `
 seconds and is then stopped, and the ids it printed are named with `adb shell ps -A -o
 PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone is read again.
 
+## Backing up and restoring
+
+| Purpose | Command |
+|---|---|
+| What is in internal storage | `adb shell ls -1 /sdcard/`, then `adb pull -a /sdcard/<folder> <here>`, one folder at a time |
+| The apps you installed | `adb shell pm list packages -3`, `adb shell pm path <package>`, then `adb pull` of each APK |
+| Contacts, messages, call log | `adb shell content query --uri content://com.android.contacts/data/phones`, the same for `content://sms` and `content://call_log/calls` |
+| Settings and the app list | `adb shell settings list system|secure|global`, `getprop`, `pm list packages -3 --show-versioncode`, `pm list packages -s` |
+| Which files the phone already has | `adb shell find '/sdcard/<folder>' -type f`, once per folder rather than once per file |
+| Sending a file back | `adb push <file> /sdcard/<path>` |
+| After sending files | `adb shell content call --uri content://media --method scan_volume --arg external_primary`, so the gallery notices them |
+| Installing an app from a backup | `adb install -r <apk>`, or `adb install-multiple -r <base.apk> <split...>` |
+| Adding a contact back | `content insert` into `raw_contacts`, then two `content insert` calls into `data`, for the name and the number |
+
+`adb backup` is **not** used: Android 12 and newer return almost nothing for it. What is inside
+an app cannot be read without root, by this or any other tool.
+
 ## Automation rules
 
 A rule runs nothing of its own: each action is the same function its button calls, so it runs

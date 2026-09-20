@@ -75,6 +75,9 @@ if (Test-Path -LiteralPath $automationScript -PathType Leaf) { . $automationScri
 # the icon by the clock, the same as the classic window's
 $trayScript = Join-Path $script:toolsRoot 'shared\Tray.ps1'
 if (Test-Path -LiteralPath $trayScript -PathType Leaf) { . $trayScript }
+# backing the phone up to this PC, and putting a backup back
+$backupScript = Join-Path $script:toolsRoot 'shared\Backup.ps1'
+if (Test-Path -LiteralPath $backupScript -PathType Leaf) { . $backupScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen
@@ -84,7 +87,7 @@ Initialize-Ui
 # The pages, in the order the side navigation lists them within each section.
 # A page that is not written yet is simply not there.
 foreach ($pageName in @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Media',
-        'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation')) {
+        'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation', 'Backup')) {
     # "-Pages a,b" through -File arrives as one string
     $onlyPages = @($PageNames | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     if ($onlyPages.Count -gt 0 -and $onlyPages -notcontains $pageName) { continue }

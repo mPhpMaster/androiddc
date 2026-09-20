@@ -56,6 +56,7 @@ window's `settings.json`, so switching never mixes them.
 | `pages\` | One page each: `<Page>.ps1` and `<Page>.xaml` |
 | `..\shared\Automation.ps1` | Start with Windows and the rules per phone, loaded by both windows |
 | `..\shared\Tray.ps1` | The icon by the clock: a click hides or shows the window, minimizing hides it there, the menu has Exit |
+| `..\shared\Backup.ps1` | A backup of the phone on this PC, and putting one back - the classic window's Advanced > Backup |
 | `tests\` | `run.ps1` runs the real program off screen with a test inside; `audit.ps1` checks the files without starting it |
 | `CONTRACT.md` | How a page is built, and which page owns what |
 | `fonts\` | The design's typefaces from Google Fonts, under the SIL Open Font License (`OFL-*.txt`): DM Sans 400 / 500 / 600 for text, Space Grotesk 500 / 600 / 700 for titles. Without the folder, Segoe UI takes their place |

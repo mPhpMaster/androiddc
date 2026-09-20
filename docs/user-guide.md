@@ -187,6 +187,45 @@ so after either one the page waits for the phone to come back and reads it again
 scrcpy's `--v4l2-sink` is Linux only and is not in the Windows build at all, so it has a note
 there instead of a dead button.
 
+### Backup
+
+A copy of the phone on this PC, and putting one back. Nova has the same page, under *System*.
+
+**What can be in a backup**, each part ticked on its own:
+
+| Part | What it holds |
+|---|---|
+| Phone files | Everything under `/sdcard` that Android lets adb read: photos, videos, downloads, documents, and `Android/media`, where messaging apps keep pictures |
+| Apps | The APK of every app you installed, splits included |
+| Contacts, messages, call log | As the phone has them now |
+| Settings and the app list | `settings list`, `getprop`, the installed packages and a device report, as text |
+
+**What cannot, and why.** Android does not let adb read what is *inside* an app - chats, game
+saves, an app's own settings - unless the phone is rooted. `adb backup`, the old route, has
+returned almost nothing since Android 12, and `Android/data` and `Android/obb` have been closed
+to adb since Android 11. No tool without root gets past that.
+
+**Taking one.** Tick the parts, press *Back up now ...*, pick a folder. Each backup is its own
+folder named after the phone and the time, holding plain files and a `manifest.json` saying
+what is in it. The log names every folder as it is pulled, and the strip beside the button says
+where it has got to.
+
+**Putting one back.** Press *Open a backup ...* and pick a backup folder - the one with
+`manifest.json` in it. The box then says whose phone it was, when it was taken and what it
+holds.
+
+* **Restore files** sends them back. When the phone already has some of them it asks first:
+  write over them, send only the rest, or stop. Afterwards the gallery is told to look again.
+* **Install ticked apps** lists the backup's apps, with the ones this phone does not have
+  already ticked. Each is installed in one call, splits included. A phone that refuses installs
+  over USB says so in the log - on Xiaomi, Redmi and POCO turn on *Install via USB*.
+* **Restore contacts** adds the contacts the phone does not have, matched by name and number,
+  so running it twice adds nothing twice. Messages and the call log are not put back: Android
+  has no way for adb to write them.
+* **Show folder** opens the backup in Explorer.
+
+Nothing is written to the phone until you press one of those buttons.
+
 ### Automation
 
 Two things that happen without a click. Nova has the same page, under *System*, and the two

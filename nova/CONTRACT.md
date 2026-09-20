@@ -46,6 +46,7 @@ unique already), and prefix any new helper with your page name (`Files-...` is w
 | `Running` | System | Running | the running-process functions |
 | `Users` | System | Users | the user functions, `Open-DeviceSettingsScreen` |
 | `Shell` | System | Shell > Shell and Logcat | `LineReader` / `LiveShell` (Add-Type), the shell and logcat functions |
+| `Backup` | System | Advanced > Backup | the page's own `*-BackupPage*` functions; taking a backup and putting one back is `..\shared\Backup.ps1`, shared with the classic window |
 | `Automation` | System | Advanced > Automation | the page's own `*-AutomationPage*` functions; the rules, actions and start-up entry are `..\shared\Automation.ps1` (shared with the classic window), `Enter-AutomationDevice` / `Exit-AutomationDevice` / `Test-DialogOpen` are in `lib\Ui.ps1` |
 
 Already provided - **do not redefine**: everything in `lib\Core.ps1` and `lib\Ui.ps1`

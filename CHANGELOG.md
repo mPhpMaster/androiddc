@@ -2,6 +2,29 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### A backup of the phone, and putting one back
+
+* **Advanced > Backup** in the classic window, the **Backup** page in Nova. Tick what goes in -
+  phone files, the apps' APK files, contacts with messages and the call log, the settings and
+  app list - choose a folder, and it writes one folder per backup, named after the phone and
+  the time, with `manifest.json` saying what is in it. Plain files: no archive, no password,
+  nothing to unpack.
+* **What cannot be in it, and why.** Android does not let adb read what is inside an app -
+  chats, game saves, an app's own settings - without root, and `adb backup` has returned almost
+  nothing since Android 12. `Android/data` and `Android/obb` are closed for the same reason;
+  `Android/media`, where messaging apps keep pictures, is taken.
+* **Putting it back**: open a backup and the window says what it holds. *Restore files* asks
+  first when the phone already has some of them - write over them, send only the rest, or stop.
+  Apps are listed with the ones this phone lacks ticked, and each is installed in one call,
+  splits included. *Restore contacts* adds the ones the phone does not have, matched by name
+  and number; messages and the call log are saved to read but never written back, because
+  Android has no way for adb to write them.
+* `tests/backup.ps1` and `nova/tests/backup.ps1` check the parts, the folder name, the row
+  parser, a backup folder read back and which files a phone already has - against a made-up
+  phone, so nothing is sent to a real one.
+
 ## 1.2.2
 
 * **`start-menu.vbs`** puts both windows in the Start menu: *AndroidDC* and *AndroidDC Nova*,

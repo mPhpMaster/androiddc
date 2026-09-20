@@ -49,6 +49,7 @@ $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
 # shared with the Nova window
 . (Join-Path $scriptRoot 'shared\Automation.ps1')
 . (Join-Path $scriptRoot 'shared\Tray.ps1')
+. (Join-Path $scriptRoot 'shared\Backup.ps1')
 
 $script:adbPath = $null
 $script:gnirehtetPath = $null
@@ -531,6 +532,11 @@ $tabAutomation = New-Object System.Windows.Forms.TabPage
 $tabAutomation.Text = 'Automation'
 $tabAutomation.BackColor = [System.Drawing.SystemColors]::Control
 $tabsAdvanced.TabPages.Add($tabAutomation)
+
+$tabBackup = New-Object System.Windows.Forms.TabPage
+$tabBackup.Text = 'Backup'
+$tabBackup.BackColor = [System.Drawing.SystemColors]::Control
+$tabsAdvanced.TabPages.Add($tabBackup)
 
 $tabApps = New-Object System.Windows.Forms.TabPage
 $tabApps.Text = 'Apps'
@@ -3701,6 +3707,134 @@ foreach ($automationAction in @(Get-AutomationActionList)) {
     $null = $clbAutoActions.Items.Add("$($automationAction.Group): $($automationAction.Label)")
     $script:automationActionIds += $automationAction.Id
 }
+
+# --- Advanced > Backup -------------------------------------------------------
+# A backup is a folder on this PC with manifest.json in it; shared\Backup.ps1
+# does the work and the Nova window has the same page. Docked, not laid out by
+# hand: two groups, a list and a few rows of buttons.
+$grpBackupRestore = New-Object System.Windows.Forms.GroupBox
+$grpBackupRestore.Text = 'Put a backup back on a phone'
+$grpBackupRestore.Dock = 'Fill'
+$tabBackup.Controls.Add($grpBackupRestore)
+
+# added after the Fill group, so it takes the top edge first
+$grpBackupMake = New-Object System.Windows.Forms.GroupBox
+$grpBackupMake.Text = 'Back this phone up'
+$grpBackupMake.Dock = 'Top'
+$grpBackupMake.Height = 104
+$tabBackup.Controls.Add($grpBackupMake)
+
+$chkBackupFiles = New-Object System.Windows.Forms.CheckBox
+$chkBackupFiles.Text = 'Phone files'
+$chkBackupFiles.Checked = $true
+$chkBackupFiles.Location = New-Object System.Drawing.Point(12, 22)
+$chkBackupFiles.Size = New-Object System.Drawing.Size(150, 22)
+$grpBackupMake.Controls.Add($chkBackupFiles)
+
+$chkBackupApps = New-Object System.Windows.Forms.CheckBox
+$chkBackupApps.Text = 'Apps (APK files)'
+$chkBackupApps.Checked = $true
+$chkBackupApps.Location = New-Object System.Drawing.Point(168, 22)
+$chkBackupApps.Size = New-Object System.Drawing.Size(150, 22)
+$grpBackupMake.Controls.Add($chkBackupApps)
+
+$chkBackupPersonal = New-Object System.Windows.Forms.CheckBox
+$chkBackupPersonal.Text = 'Contacts, messages, calls'
+$chkBackupPersonal.Checked = $true
+$chkBackupPersonal.Location = New-Object System.Drawing.Point(324, 22)
+$chkBackupPersonal.Size = New-Object System.Drawing.Size(200, 22)
+$grpBackupMake.Controls.Add($chkBackupPersonal)
+
+$chkBackupSettings = New-Object System.Windows.Forms.CheckBox
+$chkBackupSettings.Text = 'Settings and app list'
+$chkBackupSettings.Checked = $true
+$chkBackupSettings.Location = New-Object System.Drawing.Point(530, 22)
+$chkBackupSettings.Size = New-Object System.Drawing.Size(170, 22)
+$grpBackupMake.Controls.Add($chkBackupSettings)
+
+$btnBackupRun = New-Object System.Windows.Forms.Button
+$btnBackupRun.Text = 'Back up now ...'
+$btnBackupRun.Location = New-Object System.Drawing.Point(12, 48)
+$btnBackupRun.Size = New-Object System.Drawing.Size(140, 28)
+$grpBackupMake.Controls.Add($btnBackupRun)
+$toolTip.SetToolTip($btnBackupRun, 'Asks where to keep it, then writes a folder named after this phone and the time')
+
+$prgBackup = New-Object System.Windows.Forms.ProgressBar
+$prgBackup.Location = New-Object System.Drawing.Point(160, 52)
+$prgBackup.Size = New-Object System.Drawing.Size(170, 20)
+$grpBackupMake.Controls.Add($prgBackup)
+
+$lblBackupProgress = New-Object System.Windows.Forms.Label
+$lblBackupProgress.Text = 'What an app keeps inside itself cannot be read without root - see the guide.'
+$lblBackupProgress.Location = New-Object System.Drawing.Point(338, 54)
+$lblBackupProgress.Size = New-Object System.Drawing.Size(362, 20)
+$lblBackupProgress.AutoEllipsis = $true
+$grpBackupMake.Controls.Add($lblBackupProgress)
+
+$clbBackupApps = New-Object System.Windows.Forms.CheckedListBox
+$clbBackupApps.Dock = 'Fill'
+$clbBackupApps.CheckOnClick = $true
+$clbBackupApps.IntegralHeight = $false
+$grpBackupRestore.Controls.Add($clbBackupApps)
+
+$pnlBackupTop = New-Object System.Windows.Forms.Panel
+$pnlBackupTop.Dock = 'Top'
+$pnlBackupTop.Height = 76
+$grpBackupRestore.Controls.Add($pnlBackupTop)
+
+# docked, not anchored: an anchored box keeps the width it was built with and
+# grew past its panel at every window size
+$txtBackupInfo = New-Object System.Windows.Forms.TextBox
+$txtBackupInfo.Multiline = $true
+$txtBackupInfo.ReadOnly = $true
+$txtBackupInfo.ScrollBars = 'Vertical'
+$txtBackupInfo.Dock = 'Fill'
+$txtBackupInfo.Text = 'No backup opened yet.'
+$pnlBackupTop.Controls.Add($txtBackupInfo)
+
+$pnlBackupOpen = New-Object System.Windows.Forms.Panel
+$pnlBackupOpen.Dock = 'Left'
+$pnlBackupOpen.Width = 156
+$pnlBackupTop.Controls.Add($pnlBackupOpen)
+
+$btnBackupOpen = New-Object System.Windows.Forms.Button
+$btnBackupOpen.Text = 'Open a backup ...'
+$btnBackupOpen.Location = New-Object System.Drawing.Point(10, 4)
+$btnBackupOpen.Size = New-Object System.Drawing.Size(140, 26)
+$pnlBackupOpen.Controls.Add($btnBackupOpen)
+$toolTip.SetToolTip($btnBackupOpen, 'Pick a backup folder - the one with manifest.json in it')
+
+$pnlBackupButtons = New-Object System.Windows.Forms.Panel
+$pnlBackupButtons.Dock = 'Bottom'
+$pnlBackupButtons.Height = 34
+$grpBackupRestore.Controls.Add($pnlBackupButtons)
+
+$btnRestoreFiles = New-Object System.Windows.Forms.Button
+$btnRestoreFiles.Text = 'Restore files ...'
+$btnRestoreFiles.Location = New-Object System.Drawing.Point(10, 4)
+$btnRestoreFiles.Size = New-Object System.Drawing.Size(130, 26)
+$pnlBackupButtons.Controls.Add($btnRestoreFiles)
+$toolTip.SetToolTip($btnRestoreFiles, 'Sends the files back; it asks first about the ones the phone already has')
+
+$btnRestoreApps = New-Object System.Windows.Forms.Button
+$btnRestoreApps.Text = 'Install ticked apps'
+$btnRestoreApps.Location = New-Object System.Drawing.Point(146, 4)
+$btnRestoreApps.Size = New-Object System.Drawing.Size(140, 26)
+$pnlBackupButtons.Controls.Add($btnRestoreApps)
+
+$btnRestoreContacts = New-Object System.Windows.Forms.Button
+$btnRestoreContacts.Text = 'Restore contacts'
+$btnRestoreContacts.Location = New-Object System.Drawing.Point(292, 4)
+$btnRestoreContacts.Size = New-Object System.Drawing.Size(130, 26)
+$pnlBackupButtons.Controls.Add($btnRestoreContacts)
+$toolTip.SetToolTip($btnRestoreContacts, 'Adds the contacts this phone does not have; messages and the call log cannot be written by adb')
+
+$btnBackupOpenFolder = New-Object System.Windows.Forms.Button
+$btnBackupOpenFolder.Text = 'Show folder'
+$btnBackupOpenFolder.Location = New-Object System.Drawing.Point(428, 4)
+$btnBackupOpenFolder.Size = New-Object System.Drawing.Size(110, 26)
+$pnlBackupButtons.Controls.Add($btnBackupOpenFolder)
+$toolTip.SetToolTip($btnBackupOpenFolder, 'Opens the backup folder in Explorer')
 
 # ------------------------------------------------------------------ logic ----
 
@@ -11974,6 +12108,146 @@ $form.Add_Resize({
     if ($form.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized -and -not (Test-TrayHidden)) { Hide-TrayWindow }
 })
 
+# ----------------------------------------------------------------- backup ----
+# The tab's own work; the backup itself is shared\Backup.ps1, which the Nova
+# window uses as well.
+
+$script:backupFolder = ''
+$script:backupManifest = $null
+$script:backupAppRows = @()
+
+function Set-BackupProgressUi {
+    param([string]$Text, [int]$Done, [int]$Total)
+
+    $lblBackupProgress.Text = $Text
+    $toolTip.SetToolTip($lblBackupProgress, $Text)
+    if ($Total -gt 0 -and $Done -ge 0) {
+        $prgBackup.Maximum = $Total
+        $prgBackup.Value = [Math]::Max(0, [Math]::Min($Total, $Done))
+    } else {
+        $prgBackup.Value = 0
+    }
+}
+
+function Get-BackupTickedParts {
+    $parts = @()
+    if ($chkBackupFiles.Checked) { $parts += 'files' }
+    if ($chkBackupApps.Checked) { $parts += 'apps' }
+    if ($chkBackupPersonal.Checked) { $parts += 'personal' }
+    if ($chkBackupSettings.Checked) { $parts += 'settings' }
+    return $parts
+}
+
+function Show-BackupAt {
+    # what a backup folder holds, and the apps in it against this phone
+    param([string]$Folder)
+
+    $manifest = Read-BackupManifest -Folder $Folder
+    if ($null -eq $manifest) {
+        Write-Log "That folder has no manifest.json, so it is not a backup: $Folder" $colorBad
+        return $false
+    }
+
+    $script:backupFolder = $Folder
+    $script:backupManifest = $manifest
+    $txtBackupInfo.Text = ((@($Folder) + @(Get-BackupSummaryLines -Manifest $manifest)) -join [Environment]::NewLine)
+
+    $serial = Get-SelectedSerial
+    $script:backupAppRows = @(Get-BackupAppRows -Folder $Folder -Serial $(if ($serial) { $serial } else { '' }))
+    $clbBackupApps.Items.Clear()
+    foreach ($row in $script:backupAppRows) {
+        # the apps this phone does not have are ticked; the rest are left alone
+        $null = $clbBackupApps.Items.Add(('{0}   {1}   {2}' -f $row.Package, $row.Size, $row.State), ($row.State -eq 'missing'))
+    }
+    Write-Log "Backup opened: $Folder" $colorInfo
+    return $true
+}
+
+function Start-BackupNow {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    $parts = @(Get-BackupTickedParts)
+    if ($parts.Count -eq 0) { Write-Log 'Tick what should go into the backup first.' $colorWarn; return }
+
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = 'Where should this backup be kept?'
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    $model = ''
+    if ($lstDevices.SelectedItems.Count -gt 0) { $model = $lstDevices.SelectedItems[0].SubItems[2].Text }
+    $manifest = Invoke-PhoneBackup -Serial $serial -Destination $dialog.SelectedPath -Parts $parts -Model $model
+    if ($manifest) { $null = Show-BackupAt -Folder $manifest.Folder }
+}
+
+function Open-BackupFolder {
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = 'Pick a backup folder - the one with manifest.json in it'
+    if ($script:backupFolder -and (Test-Path -LiteralPath $script:backupFolder)) { $dialog.SelectedPath = $script:backupFolder }
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $null = Show-BackupAt -Folder $dialog.SelectedPath
+}
+
+function Start-RestoreFiles {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
+
+    Write-Log 'Restore: reading what the phone already has ...' $colorStep
+    $plan = Get-BackupFilePlan -Folder $script:backupFolder
+    if ($plan.Total -eq 0) { Write-Log 'This backup holds no files.' $colorWarn; return }
+    $plan = Set-BackupFilePlanState -Plan $plan -Serial $serial
+
+    $mode = 'skip'
+    if ($plan.Existing -gt 0) {
+        $answer = [System.Windows.Forms.MessageBox]::Show(
+            "$($plan.Existing) of $($plan.Total) file(s) in this backup are already on the phone." +
+            [Environment]::NewLine + [Environment]::NewLine +
+            'Yes - write over them' + [Environment]::NewLine +
+            'No - leave them and send only the rest' + [Environment]::NewLine +
+            'Cancel - do nothing',
+            'Restore files', 'YesNoCancel', 'Question')
+        if ($answer -eq [System.Windows.Forms.DialogResult]::Cancel) { Write-Log 'Restore cancelled.' $colorWarn; return }
+        if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) { $mode = 'replace' }
+    }
+    $null = Restore-BackupFiles -Plan $plan -Serial $serial -OnConflict $mode
+}
+
+function Start-RestoreApps {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
+
+    $rows = @()
+    foreach ($index in $clbBackupApps.CheckedIndices) {
+        if ($index -ge 0 -and $index -lt $script:backupAppRows.Count) { $rows += $script:backupAppRows[$index] }
+    }
+    if ($rows.Count -eq 0) { Write-Log 'Tick the apps to install first.' $colorWarn; return }
+    $null = Restore-BackupApps -Rows $rows -Serial $serial
+    $null = Show-BackupAt -Folder $script:backupFolder
+}
+
+function Start-RestoreContacts {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
+    $null = Restore-BackupContacts -Folder $script:backupFolder -Serial $serial
+}
+
+function Show-BackupInExplorer {
+    if (-not $script:backupFolder -or -not (Test-Path -LiteralPath $script:backupFolder)) {
+        Write-Log 'Open a backup first.' $colorWarn
+        return
+    }
+    Start-Process -FilePath 'explorer.exe' -ArgumentList ('"' + $script:backupFolder + '"')
+}
+
+$btnBackupRun.Add_Click({ Start-BackupNow })
+$btnBackupOpen.Add_Click({ Open-BackupFolder })
+$btnRestoreFiles.Add_Click({ Start-RestoreFiles })
+$btnRestoreApps.Add_Click({ Start-RestoreApps })
+$btnRestoreContacts.Add_Click({ Start-RestoreContacts })
+$btnBackupOpenFolder.Add_Click({ Show-BackupInExplorer })
+
 $form.Add_FormClosing({
     Save-Settings
     # the rules are free for the other window once this one is gone
@@ -12059,6 +12333,7 @@ Restore-Settings
 Initialize-Automation -ProjectRoot $scriptRoot -CountPresent ([bool]$Minimized)
 Initialize-Tray -Title 'AndroidDC' -ProjectRoot $scriptRoot -GetHandle { $form.Handle } -OnExit { $form.Close() } `
     -OnOpenRules { $tabs.SelectedTab = $tabAdvanced; $tabsAdvanced.SelectedTab = $tabAutomation }
+Initialize-Backup -Progress { param($Text, $Done, $Total) Set-BackupProgressUi -Text $Text -Done $Done -Total $Total }
 
 try {
     [void]$form.ShowDialog()
