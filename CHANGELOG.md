@@ -2,7 +2,7 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.3.0
 
 ### A backup of the phone, and putting one back
 

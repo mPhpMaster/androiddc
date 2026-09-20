@@ -24,7 +24,7 @@ anything added next.
 > same tool. 1.2.0 added starting with Windows, a rule per phone that runs chosen actions when
 > that phone is plugged in, and an icon by the clock. 1.2.1 lists the rules that are set in the
 > log and in that icon's menu. 1.2.2 adds both windows to the Start menu and back out, and keeps
-> Nova on the page you were using.
+> Nova on the page you were using. 1.3.0 backs a phone up to this PC and puts a backup back.
 
 > **Corrections, measured on 2026-09-10.** Four of the "done" claims above did not hold when
 > they were checked against the code and the running window.
