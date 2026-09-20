@@ -51,6 +51,28 @@ $plan = Set-BackupFilePlanKnown -Plan $plan -RemotePaths @()
 Say ("  a phone without it: {0} already there   {1}" -f $plan.Existing, (Mark ($plan.Existing -eq 0)))
 
 Say ''
+Say '== stopping, and saying so =='
+Say ("  a phone that has gone is recognised   {0}" -f (Mark (
+    (Test-BackupDeviceGone -Text "adb: error: device 'ABC123' not found") -and
+    -not (Test-BackupDeviceGone -Text '1 file pushed, 0 skipped.'))))
+Start-BackupRun
+Stop-BackupRun -Reason 'you cancelled it'
+Say ("  Cancel stops it and says why: '{0}'   {1}" -f (Get-BackupStopReason),
+    (Mark ((Test-BackupStopped) -and (Get-BackupStopReason) -eq 'you cancelled it')))
+Complete-BackupRun
+
+$logBefore = @(Get-LogText -split "`n").Count
+Send-BackupNotice -Title 'Backup done' -Text '1 file from a made-up phone.'
+Say ("  finishing says so in the log   {0}" -f (Mark ((Get-LogText) -match 'Backup done')))
+
+Set-BackupPageBusy -Running $true
+Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
+    $ui.BackupCancel.IsEnabled -and -not $ui.BackupRun.IsEnabled -and -not $ui.BackupRestoreFiles.IsEnabled)))
+Set-BackupPageBusy -Running $false
+Say ("  and afterwards the buttons are back   {0}" -f (Mark (
+    (-not $ui.BackupCancel.IsEnabled) -and $ui.BackupRun.IsEnabled -and $ui.BackupRestoreFiles.IsEnabled)))
+
+Say ''
 Say '== fitting the window =='
 foreach ($size in @('default', 'min')) {
     Set-WindowSize -Size $size

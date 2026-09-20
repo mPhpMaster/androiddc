@@ -78,8 +78,9 @@ $marked = @($plan.Items | Where-Object { $_.Exists } | ForEach-Object { $_.Remot
 Say ("  against that phone: {0} of {1} already there ({2})   {3}" -f $plan.Existing, $plan.Total, ($marked -join ','),
     (Mark ($plan.Existing -eq 1 -and ($marked -join ',') -eq '/sdcard/Pictures/one.jpg')))
 
+# Invoke-BackupAdb is what a restore calls now: one adb it can watch and kill
 $sent = & {
-    function Invoke-Adb { param($CommandArguments, $TimeoutMs) $script:pushed += ,@($CommandArguments); return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pushed'; Lines = @() } }
+    function Invoke-BackupAdb { param($ArgumentList, $Caption, $Expected, $OnPoll) $script:pushed += ,@($ArgumentList); return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pushed'; Stopped = $false } }
     function Invoke-DeviceShell { param($Serial, $CommandArguments) return [PSCustomObject]@{ Lines = @(); Text = ''; ExitCode = 0 } }
     $script:pushed = @()
     $result = Restore-BackupFiles -Plan $plan -Serial 'ABC123' -OnConflict 'skip'
@@ -90,7 +91,7 @@ Say ("  skipping what is there sends 1 and leaves 1   {0}" -f (Mark (
 Say ("  and it pushed the missing one   {0}" -f (Mark (((@($sent.Pushed) | ForEach-Object { $_ -join ' ' }) -join '|') -match 'two\.txt')))
 
 $all = & {
-    function Invoke-Adb { param($CommandArguments, $TimeoutMs) return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pushed'; Lines = @() } }
+    function Invoke-BackupAdb { param($ArgumentList, $Caption, $Expected, $OnPoll) return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pushed'; Stopped = $false } }
     function Invoke-DeviceShell { param($Serial, $CommandArguments) return [PSCustomObject]@{ Lines = @(); Text = ''; ExitCode = 0 } }
     Restore-BackupFiles -Plan $plan -Serial 'ABC123' -OnConflict 'replace'
 }
@@ -99,7 +100,7 @@ Say ("  replacing sends both   {0}" -f (Mark ($all.Sent -eq 2 -and $all.Skipped 
 Say ''
 Say '== installing an app from a backup =='
 $installed = & {
-    function Invoke-Adb { param($CommandArguments, $TimeoutMs) $script:ran = $CommandArguments -join ' '; return [PSCustomObject]@{ ExitCode = 0; Text = 'Success'; Lines = @() } }
+    function Invoke-BackupAdb { param($ArgumentList, $Caption, $Expected, $OnPoll) $script:ran = $ArgumentList -join ' '; return [PSCustomObject]@{ ExitCode = 0; Text = 'Success'; Stopped = $false } }
     $script:ran = ''
     $result = Restore-BackupApps -Rows $apps -Serial 'ABC123'
     [PSCustomObject]@{ Result = $result; Ran = $script:ran }
@@ -121,6 +122,68 @@ Say ("  the strip says '{0}' at {1} of {2}   {3}" -f $lblBackupProgress.Text, $p
     (Mark ($lblBackupProgress.Text -eq 'Files: Pictures' -and $prgBackup.Value -eq 3 -and $prgBackup.Maximum -eq 10)))
 $null = Show-BackupAt -Folder $work
 Say ("  a folder without a manifest is refused   {0}" -f (Mark ($script:backupFolder -eq $folder)))
+
+Say ''
+Say '== stopping, and saying so =='
+Say ("  a phone that has gone is recognised   {0}" -f (Mark (
+    (Test-BackupDeviceGone -Text "adb: error: device 'ABC123' not found") -and
+    (Test-BackupDeviceGone -Text 'error: device offline') -and
+    -not (Test-BackupDeviceGone -Text '1 file pushed, 0 skipped.'))))
+
+Start-BackupRun
+Say ("  a fresh run is not stopped   {0}" -f (Mark ((-not (Test-BackupStopped)) -and (Test-BackupRunning))))
+Stop-BackupRun -Reason 'you cancelled it'
+Say ("  Cancel stops it and says why: '{0}'   {1}" -f (Get-BackupStopReason),
+    (Mark ((Test-BackupStopped) -and (Get-BackupStopReason) -eq 'you cancelled it')))
+Stop-BackupRun -Reason 'something else'
+Say ("  the first reason is the one kept   {0}" -f (Mark ((Get-BackupStopReason) -eq 'you cancelled it')))
+Complete-BackupRun
+Say ("  and a stop after the run has ended is ignored   {0}" -f (Mark (-not (Test-BackupRunning))))
+
+# Cancel in the middle: the third file stops it, and the rest are never sent
+$plan = Get-BackupFilePlan -Folder $folder
+$plan = Set-BackupFilePlanKnown -Plan $plan -RemotePaths @()
+$cancelled = & {
+    function Invoke-BackupAdb {
+        param($ArgumentList, $Caption, $Expected, $OnPoll)
+        if (Test-BackupStopped) { return [PSCustomObject]@{ ExitCode = 1; Text = 'stopped'; Stopped = $true } }
+        $script:calls++
+        if ($script:calls -eq 1) { Stop-BackupRun -Reason 'you cancelled it' }
+        return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pushed'; Stopped = $false }
+    }
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) return [PSCustomObject]@{ Lines = @(); Text = ''; ExitCode = 0 } }
+    $script:calls = 0
+    $result = Restore-BackupFiles -Plan $plan -Serial 'ABC123' -OnConflict 'replace'
+    [PSCustomObject]@{ Result = $result; Calls = $script:calls }
+}
+Say ("  a restore cancelled after the first file sends one, not two: {0} call(s)   {1}" -f $cancelled.Calls,
+    (Mark ($cancelled.Calls -eq 1 -and $cancelled.Result.Sent -eq 1 -and $cancelled.Result.Stopped -eq 'you cancelled it')))
+
+# the phone unplugged halfway: adb says so, and the run ends there
+$gone = & {
+    function Invoke-BackupAdb {
+        param($ArgumentList, $Caption, $Expected, $OnPoll)
+        if (Test-BackupStopped) { return [PSCustomObject]@{ ExitCode = 1; Text = 'stopped'; Stopped = $true } }
+        Stop-BackupRun -Reason 'the phone was disconnected'
+        return [PSCustomObject]@{ ExitCode = 1; Text = "adb: error: device 'ABC123' not found"; Stopped = $true }
+    }
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) return [PSCustomObject]@{ Lines = @(); Text = ''; ExitCode = 0 } }
+    Restore-BackupFiles -Plan $plan -Serial 'ABC123' -OnConflict 'replace'
+}
+Say ("  a phone unplugged halfway ends it: '{0}', {1} sent   {2}" -f $gone.Stopped, $gone.Sent,
+    (Mark ($gone.Stopped -eq 'the phone was disconnected' -and $gone.Sent -eq 0)))
+
+$logBefore = $txtLog.TextLength
+Send-BackupNotice -Title 'Backup done' -Text '2 file(s) from a made-up phone.'
+$said = $txtLog.Text.Substring($logBefore)
+Say ("  finishing says so in the log   {0}" -f (Mark ($said -match 'Backup done' -and $said -match 'made-up phone')))
+
+Set-BackupBusyUi -Running $true
+Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
+    $btnBackupCancel.Enabled -and -not $btnBackupRun.Enabled -and -not $btnRestoreFiles.Enabled)))
+Set-BackupBusyUi -Running $false
+Say ("  and afterwards the buttons are back   {0}" -f (Mark (
+    (-not $btnBackupCancel.Enabled) -and $btnBackupRun.Enabled -and $btnRestoreFiles.Enabled -and $prgBackup.Value -eq 0)))
 
 Say ''
 Say '== a real backup, reading only =='

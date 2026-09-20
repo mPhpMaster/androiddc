@@ -31,8 +31,12 @@
           <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <Button x:Name="BackupRun" Style="{StaticResource Primary}" Content="Back up now ..." VerticalAlignment="Center"
-                ToolTip="Asks where to keep it, then writes a folder named after this phone and the time"/>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="BackupRun" Style="{StaticResource Primary}" Content="Back up now ..."
+                  ToolTip="Asks where to keep it, then writes a folder named after this phone and the time"/>
+          <Button x:Name="BackupCancel" Content="Cancel" Margin="8,0,0,0" IsEnabled="False"
+                  ToolTip="Stops the backup or the restore where it is; what was already done stays"/>
+        </StackPanel>
         <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
           <TextBlock x:Name="BackupProgressText" Style="{StaticResource MutedLine}" TextWrapping="NoWrap"
                      TextTrimming="CharacterEllipsis" Text="Nothing running."/>

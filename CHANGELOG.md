@@ -21,6 +21,13 @@
   splits included. *Restore contacts* adds the ones the phone does not have, matched by name
   and number; messages and the call log are saved to read but never written back, because
   Android has no way for adb to write them.
+* **It can be stopped, and it says what happened.** A **Cancel** button next to the progress
+  bar stops a backup or a restore where it is - adb is killed mid-file, and what was already
+  done stays. The bar fills as a folder is pulled, named and sized, because the size of the
+  folder on the phone is read first. A phone that is unplugged halfway is noticed at once and
+  the run ends there rather than failing file after file. Whatever ends it - finished,
+  cancelled, or the phone gone - the log says so and a notification appears by the clock, and
+  a backup that did not finish is marked *not complete* in its manifest and where it is opened.
 * `tests/backup.ps1` and `nova/tests/backup.ps1` check the parts, the folder name, the row
   parser, a backup folder read back and which files a phone already has - against a made-up
   phone, so nothing is sent to a real one.

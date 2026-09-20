@@ -210,6 +210,15 @@ folder named after the phone and the time, holding plain files and a `manifest.j
 what is in it. The log names every folder as it is pulled, and the strip beside the button says
 where it has got to.
 
+**While it runs.** The bar beside the button fills as each folder is pulled, and the line above
+it names what is being copied and how much of it is done. **Cancel** stops the run where it is:
+adb is stopped mid-file, and everything already copied stays. A backup that was stopped is
+marked *not complete* in its `manifest.json`, and says so when you open it later.
+
+**When something goes wrong.** If the phone is unplugged, or adb loses it, the run ends there
+instead of failing file after file, and the log says why. Whatever ends the run - finished,
+cancelled, or the phone gone - a notification appears by the clock and the log gives the count.
+
 **Putting one back.** Press *Open a backup ...* and pick a backup folder - the one with
 `manifest.json` in it. The box then says whose phone it was, when it was taken and what it
 holds.

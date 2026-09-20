@@ -21,6 +21,16 @@
     to unpack - with manifest.json saying what is in it. Restoring reads that
     manifest, never the folder's name.
 
+    Long work can be stopped, and never runs blind:
+
+      * every adb call goes through Invoke-BackupAdb, which watches the process
+        while the window keeps drawing, says how far it has got, and kills adb
+        the moment Stop-BackupRun is called;
+      * a phone that is unplugged is noticed at once - adb says so - and the
+        run ends there instead of failing file after file;
+      * however it ends, the manifest is written, the log says what was done,
+        and a notification by the clock says it has finished.
+
     Dot-sourced by androiddc.ps1 and nova\androiddc-nova.ps1. Nothing here
     touches a control: each window passes a progress script block, and decides
     what to ask before files already on the phone are written over.
@@ -28,8 +38,9 @@
 
 $script:backupFormat = 1
 $script:backupProgress = $null
-# a whole phone is minutes, not seconds; adb's own calls keep their timeout
-$script:backupTimeoutMs = 7200000
+$script:backupStopped = $false
+$script:backupStopReason = ''
+$script:backupRunning = $false
 
 function Initialize-Backup {
     # Progress: param($Text, $Done, $Total); $Done and $Total are -1 when unknown
@@ -41,6 +52,152 @@ function Write-BackupProgress {
     param([string]$Text, [int]$Done = -1, [int]$Total = -1)
     if ($script:backupProgress) { try { & $script:backupProgress $Text $Done $Total } catch { } }
 }
+
+# ------------------------------------------------------ starting, stopping ----
+
+function Start-BackupRun {
+    # a fresh run: nothing stopped, nothing to report yet
+    $script:backupStopped = $false
+    $script:backupStopReason = ''
+    $script:backupRunning = $true
+}
+
+function Stop-BackupRun {
+    # what Cancel calls, and what a lost phone calls; the run notices between
+    # files, and kills adb in the middle of one
+    param([string]$Reason = 'cancelled')
+
+    if (-not $script:backupRunning) { return }
+    if (-not $script:backupStopped) {
+        $script:backupStopped = $true
+        $script:backupStopReason = $Reason
+    }
+}
+
+function Complete-BackupRun {
+    $script:backupRunning = $false
+}
+
+function Test-BackupStopped {
+    return $script:backupStopped
+}
+
+function Get-BackupStopReason {
+    return $script:backupStopReason
+}
+
+function Test-BackupRunning {
+    return $script:backupRunning
+}
+
+function Test-BackupDeviceGone {
+    # what adb says when the phone has gone: stop everything, not just this file
+    param([string]$Text)
+    return ("$Text" -match 'device .*not found|device offline|no devices/emulators found|error: closed|device unauthorized')
+}
+
+function Send-BackupNotice {
+    # a notification by the clock when a long run ends, however it ended
+    param([string]$Title, [string]$Text)
+
+    Write-Log "$Title - $Text" $colorInfo
+    if (Get-Command Show-TrayBalloon -ErrorAction SilentlyContinue) {
+        $null = Show-TrayBalloon -Title $Title -Text $Text
+    }
+}
+
+function Invoke-BackupAdb {
+    <#
+        One adb call that can be watched and stopped. adb prints no progress
+        when its output is redirected, so how far it has got is measured where
+        the bytes land: OnPoll is asked every second or so and answers the size
+        so far, or -1 when that cannot be known.
+
+        Returns ExitCode, Text and Stopped.
+    #>
+    param(
+        [string[]]$ArgumentList,
+        [string]$Caption = '',
+        [long]$Expected = -1,
+        [scriptblock]$OnPoll
+    )
+
+    if (Test-BackupStopped) { return [PSCustomObject]@{ ExitCode = 1; Text = 'stopped'; Stopped = $true } }
+
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = $script:adbPath
+    # every argument quoted on its own: a path may hold spaces
+    $info.Arguments = (@($ArgumentList | ForEach-Object { '"' + $_ + '"' }) -join ' ')
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    # adb writes UTF-8; left unset, .NET decodes with the console page and an
+    # Arabic name in adb's messages comes back garbled
+    $info.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $info.StandardErrorEncoding = New-Object System.Text.UTF8Encoding($false)
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $info
+    try {
+        if (-not $process.Start()) { return [PSCustomObject]@{ ExitCode = 1; Text = 'adb did not start'; Stopped = $false } }
+    } catch {
+        return [PSCustomObject]@{ ExitCode = 1; Text = $_.Exception.Message; Stopped = $false }
+    }
+
+    # both streams are read as they come, so a chatty adb never blocks on a full pipe
+    $errorRead = $process.StandardError.ReadToEndAsync()
+    $outputRead = $process.StandardOutput.ReadToEndAsync()
+
+    $script:busy++
+    $script:busyWhat = 'adb ' + ($ArgumentList -join ' ')
+    $stopped = $false
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastPoll = -2000
+    try {
+        while (-not $process.HasExited) {
+            # the window keeps drawing, and Cancel keeps working, while adb runs
+            Wait-Pumped -Milliseconds 120
+            if (Test-BackupStopped) {
+                try { $process.Kill() } catch { }
+                $stopped = $true
+                break
+            }
+            if ($OnPoll -and ($watch.ElapsedMilliseconds - $lastPoll) -gt 1200) {
+                $lastPoll = $watch.ElapsedMilliseconds
+                $done = [long](-1)
+                try { $done = [long](& $OnPoll) } catch { $done = [long](-1) }
+                if ($Expected -gt 0 -and $done -ge 0) {
+                    $share = [int]([Math]::Min(100, 100 * $done / $Expected))
+                    Write-BackupProgress -Text ("$Caption  " + (Format-FileSize -Bytes $done) + ' of ' +
+                        (Format-FileSize -Bytes $Expected)) -Done $share -Total 100
+                } elseif ($done -ge 0) {
+                    Write-BackupProgress -Text ("$Caption  " + (Format-FileSize -Bytes $done) + ' so far') -Done -1 -Total -1
+                }
+            }
+        }
+        $null = $process.WaitForExit(5000)
+    } finally {
+        $script:busy--
+        if ($script:busy -lt 0) { $script:busy = 0 }
+    }
+
+    $text = ''
+    try {
+        if ($errorRead.Wait(3000)) { $text += $errorRead.Result }
+        if ($outputRead.Wait(3000)) { $text += $outputRead.Result }
+    } catch { }
+
+    $code = 1
+    try { $code = $process.ExitCode } catch { }
+    if (-not $stopped -and (Test-BackupDeviceGone -Text $text)) {
+        Stop-BackupRun -Reason 'the phone was disconnected'
+        $stopped = $true
+    }
+    return [PSCustomObject]@{ ExitCode = $code; Text = "$text".Trim(); Stopped = $stopped }
+}
+
+# ------------------------------------------------------------------ parts ----
 
 function Get-BackupParts {
     # what a backup can hold; each one is ticked on its own
@@ -115,6 +272,16 @@ function Get-BackupStorageEntries {
     return $entries
 }
 
+function Get-BackupRemoteSize {
+    # how big a folder on the phone is, so the bar can mean something; -1 when
+    # the phone has no du, which some ROMs do not
+    param([string]$Serial, [string]$Path)
+
+    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @("du -sk '$Path' 2>/dev/null")).Text
+    if ("$text" -match '^\s*(\d+)') { return ([long]$Matches[1] * 1024) }
+    return [long](-1)
+}
+
 function Save-BackupText {
     # one text file in the backup, written as UTF-8 without a BOM
     param([string]$Path, [string]$Text)
@@ -134,7 +301,8 @@ function Get-BackupFolderSize {
 }
 
 function Backup-PhoneFiles {
-    # /sdcard onto the PC, one top-level folder at a time so the log says where it is
+    # /sdcard onto the PC, one top-level folder at a time, so the log says where
+    # it is and Cancel lands between folders as well as inside one
     param([string]$Serial, [string]$Folder)
 
     $target = Join-Path $Folder 'files'
@@ -145,16 +313,22 @@ function Backup-PhoneFiles {
     $index = 0
     $refused = @()
     foreach ($entry in $entries) {
+        if (Test-BackupStopped) { break }
         $index++
         Write-BackupProgress -Text "Files: $entry" -Done $index -Total $entries.Count
         Write-Log "  pulling /sdcard/$entry ..." $colorInfo
-        $local = Join-Path $target ($entry -replace '/', '\')
+
+        $local = Join-Path $target ($entry -replace '/', [string][char]92)
         $parent = Split-Path -Parent $local
         if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
-        $result = Invoke-Adb -CommandArguments @('-s', $Serial, 'pull', '-a', "/sdcard/$entry", $local) -TimeoutMs $script:backupTimeoutMs
+
+        $expected = Get-BackupRemoteSize -Serial $Serial -Path "/sdcard/$entry"
+        $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', "/sdcard/$entry", $local) `
+            -Caption "Files: $entry" -Expected $expected -OnPoll { Get-BackupFolderSize -Path $local }.GetNewClosure()
+        if ($result.Stopped) { break }
         if ($result.ExitCode -ne 0) {
             $refused += $entry
-            Write-Log ('  ' + $result.Text.Trim()) $colorWarn
+            Write-Log ('  ' + $result.Text) $colorWarn
         }
     }
 
@@ -181,8 +355,10 @@ function Backup-PhoneApps {
     $apps = @()
     $index = 0
     foreach ($package in $packages) {
+        if (Test-BackupStopped) { break }
         $index++
         Write-BackupProgress -Text "Apps: $package" -Done $index -Total $packages.Count
+
         $paths = @()
         foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'path', $package)).Lines) {
             if ("$line" -match '^package:(/\S+\.apk)$') { $paths += $Matches[1] }
@@ -193,9 +369,12 @@ function Backup-PhoneApps {
         $null = New-Item -ItemType Directory -Path $appFolder -Force
         $saved = @()
         foreach ($path in $paths) {
+            if (Test-BackupStopped) { break }
             $name = [System.IO.Path]::GetFileName($path)
-            $result = Invoke-Adb -CommandArguments @('-s', $Serial, 'pull', $path, (Join-Path $appFolder $name)) -TimeoutMs $script:backupTimeoutMs
-            if ($result.ExitCode -eq 0) { $saved += $name } else { Write-Log ("  $package : " + $result.Text.Trim()) $colorWarn }
+            $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', $path, (Join-Path $appFolder $name)) `
+                -Caption "Apps: $package"
+            if ($result.Stopped) { break }
+            if ($result.ExitCode -eq 0) { $saved += $name } else { Write-Log ("  $package : " + $result.Text) $colorWarn }
         }
         if ($saved.Count -eq 0) { continue }
         $apps += [PSCustomObject]@{ Package = $package; Files = @($saved); Bytes = (Get-BackupFolderSize -Path $appFolder) }
@@ -216,6 +395,7 @@ function Backup-PhonePersonal {
     $contacts = @()
     $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
         'content query --uri content://com.android.contacts/data/phones --projection display_name:data1')).Text
+    if (Test-BackupDeviceGone -Text $text) { Stop-BackupRun -Reason 'the phone was disconnected' }
     foreach ($row in (Split-BackupRows -Text $text)) {
         $number = Get-BackupRowValue -Row $row -Column 'data1'
         if (-not $number) { continue }
@@ -223,37 +403,41 @@ function Backup-PhonePersonal {
     }
     Save-BackupText -Path (Join-Path $target 'contacts.json') -Text (ConvertTo-Json -InputObject @($contacts) -Depth 3)
 
-    Write-BackupProgress -Text 'Messages ...' -Done 2 -Total 3
     $messages = @()
-    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        'content query --uri content://sms --projection _id:address:date:type:body')).Text
-    foreach ($row in (Split-BackupRows -Text $text)) {
-        $address = Get-BackupRowValue -Row $row -Column 'address'
-        if (-not $address) { continue }
-        $messages += [PSCustomObject]@{
-            Number = $address
-            When   = (Get-BackupRowValue -Row $row -Column 'date')
-            Kind   = (Get-BackupRowValue -Row $row -Column 'type')
-            Text   = (Get-BackupRowValue -Row $row -Column 'body')
+    if (-not (Test-BackupStopped)) {
+        Write-BackupProgress -Text 'Messages ...' -Done 2 -Total 3
+        $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+            'content query --uri content://sms --projection _id:address:date:type:body')).Text
+        foreach ($row in (Split-BackupRows -Text $text)) {
+            $address = Get-BackupRowValue -Row $row -Column 'address'
+            if (-not $address) { continue }
+            $messages += [PSCustomObject]@{
+                Number = $address
+                When   = (Get-BackupRowValue -Row $row -Column 'date')
+                Kind   = (Get-BackupRowValue -Row $row -Column 'type')
+                Text   = (Get-BackupRowValue -Row $row -Column 'body')
+            }
         }
+        Save-BackupText -Path (Join-Path $target 'messages.json') -Text (ConvertTo-Json -InputObject @($messages) -Depth 3)
     }
-    Save-BackupText -Path (Join-Path $target 'messages.json') -Text (ConvertTo-Json -InputObject @($messages) -Depth 3)
 
-    Write-BackupProgress -Text 'Call log ...' -Done 3 -Total 3
     $calls = @()
-    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        'content query --uri content://call_log/calls --projection number:date:duration:type')).Text
-    foreach ($row in (Split-BackupRows -Text $text)) {
-        $number = Get-BackupRowValue -Row $row -Column 'number'
-        if (-not $number) { continue }
-        $calls += [PSCustomObject]@{
-            Number  = $number
-            When    = (Get-BackupRowValue -Row $row -Column 'date')
-            Seconds = (Get-BackupRowValue -Row $row -Column 'duration')
-            Kind    = (Get-BackupRowValue -Row $row -Column 'type')
+    if (-not (Test-BackupStopped)) {
+        Write-BackupProgress -Text 'Call log ...' -Done 3 -Total 3
+        $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+            'content query --uri content://call_log/calls --projection number:date:duration:type')).Text
+        foreach ($row in (Split-BackupRows -Text $text)) {
+            $number = Get-BackupRowValue -Row $row -Column 'number'
+            if (-not $number) { continue }
+            $calls += [PSCustomObject]@{
+                Number  = $number
+                When    = (Get-BackupRowValue -Row $row -Column 'date')
+                Seconds = (Get-BackupRowValue -Row $row -Column 'duration')
+                Kind    = (Get-BackupRowValue -Row $row -Column 'type')
+            }
         }
+        Save-BackupText -Path (Join-Path $target 'calls.json') -Text (ConvertTo-Json -InputObject @($calls) -Depth 3)
     }
-    Save-BackupText -Path (Join-Path $target 'calls.json') -Text (ConvertTo-Json -InputObject @($calls) -Depth 3)
 
     Write-Log "  $($contacts.Count) contact(s), $($messages.Count) message(s), $($calls.Count) call(s)" $colorGood
     return [PSCustomObject]@{ Contacts = $contacts.Count; Messages = $messages.Count; Calls = $calls.Count }
@@ -277,17 +461,22 @@ function Backup-PhoneSettings {
     $written = @()
     $index = 0
     foreach ($read in $reads) {
+        if (Test-BackupStopped) { break }
         $index++
         Write-BackupProgress -Text "Settings: $($read.File)" -Done $index -Total ($reads.Count + 1)
-        Save-BackupText -Path (Join-Path $target $read.File) -Text (Invoke-DeviceShell -Serial $Serial -CommandArguments $read.Command).Text
+        $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments $read.Command).Text
+        if (Test-BackupDeviceGone -Text $text) { Stop-BackupRun -Reason 'the phone was disconnected'; break }
+        Save-BackupText -Path (Join-Path $target $read.File) -Text $text
         $written += $read.File
     }
 
-    Write-BackupProgress -Text 'Settings: the device report' -Done ($reads.Count + 1) -Total ($reads.Count + 1)
-    # the Overview page's report, when this window has it
-    if (Get-Command Get-DeviceReport -ErrorAction SilentlyContinue) {
-        Save-BackupText -Path (Join-Path $target 'device.txt') -Text (Get-DeviceReport -Serial $Serial)
-        $written += 'device.txt'
+    if (-not (Test-BackupStopped)) {
+        Write-BackupProgress -Text 'Settings: the device report' -Done ($reads.Count + 1) -Total ($reads.Count + 1)
+        # the Overview page's report, when this window has it
+        if (Get-Command Get-DeviceReport -ErrorAction SilentlyContinue) {
+            Save-BackupText -Path (Join-Path $target 'device.txt') -Text (Get-DeviceReport -Serial $Serial)
+            $written += 'device.txt'
+        }
     }
     Write-Log ('  ' + ($written -join ', ')) $colorGood
     return $written
@@ -296,7 +485,9 @@ function Backup-PhoneSettings {
 function Invoke-PhoneBackup {
     <#
         One backup into a new folder under Destination. Parts are ids from
-        Get-BackupParts. Returns the manifest, or $null when nothing was taken.
+        Get-BackupParts. Stopping - by Cancel, or by the phone going away -
+        ends it where it is; the manifest is written either way, and Complete
+        says whether everything asked for was taken.
     #>
     param([string]$Serial, [string]$Destination, [string[]]$Parts, [string]$Model = '')
 
@@ -308,6 +499,7 @@ function Invoke-PhoneBackup {
     $folder = Join-Path $Destination (ConvertTo-BackupName -Model $Model -Serial $Serial -When $started)
     $null = New-Item -ItemType Directory -Path $folder -Force
     Write-Log "Backup of $Serial into $folder" $colorStep
+    Start-BackupRun
 
     $manifest = [ordered]@{
         Format   = $script:backupFormat
@@ -321,21 +513,37 @@ function Invoke-PhoneBackup {
         Personal = $null
         Settings = @()
         Bytes    = [long]0
+        Complete = $true
+        Stopped  = ''
         Finished = ''
     }
 
-    if ($wanted -contains 'files') { $manifest.Files = Backup-PhoneFiles -Serial $Serial -Folder $folder }
-    if ($wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder) }
-    if ($wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
-    if ($wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
-
-    $manifest.Bytes = Get-BackupFolderSize -Path $folder
-    $manifest.Finished = ([datetime]::Now).ToString('s')
-    Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -InputObject $manifest -Depth 6)
+    try {
+        if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Backup-PhoneFiles -Serial $Serial -Folder $folder }
+        if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder) }
+        if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
+        if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
+    } finally {
+        $manifest.Bytes = Get-BackupFolderSize -Path $folder
+        $manifest.Finished = ([datetime]::Now).ToString('s')
+        $manifest.Complete = -not (Test-BackupStopped)
+        $manifest.Stopped = Get-BackupStopReason
+        Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -InputObject $manifest -Depth 6)
+        Complete-BackupRun
+    }
 
     $minutes = ([datetime]::Now - $started).TotalMinutes
-    Write-Log ('Backup done: ' + (Format-FileSize -Bytes $manifest.Bytes) + (' in {0:N1} minute(s).' -f $minutes)) $colorGood
-    Write-BackupProgress -Text 'Backup done' -Done 1 -Total 1
+    $size = Format-FileSize -Bytes $manifest.Bytes
+    if ($manifest.Complete) {
+        Write-Log ("Backup done: $size" + (' in {0:N1} minute(s).' -f $minutes)) $colorGood
+        Send-BackupNotice -Title 'Backup done' -Text "$size from $Serial is in the folder."
+    } else {
+        Write-Log ("Backup stopped ($($manifest.Stopped)) after $size" + (' and {0:N1} minute(s).' -f $minutes)) $colorWarn
+        Write-Log '  What was already pulled is kept, and the manifest says this backup is not complete.' $colorInfo
+        Send-BackupNotice -Title 'Backup stopped' -Text "$($manifest.Stopped). $size was kept."
+    }
+    Write-BackupProgress -Text $(if ($manifest.Complete) { 'Backup done' } else { "Backup stopped: $($manifest.Stopped)" }) -Done 1 -Total 1
+
     $result = [PSCustomObject]$manifest
     Add-Member -InputObject $result -NotePropertyName 'Folder' -NotePropertyValue $folder -Force
     return $result
@@ -360,6 +568,9 @@ function Get-BackupSummaryLines {
     $lines = @("$($Manifest.Model) ($($Manifest.Serial)), Android $($Manifest.Android), taken " +
         (("$($Manifest.Created)" -replace 'T', ' ')))
     if ($Manifest.PSObject.Properties['Bytes']) { $lines += 'Size: ' + (Format-FileSize -Bytes ([long]$Manifest.Bytes)) }
+    if ($Manifest.PSObject.Properties['Complete'] -and -not $Manifest.Complete) {
+        $lines += "Not complete: this backup was stopped ($($Manifest.Stopped))"
+    }
     if ($Manifest.PSObject.Properties['Files'] -and $Manifest.Files) {
         $lines += "Files: $($Manifest.Files.Files) file(s), " + (Format-FileSize -Bytes ([long]$Manifest.Files.Bytes))
     }
@@ -464,40 +675,60 @@ function Set-BackupFilePlanState {
 }
 
 function Restore-BackupFiles {
-    # OnConflict: 'skip' leaves what the phone has, 'replace' writes over it
+    # OnConflict: 'skip' leaves what the phone has, 'replace' writes over it.
+    # Stops on Cancel and when the phone goes away, and says how far it got.
     param($Plan, [string]$Serial, [ValidateSet('skip', 'replace')][string]$OnConflict = 'skip')
 
     $items = @($Plan.Items)
     if ($OnConflict -eq 'skip') { $items = @($items | Where-Object { -not $_.Exists }) }
     if ($items.Count -eq 0) {
         Write-Log 'Restore: every file in the backup is already on the phone.' $colorInfo
-        return [PSCustomObject]@{ Sent = 0; Failed = 0; Skipped = $Plan.Existing }
+        return [PSCustomObject]@{ Sent = 0; Failed = 0; Skipped = $Plan.Existing; Stopped = '' }
     }
 
     Write-Log "Restore: sending $($items.Count) file(s) ..." $colorStep
+    Start-BackupRun
     $sent = 0
     $failed = 0
     $index = 0
-    foreach ($item in $items) {
-        $index++
-        if (($index % 25) -eq 1 -or $index -eq $items.Count) {
+    try {
+        foreach ($item in $items) {
+            if (Test-BackupStopped) { break }
+            $index++
             Write-BackupProgress -Text "Files: $($item.Remote)" -Done $index -Total $items.Count
+            $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'push', $item.Local, $item.Remote) -Caption 'Restore'
+            if ($result.Stopped) { break }
+            if ($result.ExitCode -eq 0) {
+                $sent++
+            } else {
+                $failed++
+                if ($failed -le 5) { Write-Log ('  ' + $result.Text) $colorWarn }
+                # a phone that refuses everything is not worth ten thousand tries
+                if ($failed -ge 20 -and $sent -eq 0) {
+                    Stop-BackupRun -Reason 'the phone refused the first 20 files'
+                    break
+                }
+            }
         }
-        $result = Invoke-Adb -CommandArguments @('-s', $Serial, 'push', $item.Local, $item.Remote) -TimeoutMs $script:backupTimeoutMs
-        if ($result.ExitCode -eq 0) {
-            $sent++
-        } else {
-            $failed++
-            if ($failed -le 5) { Write-Log ('  ' + $result.Text.Trim()) $colorWarn }
-        }
+    } finally {
+        Complete-BackupRun
     }
 
     $skipped = $(if ($OnConflict -eq 'skip') { $Plan.Existing } else { 0 })
-    Write-Log "  $sent sent, $failed refused, $skipped left as they were." $(if ($failed -gt 0) { $colorWarn } else { $colorGood })
+    $stopped = Get-BackupStopReason
+    if ($stopped) {
+        Write-Log "Restore stopped ($stopped): $sent of $($items.Count) file(s) had been sent." $colorWarn
+        Send-BackupNotice -Title 'Restore stopped' -Text "$stopped. $sent file(s) were sent before it stopped."
+    } else {
+        Write-Log "  $sent sent, $failed refused, $skipped left as they were." $(if ($failed -gt 0) { $colorWarn } else { $colorGood })
+        Send-BackupNotice -Title 'Restore done' -Text "$sent file(s) sent to $Serial, $failed refused."
+    }
+    Write-BackupProgress -Text $(if ($stopped) { "Restore stopped: $stopped" } else { 'Restore done' }) -Done 1 -Total 1
+
     # the gallery shows what it has scanned, not what is on the card
     $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @(
         'content call --uri content://media --method scan_volume --arg external_primary')
-    return [PSCustomObject]@{ Sent = $sent; Failed = $failed; Skipped = $skipped }
+    return [PSCustomObject]@{ Sent = $sent; Failed = $failed; Skipped = $skipped; Stopped = $stopped }
 }
 
 function Restore-BackupApps {
@@ -505,36 +736,56 @@ function Restore-BackupApps {
     param($Rows, [string]$Serial)
 
     $rows = @($Rows)
-    if ($rows.Count -eq 0) { return [PSCustomObject]@{ Installed = 0; Failed = 0 } }
+    if ($rows.Count -eq 0) { return [PSCustomObject]@{ Installed = 0; Failed = 0; Stopped = '' } }
     Write-Log "Restore: installing $($rows.Count) app(s) ..." $colorStep
+    Start-BackupRun
 
     $installed = 0
     $failed = 0
     $index = 0
-    foreach ($row in $rows) {
-        $index++
-        Write-BackupProgress -Text "Apps: $($row.Package)" -Done $index -Total $rows.Count
-        $apks = @($row.Apks)
-        $arguments = @('-s', $Serial)
-        $arguments += $(if ($apks.Count -gt 1) { @('install-multiple', '-r') } else { @('install', '-r') })
-        $arguments += $apks
+    try {
+        foreach ($row in $rows) {
+            if (Test-BackupStopped) { break }
+            $index++
+            Write-BackupProgress -Text "Apps: $($row.Package)" -Done $index -Total $rows.Count
 
-        $text = (Invoke-Adb -CommandArguments $arguments -TimeoutMs $script:backupTimeoutMs).Text.Trim()
-        if ($text -match 'Success') {
-            $installed++
-            Write-Log "  $($row.Package) installed." $colorGood
-        } else {
-            $failed++
-            Write-Log ("  $($row.Package): " + $text) $colorBad
-            # measured on a Xiaomi phone: it refuses any adb install until allowed
-            if ($text -match 'INSTALL_FAILED_USER_RESTRICTED') {
-                Write-Log ('  The phone blocks installs over USB. On Xiaomi / Redmi / POCO turn on ' +
-                    'Developer options > Install via USB, then try again.') $colorWarn
+            $apks = @($row.Apks)
+            $arguments = @('-s', $Serial)
+            $arguments += $(if ($apks.Count -gt 1) { @('install-multiple', '-r') } else { @('install', '-r') })
+            $arguments += $apks
+
+            $result = Invoke-BackupAdb -ArgumentList $arguments -Caption "Apps: $($row.Package)"
+            if ($result.Stopped) { break }
+            $text = $result.Text
+            if ($text -match 'Success') {
+                $installed++
+                Write-Log "  $($row.Package) installed." $colorGood
+            } else {
+                $failed++
+                Write-Log ("  $($row.Package): " + $text) $colorBad
+                # measured on a Xiaomi phone: it refuses every adb install until allowed
+                if ($text -match 'INSTALL_FAILED_USER_RESTRICTED') {
+                    Write-Log ('  The phone blocks installs over USB. On Xiaomi / Redmi / POCO turn on ' +
+                        'Developer options > Install via USB, then try again.') $colorWarn
+                    Stop-BackupRun -Reason 'the phone blocks installs over USB'
+                    break
+                }
             }
         }
+    } finally {
+        Complete-BackupRun
     }
-    Write-Log "  $installed installed, $failed refused." $(if ($failed -gt 0) { $colorWarn } else { $colorGood })
-    return [PSCustomObject]@{ Installed = $installed; Failed = $failed }
+
+    $stopped = Get-BackupStopReason
+    if ($stopped) {
+        Write-Log "Installing stopped ($stopped): $installed app(s) installed." $colorWarn
+        Send-BackupNotice -Title 'Installing stopped' -Text "$stopped. $installed app(s) were installed."
+    } else {
+        Write-Log "  $installed installed, $failed refused." $(if ($failed -gt 0) { $colorWarn } else { $colorGood })
+        Send-BackupNotice -Title 'Apps installed' -Text "$installed installed on $Serial, $failed refused."
+    }
+    Write-BackupProgress -Text $(if ($stopped) { "Installing stopped: $stopped" } else { 'Apps installed' }) -Done 1 -Total 1
+    return [PSCustomObject]@{ Installed = $installed; Failed = $failed; Stopped = $stopped }
 }
 
 function Restore-BackupContacts {
@@ -544,13 +795,13 @@ function Restore-BackupContacts {
     $path = Join-Path (Join-Path "$Folder" 'personal') 'contacts.json'
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         Write-Log 'Restore: this backup holds no contacts.' $colorWarn
-        return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0 }
+        return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0; Stopped = '' }
     }
     try {
         $contacts = @(Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json)
     } catch {
         Write-Log ('Restore: the contacts file could not be read: ' + $_.Exception.Message) $colorBad
-        return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0 }
+        return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0; Stopped = '' }
     }
 
     # what the phone has now, so no contact is added twice
@@ -564,39 +815,54 @@ function Restore-BackupContacts {
     }
 
     Write-Log "Restore: $($contacts.Count) contact(s) in the backup ..." $colorStep
+    Start-BackupRun
     $added = 0
     $failed = 0
     $skipped = 0
     $index = 0
-    foreach ($contact in $contacts) {
-        $index++
-        $name = "$($contact.Name)".Trim()
-        $number = "$($contact.Number)".Trim()
-        if (-not $number) { continue }
-        $key = ($name + '|' + ($number -replace '[\s\-()]', '')).ToLowerInvariant()
-        if ($have.ContainsKey($key)) { $skipped++; continue }
-        Write-BackupProgress -Text "Contacts: $name" -Done $index -Total $contacts.Count
+    try {
+        foreach ($contact in $contacts) {
+            if (Test-BackupStopped) { break }
+            $index++
+            $name = "$($contact.Name)".Trim()
+            $number = "$($contact.Number)".Trim()
+            if (-not $number) { continue }
+            $key = ($name + '|' + ($number -replace '[\s\-()]', '')).ToLowerInvariant()
+            if ($have.ContainsKey($key)) { $skipped++; continue }
+            Write-BackupProgress -Text "Contacts: $name" -Done $index -Total $contacts.Count
 
-        $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-            'content insert --uri content://com.android.contacts/raw_contacts --bind account_name:s:null --bind account_type:s:null')
-        if ($result.Text -match 'Error|Exception') { $failed++; continue }
-        # the row just made is the one with the highest id
-        $newest = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-            "content query --uri content://com.android.contacts/raw_contacts --projection _id --sort '_id DESC' | head -1")).Text
-        if ($newest -notmatch '_id=(\d+)') { $failed++; continue }
-        $rawId = $Matches[1]
+            $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+                'content insert --uri content://com.android.contacts/raw_contacts --bind account_name:s:null --bind account_type:s:null')
+            if (Test-BackupDeviceGone -Text $result.Text) { Stop-BackupRun -Reason 'the phone was disconnected'; break }
+            if ($result.Text -match 'Error|Exception') { $failed++; continue }
+            # the row just made is the one with the highest id
+            $newest = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+                "content query --uri content://com.android.contacts/raw_contacts --projection _id --sort '_id DESC' | head -1")).Text
+            if ($newest -notmatch '_id=(\d+)') { $failed++; continue }
+            $rawId = $Matches[1]
 
-        # one argument each: a name has spaces, and may hold an apostrophe
-        $null = Invoke-DeviceCommand -Serial $Serial -Arguments @('content', 'insert', '--uri',
-            'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
-            '--bind', 'mimetype:s:vnd.android.cursor.item/name', '--bind', "data1:s:$name")
-        $null = Invoke-DeviceCommand -Serial $Serial -Arguments @('content', 'insert', '--uri',
-            'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
-            '--bind', 'mimetype:s:vnd.android.cursor.item/phone_v2', '--bind', "data1:s:$number")
-        $added++
-        $have[$key] = $true
+            # one argument each: a name has spaces, and may hold an apostrophe
+            $null = Invoke-DeviceCommand -Serial $Serial -Arguments @('content', 'insert', '--uri',
+                'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
+                '--bind', 'mimetype:s:vnd.android.cursor.item/name', '--bind', "data1:s:$name")
+            $null = Invoke-DeviceCommand -Serial $Serial -Arguments @('content', 'insert', '--uri',
+                'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
+                '--bind', 'mimetype:s:vnd.android.cursor.item/phone_v2', '--bind', "data1:s:$number")
+            $added++
+            $have[$key] = $true
+        }
+    } finally {
+        Complete-BackupRun
     }
 
-    Write-Log "  $added added, $skipped already there, $failed refused." $(if ($failed -gt 0) { $colorWarn } else { $colorGood })
-    return [PSCustomObject]@{ Added = $added; Failed = $failed; Skipped = $skipped }
+    $stopped = Get-BackupStopReason
+    if ($stopped) {
+        Write-Log "Contacts stopped ($stopped): $added contact(s) added." $colorWarn
+        Send-BackupNotice -Title 'Contacts stopped' -Text "$stopped. $added contact(s) were added."
+    } else {
+        Write-Log "  $added added, $skipped already there, $failed refused." $(if ($failed -gt 0) { $colorWarn } else { $colorGood })
+        Send-BackupNotice -Title 'Contacts restored' -Text "$added added to $Serial, $skipped were already there."
+    }
+    Write-BackupProgress -Text $(if ($stopped) { "Contacts stopped: $stopped" } else { 'Contacts restored' }) -Done 1 -Total 1
+    return [PSCustomObject]@{ Added = $added; Failed = $failed; Skipped = $skipped; Stopped = $stopped }
 }

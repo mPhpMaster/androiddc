@@ -3759,15 +3759,23 @@ $btnBackupRun.Size = New-Object System.Drawing.Size(140, 28)
 $grpBackupMake.Controls.Add($btnBackupRun)
 $toolTip.SetToolTip($btnBackupRun, 'Asks where to keep it, then writes a folder named after this phone and the time')
 
+$btnBackupCancel = New-Object System.Windows.Forms.Button
+$btnBackupCancel.Text = 'Cancel'
+$btnBackupCancel.Location = New-Object System.Drawing.Point(158, 48)
+$btnBackupCancel.Size = New-Object System.Drawing.Size(90, 28)
+$btnBackupCancel.Enabled = $false
+$grpBackupMake.Controls.Add($btnBackupCancel)
+$toolTip.SetToolTip($btnBackupCancel, 'Stops the backup or the restore where it is; what was already done stays')
+
 $prgBackup = New-Object System.Windows.Forms.ProgressBar
-$prgBackup.Location = New-Object System.Drawing.Point(160, 52)
-$prgBackup.Size = New-Object System.Drawing.Size(170, 20)
+$prgBackup.Location = New-Object System.Drawing.Point(256, 52)
+$prgBackup.Size = New-Object System.Drawing.Size(150, 20)
 $grpBackupMake.Controls.Add($prgBackup)
 
 $lblBackupProgress = New-Object System.Windows.Forms.Label
 $lblBackupProgress.Text = 'What an app keeps inside itself cannot be read without root - see the guide.'
-$lblBackupProgress.Location = New-Object System.Drawing.Point(338, 54)
-$lblBackupProgress.Size = New-Object System.Drawing.Size(362, 20)
+$lblBackupProgress.Location = New-Object System.Drawing.Point(414, 54)
+$lblBackupProgress.Size = New-Object System.Drawing.Size(286, 20)
 $lblBackupProgress.AutoEllipsis = $true
 $grpBackupMake.Controls.Add($lblBackupProgress)
 
@@ -12129,6 +12137,19 @@ function Set-BackupProgressUi {
     }
 }
 
+function Set-BackupBusyUi {
+    # while a backup or a restore runs, Cancel is the only button that works
+    param([bool]$Running)
+
+    $btnBackupCancel.Enabled = $Running
+    foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps, $btnRestoreContacts)) {
+        $control.Enabled = -not $Running
+    }
+    if (-not $Running) {
+        $prgBackup.Value = 0
+    }
+}
+
 function Get-BackupTickedParts {
     $parts = @()
     if ($chkBackupFiles.Checked) { $parts += 'files' }
@@ -12175,7 +12196,12 @@ function Start-BackupNow {
 
     $model = ''
     if ($lstDevices.SelectedItems.Count -gt 0) { $model = $lstDevices.SelectedItems[0].SubItems[2].Text }
-    $manifest = Invoke-PhoneBackup -Serial $serial -Destination $dialog.SelectedPath -Parts $parts -Model $model
+    Set-BackupBusyUi -Running $true
+    try {
+        $manifest = Invoke-PhoneBackup -Serial $serial -Destination $dialog.SelectedPath -Parts $parts -Model $model
+    } finally {
+        Set-BackupBusyUi -Running $false
+    }
     if ($manifest) { $null = Show-BackupAt -Folder $manifest.Folder }
 }
 
@@ -12209,7 +12235,12 @@ function Start-RestoreFiles {
         if ($answer -eq [System.Windows.Forms.DialogResult]::Cancel) { Write-Log 'Restore cancelled.' $colorWarn; return }
         if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) { $mode = 'replace' }
     }
-    $null = Restore-BackupFiles -Plan $plan -Serial $serial -OnConflict $mode
+    Set-BackupBusyUi -Running $true
+    try {
+        $null = Restore-BackupFiles -Plan $plan -Serial $serial -OnConflict $mode
+    } finally {
+        Set-BackupBusyUi -Running $false
+    }
 }
 
 function Start-RestoreApps {
@@ -12222,7 +12253,12 @@ function Start-RestoreApps {
         if ($index -ge 0 -and $index -lt $script:backupAppRows.Count) { $rows += $script:backupAppRows[$index] }
     }
     if ($rows.Count -eq 0) { Write-Log 'Tick the apps to install first.' $colorWarn; return }
-    $null = Restore-BackupApps -Rows $rows -Serial $serial
+    Set-BackupBusyUi -Running $true
+    try {
+        $null = Restore-BackupApps -Rows $rows -Serial $serial
+    } finally {
+        Set-BackupBusyUi -Running $false
+    }
     $null = Show-BackupAt -Folder $script:backupFolder
 }
 
@@ -12230,7 +12266,12 @@ function Start-RestoreContacts {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
     if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
-    $null = Restore-BackupContacts -Folder $script:backupFolder -Serial $serial
+    Set-BackupBusyUi -Running $true
+    try {
+        $null = Restore-BackupContacts -Folder $script:backupFolder -Serial $serial
+    } finally {
+        Set-BackupBusyUi -Running $false
+    }
 }
 
 function Show-BackupInExplorer {
@@ -12242,6 +12283,10 @@ function Show-BackupInExplorer {
 }
 
 $btnBackupRun.Add_Click({ Start-BackupNow })
+$btnBackupCancel.Add_Click({
+    Write-Log 'Stopping ...' $colorWarn
+    Stop-BackupRun -Reason 'you cancelled it'
+})
 $btnBackupOpen.Add_Click({ Open-BackupFolder })
 $btnRestoreFiles.Add_Click({ Start-RestoreFiles })
 $btnRestoreApps.Add_Click({ Start-RestoreApps })

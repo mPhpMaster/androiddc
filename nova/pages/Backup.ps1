@@ -31,6 +31,20 @@ function Set-BackupPageProgress {
     }
 }
 
+function Set-BackupPageBusy {
+    # while a backup or a restore runs, Cancel is the only button that works
+    param([bool]$Running)
+
+    $ui.BackupCancel.IsEnabled = $Running
+    foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps', 'BackupRestoreContacts')) {
+        $ui[$name].IsEnabled = -not $Running
+    }
+    if (-not $Running) {
+        $ui.BackupProgress.IsIndeterminate = $false
+        $ui.BackupProgress.Value = 0
+    }
+}
+
 function Get-BackupPageParts {
     $parts = @()
     if ($ui.BackupFiles.IsChecked) { $parts += 'files' }
@@ -88,10 +102,16 @@ function Start-BackupPageNow {
     $device = Get-SelectedDevice
     $model = if ($device) { "$($device.Model)" } else { '' }
 
-    $manifest = Invoke-PhoneBackup -Serial $serial -Destination $where -Parts $parts -Model $model
+    Set-BackupPageBusy -Running $true
+    try {
+        $manifest = Invoke-PhoneBackup -Serial $serial -Destination $where -Parts $parts -Model $model
+    } finally {
+        Set-BackupPageBusy -Running $false
+    }
     if ($manifest) {
         $null = Show-BackupPageAt -Folder $manifest.Folder
-        Show-Toast -Text 'Backup done' -Color 'good'
+        if ($manifest.Complete) { Show-Toast -Text 'Backup done' -Color 'good' }
+        else { Show-Toast -Text "Backup stopped: $($manifest.Stopped)" -Color 'warn' }
     }
 }
 
@@ -118,7 +138,14 @@ function Start-BackupPageFiles {
         if (-not $answer) { Write-Log 'Restore cancelled.' $colorWarn; return }
         if ($answer -eq 'Write over them') { $mode = 'replace' }
     }
-    $null = Restore-BackupFiles -Plan $plan -Serial $serial -OnConflict $mode
+    Set-BackupPageBusy -Running $true
+    try {
+        $result = Restore-BackupFiles -Plan $plan -Serial $serial -OnConflict $mode
+    } finally {
+        Set-BackupPageBusy -Running $false
+    }
+    if ($result.Stopped) { Show-Toast -Text "Restore stopped: $($result.Stopped)" -Color 'warn' }
+    else { Show-Toast -Text "$($result.Sent) file(s) sent" -Color 'good' }
 }
 
 function Start-BackupPageApps {
@@ -132,7 +159,14 @@ function Start-BackupPageApps {
         foreach ($row in $script:backupAppRows) { if ($row.Package -eq "$($box.Tag)") { $picked += $row } }
     }
     if ($picked.Count -eq 0) { Write-Log 'Tick the apps to install first.' $colorWarn; return }
-    $null = Restore-BackupApps -Rows $picked -Serial $serial
+    Set-BackupPageBusy -Running $true
+    try {
+        $result = Restore-BackupApps -Rows $picked -Serial $serial
+    } finally {
+        Set-BackupPageBusy -Running $false
+    }
+    if ($result.Stopped) { Show-Toast -Text "Installing stopped: $($result.Stopped)" -Color 'warn' }
+    else { Show-Toast -Text "$($result.Installed) app(s) installed" -Color 'good' }
     Update-BackupPageApps
 }
 
@@ -140,7 +174,14 @@ function Start-BackupPageContacts {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
     if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
-    $null = Restore-BackupContacts -Folder $script:backupFolder -Serial $serial
+    Set-BackupPageBusy -Running $true
+    try {
+        $result = Restore-BackupContacts -Folder $script:backupFolder -Serial $serial
+    } finally {
+        Set-BackupPageBusy -Running $false
+    }
+    if ($result.Stopped) { Show-Toast -Text "Contacts stopped: $($result.Stopped)" -Color 'warn' }
+    else { Show-Toast -Text "$($result.Added) contact(s) added" -Color 'good' }
 }
 
 function Show-BackupPageFolder {
@@ -154,6 +195,10 @@ function Show-BackupPageFolder {
 # ------------------------------------------------------------------ events ----
 
 $ui.BackupRun.Add_Click({ Start-BackupPageNow })
+$ui.BackupCancel.Add_Click({
+    Write-Log 'Stopping ...' $colorWarn
+    Stop-BackupRun -Reason 'you cancelled it'
+})
 $ui.BackupOpen.Add_Click({ Open-BackupPageFolder })
 $ui.BackupRestoreFiles.Add_Click({ Start-BackupPageFiles })
 $ui.BackupInstallApps.Add_Click({ Start-BackupPageApps })
