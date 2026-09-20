@@ -23,7 +23,7 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 | `shared\` | 3 files | 2026-09-20 | Loaded by both windows. `Tray.ps1`: the icon by the clock (a click hides or shows the window, minimizing hides it there, Exit in its menu). `Backup.ps1`: a copy of the phone on this PC (files, APK files, contacts, messages, call log, settings) and putting one back. `Automation.ps1`: starting with Windows (one `AndroidDC` value under the user's Run key, the launcher with `-Minimized`), the actions a rule can run, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone just plugged in from one already there, and the mutex that lets only one window run the rules. |
 | `README.md` | 9.9 KB | 2026-09-20 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
 | `CHANGELOG.md` | 12 KB | 2026-09-20 | What each release changed, starting with 1.0.0 and what the pre-release review fixed. The version is also `$appVersion` at the top of `androiddc.ps1`, and the log shows it at startup. |
-| `docs\` | 9 pages | 2026-09-20 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
+| `docs\` | 9 pages | 2026-09-21 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
 | `assets\` | 10 files | 2026-09-10 | The logo: `androiddc.svg` (source), `wordmark.png` (README banner), `androiddc.ico` (window icon) and PNGs from 16 to 512 px. |
 | `LICENSE` | 12 KB | 2026-09-10 | Apache License 2.0 for AndroidDC itself. |
 | `gnirehtet-share.ps1` | 13 KB, 418 lines | 2026-09-11 | The command-line reverse-tethering script. Parameters: `-Serial -Dns -Port -Routes -All -Reinstall -StopOnly -ListDevices -DisableWifi -PauseOnError`. |
@@ -109,4 +109,4 @@ deacb991ed250971  scrcpy-server
 4cc809d2cd822e18  swresample-6.dll
 ```
 
-Index written 2026-09-20.
+Index written 2026-09-21.

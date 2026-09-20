@@ -114,6 +114,37 @@ Drag it out next to the clock to keep it in sight.
 * Windows' *Task Manager > Startup apps* lists it by the program the entry runs, *Microsoft
   Windows Based Script Host* (wscript). A startup app switched off there does not run.
 
+## A backup or a restore did not do what I expected
+
+**Some folders were refused.** The log names them. `Android/data` and `Android/obb` have been
+closed to adb since Android 11, so they are skipped on purpose; anything else refused is
+usually a folder the phone keeps for another user or a second space.
+
+**An app is not in the backup.** Only the apps you installed are taken (`pm list packages -3`),
+not the ones that came with the phone. An app whose APK the phone will not hand over is named
+in the log and skipped.
+
+**What is inside my apps is missing.** It cannot be read without root - chats, game saves, an
+app's own settings. `adb backup`, which used to reach some of it, returns almost nothing on
+Android 12 and newer. See [What it runs](what-it-runs.md#backing-up-and-restoring).
+
+**Restoring says the files are already there.** That is the question it asks before writing
+over anything: *write over them*, *send only the rest*, or *stop*. Nothing is sent until you
+answer.
+
+**An app refused to install.** The log says what the phone answered. `INSTALL_FAILED_USER_RESTRICTED`
+means installs over USB are blocked - on Xiaomi, Redmi and POCO turn on *Developer options >
+Install via USB*. `INSTALL_FAILED_VERSION_DOWNGRADE` means the phone already has a newer version
+than the backup's.
+
+**Contacts came back but messages did not.** Android has no way for adb to write messages or
+the call log. They are saved in the backup (`personal\messages.json`, `calls.json`) to read and
+to keep, and contacts are the only part that goes back on a phone.
+
+**The pictures are not in the gallery.** The gallery shows what it has scanned. AndroidDC asks
+it to look again after a restore, but some ROMs take their time; opening the gallery once
+usually does it.
+
 ## The picture is stale or black
 
 * Press **Capture** once by hand. If the log shows a timeout, the phone is busy or asleep.
