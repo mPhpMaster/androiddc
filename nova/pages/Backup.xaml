@@ -5,16 +5,8 @@
   one, and its apps. The classic window has the same under Advanced > Backup;
   the work itself is ..\shared\Backup.ps1.
 -->
-<!-- The page scrolls, alone among the pages: it carries two cards and three
-     lists, and at the smallest window they need more height than there is.
-     MinHeight bound to the viewport means it fills the page exactly whenever
-     it fits, and scrolls only when it does not, instead of cutting the row of
-     buttons off the bottom. -->
-<ScrollViewer x:Name="BackupScroll"
-              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-<Grid MinHeight="{Binding ViewportHeight, ElementName=BackupScroll}">
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Grid.RowDefinitions>
     <RowDefinition Height="Auto"/>
     <RowDefinition Height="*"/>
@@ -62,9 +54,11 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <!-- a floor under the lists: without it this row shrank to nothing at
-             the smallest window and the three tabs had no body at all. 150 is
-             the tab strip, the folder row and a couple of lines of list -->
-        <RowDefinition Height="*" MinHeight="150"/>
+             the smallest window and the three tabs had no body at all. A list
+             inside a page that scrolls does not scroll itself, so the page
+             does not: this row is what gives, and the lists keep their own
+             scrollbars -->
+        <RowDefinition Height="*" MinHeight="96"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
@@ -161,17 +155,48 @@
         </TabItem>
 
         <TabItem x:Name="BackupTabApps" Header="Apps to install">
-          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel x:Name="BackupAppList"/>
-          </ScrollViewer>
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <ListView x:Name="BackupAppList" SelectionMode="Extended"
+                      ToolTip="The apps in the backup. The ones this phone does not have are picked out for you - press Install picked apps below">
+              <ListView.View>
+                <GridView>
+                  <GridViewColumn Header="APP" Width="200" DisplayMemberBinding="{Binding Shown}"/>
+                  <GridViewColumn Header="PACKAGE" Width="250" DisplayMemberBinding="{Binding Package}"/>
+                  <GridViewColumn Header="IN THE BACKUP" Width="120" DisplayMemberBinding="{Binding Held}"/>
+                  <GridViewColumn Header="SIZE" Width="90" DisplayMemberBinding="{Binding Size}"/>
+                  <GridViewColumn Header="ON THIS PHONE" Width="170" DisplayMemberBinding="{Binding Says}"/>
+                </GridView>
+              </ListView.View>
+            </ListView>
+            <Grid Grid.Row="1" Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Find:" VerticalAlignment="Center" Style="{StaticResource MutedLine}"/>
+              <TextBox x:Name="BackupAppFind" Grid.Column="1" Width="180" Margin="8,0,0,0"
+                       ToolTip="Shows only the apps whose name or package holds this text"/>
+              <Button x:Name="BackupAppsMissing" Grid.Column="2" Margin="8,0,0,0" Content="Pick the missing ones"
+                      ToolTip="Picks out every app in the backup that this phone does not have"/>
+              <TextBlock x:Name="BackupAppsCount" Grid.Column="3" Margin="14,0,0,0" VerticalAlignment="Center"
+                         Style="{StaticResource MutedLine}" TextTrimming="CharacterEllipsis"
+                         Text="Open a backup to see the apps in it."/>
+            </Grid>
+          </Grid>
         </TabItem>
       </TabControl>
 
       <WrapPanel Grid.Row="3" Margin="0,8,0,0">
         <Button x:Name="BackupRestoreFiles" Style="{StaticResource Primary}" Content="Restore files ..." Margin="0,4,8,0"
                 ToolTip="Sends the files back; it asks first about the ones the phone already has"/>
-        <Button x:Name="BackupInstallApps" Content="Install ticked apps" Margin="0,4,8,0"
-                ToolTip="Installs the apps ticked under Apps to install; a split app goes in one call"/>
+        <Button x:Name="BackupInstallApps" Content="Install picked apps" Margin="0,4,8,0"
+                ToolTip="Installs the apps picked out under Apps to install; a split app goes in one call"/>
         <Button x:Name="BackupRestoreContacts" Content="Restore contacts" Margin="0,4,8,0"
                 ToolTip="Adds the contacts this phone does not have; messages and the call log cannot be written by adb"/>
         <Button x:Name="BackupShowFolder" Content="Show in Explorer" Margin="0,4,8,0"
@@ -180,4 +205,3 @@
     </Grid>
   </Border>
 </Grid>
-</ScrollViewer>

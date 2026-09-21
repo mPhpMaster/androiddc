@@ -153,7 +153,8 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 | Purpose | Command |
 |---|---|
 | What is in internal storage | `adb shell ls -1 /sdcard/`, then `adb pull -a /sdcard/<folder> <here>`, one folder at a time |
-| The apps you installed | `adb shell pm list packages -3`, `adb shell pm path <package>`, then `adb pull` of each APK |
+| The apps you installed | `adb shell pm list packages -3 --show-versioncode`, `adb shell pm path <package>`, then `adb pull` of each APK. The names come from `scrcpy --list-apps`, and name plus version are written into the backup as `apps\apps.json` |
+| Whether the phone has an app already | `adb shell pm list packages --show-versioncode`, compared with what the backup wrote down |
 | Contacts, messages, call log | `adb shell content query --uri content://com.android.contacts/data/phones`, the same for `content://sms` and `content://call_log/calls` |
 | Settings and the app list | `adb shell settings list system|secure|global`, `getprop`, `pm list packages -3 --show-versioncode`, `pm list packages -s` |
 | Which files the phone already has | `adb shell find '/sdcard/<folder>' -type f`, once per folder rather than once per file |

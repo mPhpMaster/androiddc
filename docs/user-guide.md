@@ -267,9 +267,27 @@ unpacked whole: each file is taken out of the zip, sent, and dropped again.
 
 * **Restore files** sends them back. When the phone already has some of them it asks first:
   write over them, send only the rest, or stop. Afterwards the gallery is told to look again.
-* **Install ticked apps** lists the backup's apps, with the ones this phone does not have
-  already ticked. Each is installed in one call, splits included. A phone that refuses installs
-  over USB says so in the log - on Xiaomi, Redmi and POCO turn on *Install via USB*.
+* **Install ticked apps** works on the *Apps to install* tab. That list says, for every app in
+  the backup: what it is called, its package, which version the backup holds, how big it is, and
+  how it stands against the phone in front of you -
+
+  | It says | What it means | What to do |
+  |---|---|---|
+  | not on the phone | the backup has it, this phone does not | it is ticked for you; press *Install ticked apps* |
+  | on the phone | the same version is there already | nothing |
+  | older on the phone | the phone has an earlier version | tick it to bring the phone up to the backup's version |
+  | newer on the phone | the phone has moved past the backup | Android refuses to put an older version over a newer one; remove the app on the phone first if you really want the backup's |
+  | no phone to compare | no phone is picked | pick one in the device list and the answers appear |
+
+  The apps the phone lacks come first, and the line under the list counts them. The *Find* box
+  narrows the list by name or package, and the ticks stay while you look; *Tick all* and *Tick
+  none* act on what is shown. Each app is installed in one call, splits included. A phone that
+  refuses installs over USB says so in the log - on Xiaomi, Redmi and POCO turn on *Install via
+  USB*.
+
+  An app's name comes from the backup itself: it is written down while the phone still has the
+  app, so a backup read a year later says *WhatsApp*, not `com.whatsapp`, even for an app that
+  phone no longer has. Backups taken before this hold no names, and show packages.
 * **Restore contacts** adds the contacts the phone does not have, matched by name and number,
   so running it twice adds nothing twice. Messages and the call log are not put back: Android
   has no way for adb to write them.

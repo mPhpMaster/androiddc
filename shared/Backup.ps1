@@ -522,16 +522,30 @@ function Backup-PhoneFiles {
 }
 
 function Backup-PhoneApps {
-    # the APK of every app the user installed, splits included
+    # the APK of every app the user installed, splits included, and what each
+    # one is called and which version it is - asked while the phone still has
+    # them, so a backup read a year later says WhatsApp, not com.whatsapp, even
+    # for an app this phone no longer has
     param([string]$Serial, [string]$Folder)
 
     $target = Join-Path $Folder 'apps'
     $null = New-Item -ItemType Directory -Path $target -Force
     $packages = @()
-    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'list', 'packages', '-3')).Lines) {
-        if ("$line" -match '^package:(\S+)') { $packages += $Matches[1] }
+    $versions = @{}
+    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+        'pm', 'list', 'packages', '-3', '--show-versioncode')).Lines) {
+        if ("$line" -notmatch '^package:(\S+)') { continue }
+        $packages += $Matches[1]
+        if ("$line" -match 'versionCode:(\S+)') { $versions[$packages[-1]] = $Matches[1] }
     }
     $packages = @($packages | Sort-Object -Unique)
+
+    # the window's own way of asking (scrcpy --list-apps); a window without it
+    # still takes the backup, with packages for names
+    $labels = @{}
+    if (Get-Command Get-AppLabels -ErrorAction SilentlyContinue) {
+        try { $labels = Get-AppLabels -Serial $Serial } catch { $labels = @{} }
+    }
     Write-Log "Backup: $($packages.Count) app(s) ..." $colorStep
 
     $apps = @()
@@ -559,9 +573,18 @@ function Backup-PhoneApps {
             if ($result.ExitCode -eq 0) { $saved += $name } else { Write-Log ("  $package : " + $result.Text) $colorWarn }
         }
         if ($saved.Count -eq 0) { continue }
-        $apps += [PSCustomObject]@{ Package = $package; Files = @($saved); Bytes = (Get-BackupFolderSize -Path $appFolder) }
+        $apps += [PSCustomObject]@{
+            Package = $package
+            Name    = $(if ($labels.ContainsKey($package)) { "$($labels[$package])" } else { '' })
+            Version = $(if ($versions.ContainsKey($package)) { "$($versions[$package])" } else { '' })
+            Files   = @($saved)
+            Bytes   = (Get-BackupFolderSize -Path $appFolder)
+        }
     }
 
+    # beside the APKs, so what each one is stays with them even if the manifest
+    # is read by something older than this
+    Save-BackupText -Path (Join-Path $target 'apps.json') -Text (ConvertTo-Json -InputObject @($apps) -Depth 4)
     Write-Log ("  $($apps.Count) app(s), " + (Format-FileSize -Bytes (Get-BackupFolderSize -Path $target))) $colorGood
     return $apps
 }
@@ -1115,18 +1138,80 @@ function Get-BackupSummaryLines {
 
 # --------------------------------------------------------------- restoring ----
 
+function Get-BackupAppNotes {
+    # what the backup wrote down about its apps: the name each one had and the
+    # version it was. Older backups have neither, and say so by saying nothing.
+    param($Source, $Archive = $null)
+
+    $notes = @{}
+    $text = Get-BackupEntryText -Source $Source -Entry 'apps/apps.json' -Archive $Archive
+    if (-not $text) { return $notes }
+    try {
+        $read = ($text | ConvertFrom-Json)
+    } catch {
+        return $notes
+    }
+    foreach ($row in @($read)) {
+        if ($null -eq $row -or $null -eq $row.PSObject.Properties['Package']) { continue }
+        $notes["$($row.Package)"] = $row
+    }
+    return $notes
+}
+
+function Get-BackupAppState {
+    <#
+        What putting this app back would mean, in words a person can act on:
+
+          not on the phone   installing it puts it back
+          on the phone       the same version is there already
+          older on the phone installing it would bring the phone up to the
+                             backup's version
+          newer on the phone the phone has moved on; installing the backup's
+                             version would be a downgrade, which Android
+                             refuses unless the app is removed first
+
+        With no phone picked there is nothing to compare against, and it says
+        that rather than calling every app missing.
+    #>
+    param([string]$Serial, [bool]$Installed, [string]$Backup, [string]$Phone)
+
+    if (-not $Serial) { return 'no phone to compare' }
+    if (-not $Installed) { return 'not on the phone' }
+    $ours = 0
+    $theirs = 0
+    if ([int]::TryParse("$Backup", [ref]$ours) -and [int]::TryParse("$Phone", [ref]$theirs)) {
+        if ($ours -gt $theirs) { return 'older on the phone' }
+        if ($ours -lt $theirs) { return 'newer on the phone' }
+    }
+    return 'on the phone'
+}
+
 function Get-BackupAppRows {
-    # the apps in a backup, and whether the phone has each one already
+    <#
+        The apps in a backup: what each is called, which version the backup
+        holds, how big it is, and how it stands against the phone. Sorted with
+        the ones the phone does not have first, because those are the ones
+        anything is done about.
+    #>
     param([Alias('Folder')]$Source, [string]$Serial = '')
 
     $source = ConvertTo-BackupSource -Source $Source
     if ($null -eq $source) { return @() }
     $entries = Get-BackupSourceEntries -Source $source
+    $notes = Get-BackupAppNotes -Source $source
 
     $installed = @{}
+    $labels = @{}
     if ($Serial) {
-        foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'list', 'packages')).Lines) {
-            if ("$line" -match '^package:(\S+)') { $installed[$Matches[1]] = $true }
+        foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+            'pm', 'list', 'packages', '--show-versioncode')).Lines) {
+            if ("$line" -notmatch '^package:(\S+)') { continue }
+            $package = $Matches[1]
+            $installed[$package] = $(if ("$line" -match 'versionCode:(\S+)') { $Matches[1] } else { '' })
+        }
+        # the names the phone knows, for a backup taken before names were kept
+        if (Get-Command Get-AppLabels -ErrorAction SilentlyContinue) {
+            try { $labels = Get-AppLabels -Serial $Serial } catch { $labels = @{} }
         }
     }
 
@@ -1148,16 +1233,34 @@ function Get-BackupAppRows {
         if ($source.Kind -eq 'folder') {
             $apks = @($apkEntries | ForEach-Object { Get-BackupEntryPath -Source $source -Entry $_.Path })
         }
+
+        $name = ''
+        $version = ''
+        if ($notes.ContainsKey($package)) {
+            if ($null -ne $notes[$package].PSObject.Properties['Name']) { $name = "$($notes[$package].Name)" }
+            if ($null -ne $notes[$package].PSObject.Properties['Version']) { $version = "$($notes[$package].Version)" }
+        }
+        if (-not $name -and $labels.ContainsKey($package)) { $name = "$($labels[$package])" }
+        $onPhone = $installed.ContainsKey($package)
+        $phoneVersion = $(if ($onPhone) { "$($installed[$package])" } else { '' })
+
         $null = $rows.Add([PSCustomObject]@{
             Package = $package
+            Name    = $name
+            # what to show where there is no name: the package says more than a blank
+            Shown   = $(if ($name) { $name } else { $package })
+            Version = $version
+            Phone   = $phoneVersion
+            Parts   = $(if ($apkEntries.Count -gt 1) { "$($apkEntries.Count) files" } else { 'one file' })
             Entries = @($apkEntries | ForEach-Object { $_.Path })
             Apks    = $apks
             Size    = (Format-FileSize -Bytes $bytes)
             Bytes   = $bytes
-            State   = $(if ($installed.ContainsKey($package)) { 'installed' } else { 'missing' })
+            State   = (Get-BackupAppState -Serial $Serial -Installed $onPhone -Backup $version -Phone $phoneVersion)
         })
     }
-    return $rows.ToArray()
+    # what the phone lacks first: those are the ones a person came here for
+    return @($rows | Sort-Object @{ Expression = { $_.State -ne 'not on the phone' } }, Shown)
 }
 
 function Get-BackupFilePlan {
@@ -1359,6 +1462,16 @@ function Restore-BackupApps {
                         'Developer options > Install via USB, then try again.') $colorWarn
                     Stop-BackupRun -Reason 'the phone blocks installs over USB'
                     break
+                }
+                # what the list calls "newer on the phone", said again where it happens
+                if ($text -match 'INSTALL_FAILED_VERSION_DOWNGRADE') {
+                    Write-Log ('  The phone already has a newer version of this app, and Android will not ' +
+                        'put an older one over it. Remove the app on the phone first if you want the ' +
+                        "backup's version back.") $colorWarn
+                }
+                if ($text -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match') {
+                    Write-Log ('  The app on the phone was signed by someone else - a different build of ' +
+                        'the same app. Remove the one on the phone first, and its data goes with it.') $colorWarn
                 }
             }
         }

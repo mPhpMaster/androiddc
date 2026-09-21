@@ -14,7 +14,7 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 
 | File | Size | Modified | What it is |
 |---|---:|---|---|
-| `androiddc.ps1` | 572 KB, 13219 lines | 2026-09-21 | The main tool: a WinForms control panel for phones over ADB. Twelve tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery, automation), Apps, Contacts, SMS, Cam / Mic, Files, Running, Radios (Wi-Fi, Bluetooth, NFC), Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
+| `androiddc.ps1` | 578 KB, 13359 lines | 2026-09-21 | The main tool: a WinForms control panel for phones over ADB. Twelve tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery, automation), Apps, Contacts, SMS, Cam / Mic, Files, Running, Radios (Wi-Fi, Bluetooth, NFC), Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
 | `androiddc.vbs` | 561 B | 2026-09-15 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`, passing its own arguments on (`-Minimized` from the start-with-Windows entry). **This is the file to double-click.** |
 | `androiddc-nova.vbs` | 722 B | 2026-09-15 | Launcher for the Nova window (`nova\androiddc-nova.ps1`), hidden and in STA. Each window has a button that closes it and opens the other. |
 | `start-menu.vbs` | 3.2 KB | 2026-09-15 | Adds *AndroidDC* and *AndroidDC Nova* to the Start menu (All apps), with the AndroidDC icon, pointing at the two launchers in this folder. `/remove` takes them out, `/quiet` shows no message, `/folder:<path>` writes elsewhere (tests). Windows keeps *Pin to Start* for the user. |
@@ -81,13 +81,13 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-199b28b6b303c9f0  androiddc.ps1
+83fae3e50d5c67d9  androiddc.ps1
 574f70700b74dec2  androiddc.vbs
 95c311cc87896c05  androiddc-nova.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
 3d6170dd68549c6f  avutil-60.dll
-3c529205d632adbc  CHANGELOG.md
+4cd76b44233f768a  CHANGELOG.md
 e394873cd3e2cc3a  disconnected.png
 b5e5354ae222bd71  get-upstream.bat
 63f3fa6196d817aa  get-upstream.ps1

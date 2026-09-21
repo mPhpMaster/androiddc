@@ -3983,11 +3983,59 @@ $tabBackupApps.Text = 'Apps to install'
 $tabBackupApps.BackColor = [System.Drawing.SystemColors]::Control
 $tabsBackupView.TabPages.Add($tabBackupApps)
 
-$clbBackupApps = New-Object System.Windows.Forms.CheckedListBox
-$clbBackupApps.Dock = 'Fill'
-$clbBackupApps.CheckOnClick = $true
-$clbBackupApps.IntegralHeight = $false
-$tabBackupApps.Controls.Add($clbBackupApps)
+# a list with columns, not a row of packages: com.shiftatinc.worker tells
+# nobody which app it is, and the version beside the phone's says whether
+# putting it back would change anything
+$lstBackupApps = New-Object System.Windows.Forms.ListView
+$lstBackupApps.View = 'Details'
+$lstBackupApps.CheckBoxes = $true
+$lstBackupApps.FullRowSelect = $true
+$lstBackupApps.HideSelection = $false
+$lstBackupApps.Dock = 'Fill'
+$null = $lstBackupApps.Columns.Add('App', 190)
+$null = $lstBackupApps.Columns.Add('Package', 230)
+$null = $lstBackupApps.Columns.Add('In the backup', 100)
+$null = $lstBackupApps.Columns.Add('Size', 75)
+$null = $lstBackupApps.Columns.Add('On this phone', 150)
+$tabBackupApps.Controls.Add($lstBackupApps)
+
+$pnlBackupAppsRow = New-Object System.Windows.Forms.Panel
+$pnlBackupAppsRow.Dock = 'Bottom'
+$pnlBackupAppsRow.Height = 30
+$tabBackupApps.Controls.Add($pnlBackupAppsRow)
+
+$lblBackupAppFind = New-Object System.Windows.Forms.Label
+$lblBackupAppFind.Text = 'Find:'
+$lblBackupAppFind.Location = New-Object System.Drawing.Point(4, 7)
+$lblBackupAppFind.Size = New-Object System.Drawing.Size(36, 20)
+$pnlBackupAppsRow.Controls.Add($lblBackupAppFind)
+
+$txtBackupAppFind = New-Object System.Windows.Forms.TextBox
+$txtBackupAppFind.Location = New-Object System.Drawing.Point(42, 4)
+$txtBackupAppFind.Size = New-Object System.Drawing.Size(150, 22)
+$pnlBackupAppsRow.Controls.Add($txtBackupAppFind)
+$toolTip.SetToolTip($txtBackupAppFind, 'Shows only the apps whose name or package holds this text; ticks are kept while you look')
+
+$btnBackupAppsAll = New-Object System.Windows.Forms.Button
+$btnBackupAppsAll.Text = 'Tick all'
+$btnBackupAppsAll.Location = New-Object System.Drawing.Point(200, 2)
+$btnBackupAppsAll.Size = New-Object System.Drawing.Size(76, 26)
+$pnlBackupAppsRow.Controls.Add($btnBackupAppsAll)
+$toolTip.SetToolTip($btnBackupAppsAll, 'Ticks every app the list is showing')
+
+$btnBackupAppsNone = New-Object System.Windows.Forms.Button
+$btnBackupAppsNone.Text = 'Tick none'
+$btnBackupAppsNone.Location = New-Object System.Drawing.Point(280, 2)
+$btnBackupAppsNone.Size = New-Object System.Drawing.Size(76, 26)
+$pnlBackupAppsRow.Controls.Add($btnBackupAppsNone)
+$toolTip.SetToolTip($btnBackupAppsNone, 'Unticks every app the list is showing')
+
+$lblBackupApps = New-Object System.Windows.Forms.Label
+$lblBackupApps.Text = 'Open a backup to see the apps in it.'
+$lblBackupApps.Location = New-Object System.Drawing.Point(364, 7)
+$lblBackupApps.Size = New-Object System.Drawing.Size(320, 20)
+$lblBackupApps.AutoEllipsis = $true
+$pnlBackupAppsRow.Controls.Add($lblBackupApps)
 
 $pnlBackupTop = New-Object System.Windows.Forms.Panel
 $pnlBackupTop.Dock = 'Top'
@@ -11512,6 +11560,13 @@ $backupFindTimer.Add_Tick({
     Update-BackupInside
 })
 
+$backupAppFindTimer = New-Object System.Windows.Forms.Timer
+$backupAppFindTimer.Interval = 250
+$backupAppFindTimer.Add_Tick({
+    $backupAppFindTimer.Stop()
+    Show-BackupApps
+})
+
 $busyTimer = New-Object System.Windows.Forms.Timer
 $busyTimer.Interval = 200
 $busyTimer.Add_Tick({
@@ -11601,6 +11656,9 @@ $lstDevices.Add_SelectedIndexChanged({
     $lblDeviceStatus.Text = 'reading ...'
     $statusTimer.Stop()
     $statusTimer.Start()
+    # another phone means other answers to "is this app on it": the apps in an
+    # opened backup are read against the phone now picked
+    Update-BackupAppsIfShown
 })
 
 $btnInstallClient.Add_Click({
@@ -12520,6 +12578,9 @@ $script:backupPath = ''
 $script:backupSource = $null
 $script:backupManifest = $null
 $script:backupAppRows = @()
+# the packages ticked, kept by name and not by row: the find box hides rows,
+# and a tick that means "row 12" means another app once one is hidden
+$script:backupAppTicked = @{}
 $script:backupInsideRows = @()
 $script:backupListRows = @()
 # what is inside, and the apps, are read when their tab is looked at - a backup
@@ -12553,7 +12614,8 @@ function Set-BackupBusyUi {
 
     $btnBackupCancel.Enabled = $Running
     foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps,
-        $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse)) {
+        $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse,
+        $btnBackupAppsAll, $btnBackupAppsNone)) {
         $control.Enabled = -not $Running
     }
     if (-not $Running) {
@@ -12592,7 +12654,8 @@ function Show-BackupAt {
     # backup itself, and only when they are looked at
     $script:backupInsideStale = $true
     $script:backupAppsStale = $true
-    $clbBackupApps.Items.Clear()
+    $script:backupAppTicked = @{}
+    $lstBackupApps.Items.Clear()
     $lstBackupInside.Items.Clear()
     $lblBackupInside.Text = 'Open the tab to read what is inside.'
     Update-BackupShownTab
@@ -12608,28 +12671,84 @@ function Update-BackupShownTab {
 }
 
 function Update-BackupApps {
-    # the apps in the opened backup, ticked where this phone does not have them
-    $clbBackupApps.Items.Clear()
+    # the apps in the opened backup, read against this phone; the ones it does
+    # not have are ticked, because those are the ones there is anything to do
+    # about
     $script:backupAppRows = @()
     $script:backupAppsStale = $false
-    if (-not $script:backupSource) { Update-ListHints; return }
+    $script:backupAppTicked = @{}
+    if (-not $script:backupSource) {
+        $lstBackupApps.Items.Clear()
+        $lblBackupApps.Text = 'Open a backup to see the apps in it.'
+        Update-ListHints
+        return
+    }
 
     Set-BackupReadingUi -Running $true
     try {
         $serial = Get-SelectedSerial
         $script:backupAppRows = @(Get-BackupAppRows -Source $script:backupSource -Serial $(if ($serial) { $serial } else { '' }))
-        $lines = New-Object System.Collections.Generic.List[object]
-        foreach ($row in $script:backupAppRows) { $null = $lines.Add(('{0}   {1}   {2}' -f $row.Package, $row.Size, $row.State)) }
-        # in one call: a hundred apps added one at a time redraw a hundred times
-        if ($lines.Count -gt 0) { $clbBackupApps.Items.AddRange($lines.ToArray()) }
-        for ($index = 0; $index -lt $script:backupAppRows.Count; $index++) {
-            # the apps this phone does not have are ticked; the rest are left alone
-            if ($script:backupAppRows[$index].State -eq 'missing') { $clbBackupApps.SetItemChecked($index, $true) }
+        foreach ($row in $script:backupAppRows) {
+            if ($row.State -eq 'not on the phone') { $script:backupAppTicked[$row.Package] = $true }
         }
     } finally {
         Set-BackupReadingUi -Running $false
     }
+    Show-BackupApps
+}
+
+function Show-BackupApps {
+    # the rows the find box lets through, with the ticks as they stand
+    $find = "$($txtBackupAppFind.Text)".Trim()
+    $items = New-Object System.Collections.Generic.List[object]
+    $shown = 0
+    foreach ($row in $script:backupAppRows) {
+        if ($find -and -not (Test-TextContains $row.Package $find) -and -not (Test-TextContains $row.Shown $find)) { continue }
+        $item = New-Object System.Windows.Forms.ListViewItem($row.Shown)
+        $null = $item.SubItems.Add($row.Package)
+        $null = $item.SubItems.Add($(if ($row.Version) { "version $($row.Version)" } else { $row.Parts }))
+        $null = $item.SubItems.Add($row.Size)
+        $null = $item.SubItems.Add($(if ($row.State -eq 'on the phone' -and $row.Phone) { "on the phone (version $($row.Phone))" } else { $row.State }))
+        # the row itself, so a tick still means this app once the list is filtered
+        $item.Tag = $row.Package
+        $item.Checked = [bool]$script:backupAppTicked[$row.Package]
+        $null = $items.Add($item)
+        $shown++
+    }
+
+    $lstBackupApps.BeginUpdate()
+    try {
+        $lstBackupApps.Items.Clear()
+        if ($items.Count -gt 0) { $lstBackupApps.Items.AddRange($items.ToArray()) }
+    } finally {
+        $lstBackupApps.EndUpdate()
+    }
+
+    $ticked = @($script:backupAppTicked.Keys).Count
+    $missing = @($script:backupAppRows | Where-Object { $_.State -eq 'not on the phone' }).Count
+    if ($script:backupAppRows.Count -eq 0) {
+        $lblBackupApps.Text = 'This backup holds no apps.'
+    } elseif ($find) {
+        $lblBackupApps.Text = ('{0} of {1} app(s) shown, {2} ticked' -f $shown, $script:backupAppRows.Count, $ticked)
+    } else {
+        $lblBackupApps.Text = ('{0} app(s), {1} not on the phone, {2} ticked - press "Install ticked apps"' -f
+            $script:backupAppRows.Count, $missing, $ticked)
+    }
+    $toolTip.SetToolTip($lblBackupApps, $lblBackupApps.Text)
     Update-ListHints
+}
+
+function Set-BackupAppTicks {
+    # every app the list is showing, ticked or unticked in one go
+    param([bool]$On)
+
+    foreach ($item in $lstBackupApps.Items) {
+        $package = "$($item.Tag)"
+        if (-not $package) { continue }
+        if ($On) { $script:backupAppTicked[$package] = $true } else { $null = $script:backupAppTicked.Remove($package) }
+        $item.Checked = $On
+    }
+    Show-BackupApps
 }
 
 function Update-BackupInside {
@@ -12870,10 +12989,13 @@ function Start-RestoreApps {
     if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
 
     $rows = @()
-    foreach ($index in $clbBackupApps.CheckedIndices) {
-        if ($index -ge 0 -and $index -lt $script:backupAppRows.Count) { $rows += $script:backupAppRows[$index] }
+    foreach ($row in $script:backupAppRows) {
+        if ($script:backupAppTicked[$row.Package]) { $rows += $row }
     }
-    if ($rows.Count -eq 0) { Write-Log 'Tick the apps to install first.' $colorWarn; return }
+    if ($rows.Count -eq 0) {
+        Write-Log 'Tick the apps to install first - the ones this phone does not have are ticked for you.' $colorWarn
+        return
+    }
     Set-BackupBusyUi -Running $true
     try {
         $null = Restore-BackupApps -Rows $rows -Serial $serial -Source $script:backupSource
@@ -12885,6 +13007,9 @@ function Start-RestoreApps {
 
 function Update-BackupAppsIfShown {
     # what the phone has changed, so the ticks would be out of date
+    # the device list can fill while the window is still being built, before
+    # this section of it has run at all
+    if (-not (Test-Path 'variable:script:backupSource')) { return }
     if ($tabsBackupView.SelectedTab -eq $tabBackupApps -and $script:backupSource) { Update-BackupApps }
     else { $script:backupAppsStale = $true }
 }
@@ -12937,6 +13062,21 @@ $btnBackupListShow.Add_Click({ Show-BackupPickedInExplorer })
 $btnBackupWhereBrowse.Add_Click({ Select-BackupFolder })
 $btnBackupSaveCopy.Add_Click({ Save-BackupPickedFiles })
 $lstBackupList.Add_DoubleClick({ Open-BackupFromList })
+$btnBackupAppsAll.Add_Click({ Set-BackupAppTicks -On $true })
+$btnBackupAppsNone.Add_Click({ Set-BackupAppTicks -On $false })
+# a tick is kept by package, so filtering the list does not move it to another app
+$lstBackupApps.Add_ItemCheck({
+    param($eventSender, $eventArgs)
+    $item = $lstBackupApps.Items[$eventArgs.Index]
+    $package = "$($item.Tag)"
+    if (-not $package) { return }
+    if ($eventArgs.NewValue -eq [System.Windows.Forms.CheckState]::Checked) {
+        $script:backupAppTicked[$package] = $true
+    } else {
+        $null = $script:backupAppTicked.Remove($package)
+    }
+})
+$txtBackupAppFind.Add_TextChanged({ $backupAppFindTimer.Stop(); $backupAppFindTimer.Start() })
 # a path typed in by hand: Enter reads it, and so does leaving the box
 $txtBackupWhere.Add_KeyDown({
     param($eventSender, $eventArgs)
@@ -13098,7 +13238,7 @@ Add-ListHint -List $lstWifi -Text 'No networks yet - press Scan, or Saved networ
 Add-ListHint -List $lstBt -Text 'No paired devices read yet - press Refresh (F5).'
 Add-ListHint -List $lstUsers -Text 'No users read yet - press Refresh (F5).'
 Add-ListHint -List $lstAutoRules -Text 'No rules yet - pick a phone above, then "Add the selected phone".'
-Add-ListHint -List $clbBackupApps -Text 'Open a backup to see the apps in it.'
+Add-ListHint -List $lstBackupApps -Text 'Open a backup to see the apps in it.'
 Add-ListHint -List $lstBackupList -Text 'No backups in this folder.'
 Add-ListHint -List $lstBackupInside -Text 'Open a backup to see every file inside it.'
 

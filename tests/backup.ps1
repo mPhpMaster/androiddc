@@ -49,6 +49,10 @@ Set-Content -LiteralPath (Join-Path $folder 'apps\com.example.app\base.apk') -Va
 Set-Content -LiteralPath (Join-Path $folder 'apps\com.example.app\split_config.apk') -Value 'split' -Encoding Ascii
 Save-BackupText -Path (Join-Path $folder 'personal\contacts.json') -Text (ConvertTo-Json -InputObject @(
     [PSCustomObject]@{ Name = 'Ada'; Number = '+1 555 0100' }) -Depth 3)
+# what the backup writes down about its apps: the name each had and its version
+Save-BackupText -Path (Join-Path $folder 'apps\apps.json') -Text (ConvertTo-Json -Depth 4 -InputObject @(
+    [PSCustomObject]@{ Package = 'com.example.app'; Name = 'Example'; Version = '42'
+        Files = @('base.apk', 'split_config.apk'); Bytes = 26 }))
 Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
     Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-20T14:05:09'
     Parts = @('files', 'apps', 'personal'); Files = [PSCustomObject]@{ Files = 2; Bytes = 20 }
@@ -68,8 +72,22 @@ Say ("  a folder that is not a backup gives nothing   {0}" -f (Mark ($null -eq (
 
 $apps = @(Get-BackupAppRows -Source $folder)
 $baseFirst = @($apps)[0].Apks[0] -like '*base.apk'
-Say ("  the app rows: {0} ({1}), base APK first   {2}" -f $apps[0].Package, $apps[0].Size,
-    (Mark ($apps.Count -eq 1 -and $apps[0].Apks.Count -eq 2 -and $baseFirst -and $apps[0].State -eq 'missing')))
+Say ("  the app row: '{0}' ({1}), version {2}, {3}, base APK first   {4}" -f $apps[0].Shown, $apps[0].Package,
+    $apps[0].Version, $apps[0].Size,
+    (Mark ($apps.Count -eq 1 -and $apps[0].Apks.Count -eq 2 -and $baseFirst -and
+        $apps[0].Shown -eq 'Example' -and $apps[0].Version -eq '42' -and $apps[0].Parts -eq '2 files')))
+Say ("  with no phone to compare against it says so, and is not called missing   {0}" -f (
+    Mark ($apps[0].State -eq 'no phone to compare')))
+
+# what the four answers are, against a phone that has this app
+Say ("  a phone without it: '{0}'   {1}" -f (Get-BackupAppState -Serial 'ABC123' -Installed $false -Backup '42' -Phone ''),
+    (Mark ((Get-BackupAppState -Serial 'ABC123' -Installed $false -Backup '42' -Phone '') -eq 'not on the phone')))
+Say ("  the same version on it: '{0}'   {1}" -f (Get-BackupAppState -Serial 'ABC123' -Installed $true -Backup '42' -Phone '42'),
+    (Mark ((Get-BackupAppState -Serial 'ABC123' -Installed $true -Backup '42' -Phone '42') -eq 'on the phone')))
+Say ("  an older one on it: '{0}'   {1}" -f (Get-BackupAppState -Serial 'ABC123' -Installed $true -Backup '42' -Phone '41'),
+    (Mark ((Get-BackupAppState -Serial 'ABC123' -Installed $true -Backup '42' -Phone '41') -eq 'older on the phone')))
+Say ("  a newer one on it: '{0}'   {1}" -f (Get-BackupAppState -Serial 'ABC123' -Installed $true -Backup '42' -Phone '43'),
+    (Mark ((Get-BackupAppState -Serial 'ABC123' -Installed $true -Backup '42' -Phone '43') -eq 'newer on the phone')))
 
 Say ''
 Say '== packed into one .zip =='
@@ -78,8 +96,8 @@ Start-BackupRun
 $packed = Compress-BackupFolder -Folder $folder -ZipPath $zipPath
 Complete-BackupRun
 Say ("  {0} file(s) packed into {1}   {2}" -f $packed.Files, (Format-FileSize -Bytes $packed.Bytes),
-    (Mark ($packed.Ok -and $packed.Files -eq 6 -and (Test-Path -LiteralPath $zipPath -PathType Leaf))))
-Say ("  the zip reads back with all six in it   {0}" -f (Mark ((Test-BackupArchive -Path $zipPath) -eq 6)))
+    (Mark ($packed.Ok -and $packed.Files -eq 7 -and (Test-Path -LiteralPath $zipPath -PathType Leaf))))
+Say ("  the zip reads back with all seven in it   {0}" -f (Mark ((Test-BackupArchive -Path $zipPath) -eq 7)))
 Say ("  a jpg goes in as it is, a txt is squeezed   {0}" -f (Mark (
     (Get-BackupCompression -Name 'one.jpg') -eq [System.IO.Compression.CompressionLevel]::NoCompression -and
     (Get-BackupCompression -Name 'two.txt') -eq [System.IO.Compression.CompressionLevel]::Fastest)))
@@ -89,7 +107,7 @@ Say ("  opened: {0}, manifest says {1}, and its index is not read yet   {2}" -f 
     (Mark ($zip.Kind -eq 'zip' -and $null -eq $zip.Entries -and $zip.Manifest.Serial -eq 'ABC123')))
 $entries = Get-BackupSourceEntries -Source $zip
 Say ("  asked for it: {0} file(s), and it is kept   {1}" -f $entries.Count,
-    (Mark ($entries.Count -eq 6 -and $null -ne $zip.Entries)))
+    (Mark ($entries.Count -eq 7 -and $null -ne $zip.Entries)))
 Say ("  its words say it is packed   {0}" -f (Mark (
     ((@(Get-BackupSummaryLines -Manifest $zip.Manifest -Source $zip)) -join ' ') -match 'Packed:')))
 Say ("  a .zip that is not a backup is refused   {0}" -f (Mark ($null -eq (Open-BackupSource -Path (Join-Path $folder 'manifest.json')))))
@@ -100,14 +118,14 @@ $inside = Get-BackupInsideRows -Source $zip
 Say ("  {0} line(s): {1}" -f $inside.Total, ((@($inside.Rows | ForEach-Object { $_.Path }) | Sort-Object) -join ', '))
 $picture = @($inside.Rows | Where-Object { $_.Entry -eq 'files/Pictures/one.jpg' })[0]
 Say ("  a file says which part it is in and where it was: {0} / {1}   {2}" -f $picture.What, $picture.Path,
-    (Mark ($inside.Total -eq 6 -and $picture.What -eq 'Files' -and $picture.Path -eq '/sdcard/Pictures/one.jpg')))
+    (Mark ($inside.Total -eq 7 -and $picture.What -eq 'Files' -and $picture.Path -eq '/sdcard/Pictures/one.jpg')))
 $found = Get-BackupInsideRows -Source $zip -Filter 'Pictures'
 Say ("  looking for Pictures leaves {0}   {1}" -f $found.Total, (Mark ($found.Total -eq 1)))
 Say ("  looking for something not in it leaves none   {0}" -f (
     Mark ((Get-BackupInsideRows -Source $zip -Filter 'no-such-thing').Total -eq 0)))
 $capped = Get-BackupInsideRows -Source $zip -Limit 2
 Say ("  a limit lists 2 of {0}, and still says how many there are   {1}" -f $capped.Total,
-    (Mark ($capped.Rows.Count -eq 2 -and $capped.Total -eq 6)))
+    (Mark ($capped.Rows.Count -eq 2 -and $capped.Total -eq 7)))
 
 $saved = Join-Path $work 'saved'
 $copy = Save-BackupCopy -Source $zip -Entries @('files/Pictures/one.jpg') -Destination $saved
@@ -284,14 +302,35 @@ $tabsBackupView.SelectedTab = $tabBackupList
 $shown = Show-BackupAt -Path $zipPath
 Say ("  opening it fills the box, and reads no further than the manifest   {0}" -f (Mark (
     $shown -and $txtBackupInfo.Text -match 'Redmi 13C' -and $lstBackupInside.Items.Count -eq 0 -and
-    $clbBackupApps.Items.Count -eq 0)))
+    $lstBackupApps.Items.Count -eq 0)))
 $tabsBackupView.SelectedTab = $tabBackupApps
 Wait-Pumped -Milliseconds 300
-Say ("  the apps tab reads them when it is looked at, and ticks the one this phone lacks   {0}" -f (Mark (
-    $clbBackupApps.Items.Count -eq 1 -and $clbBackupApps.CheckedIndices.Count -eq 1)))
+$appRow = $lstBackupApps.Items[0]
+Say ("  the apps tab, read when it is looked at: {0} | {1} | {2} | {3} | {4}" -f $appRow.Text,
+    $appRow.SubItems[1].Text, $appRow.SubItems[2].Text, $appRow.SubItems[3].Text, $appRow.SubItems[4].Text)
+Say ("  it says the app's name, its package and its version, not just the package   {0}" -f (Mark (
+    $lstBackupApps.Items.Count -eq 1 -and $appRow.Text -eq 'Example' -and
+    $appRow.SubItems[1].Text -eq 'com.example.app' -and $appRow.SubItems[2].Text -eq 'version 42')))
+Say ("  the one this phone does not have is ticked for you, and the line says what to press: '{0}'   {1}" -f
+    $lblBackupApps.Text, (Mark ($appRow.Checked -and $lblBackupApps.Text -match 'Install ticked apps')))
+$txtBackupAppFind.Text = 'nothing like this'
+Wait-Pumped -Milliseconds 600
+Say ("  the find box over the apps leaves {0}   {1}" -f $lstBackupApps.Items.Count,
+    (Mark ($lstBackupApps.Items.Count -eq 0)))
+$txtBackupAppFind.Text = 'Example'
+Wait-Pumped -Milliseconds 600
+Say ("  looking for its name finds it, still ticked   {0}" -f (Mark (
+    $lstBackupApps.Items.Count -eq 1 -and $lstBackupApps.Items[0].Checked)))
+Set-BackupAppTicks -On $false
+Say ("  Tick none clears it   {0}" -f (Mark (-not $lstBackupApps.Items[0].Checked -and
+    @($script:backupAppTicked.Keys).Count -eq 0)))
+Set-BackupAppTicks -On $true
+Say ("  Tick all puts it back   {0}" -f (Mark ($lstBackupApps.Items[0].Checked)))
+$txtBackupAppFind.Text = ''
+Wait-Pumped -Milliseconds 600
 $tabsBackupView.SelectedTab = $tabBackupInside
 Wait-Pumped -Milliseconds 300
-Say ("  and What is inside lists all six when it is looked at   {0}" -f (Mark ($lstBackupInside.Items.Count -eq 6)))
+Say ("  and What is inside lists all seven when it is looked at   {0}" -f (Mark ($lstBackupInside.Items.Count -eq 7)))
 $txtBackupFind.Text = 'Pictures'
 # the box waits a moment before it filters, so a word typed letter by letter
 # does not walk the whole backup five times
@@ -300,7 +339,7 @@ Say ("  typing in the find box leaves {0} of them   {1}" -f $lstBackupInside.Ite
     (Mark ($lstBackupInside.Items.Count -eq 1 -and $lblBackupInside.Text -match '^1 file')))
 $txtBackupFind.Text = ''
 Wait-Pumped -Milliseconds 600
-Say ("  emptying it brings them all back   {0}" -f (Mark ($lstBackupInside.Items.Count -eq 6)))
+Say ("  emptying it brings them all back   {0}" -f (Mark ($lstBackupInside.Items.Count -eq 7)))
 
 Set-BackupFolderUi -Folder $work
 Say ("  the box says where to look, and the list shows what is in it: {0} of them   {1}" -f $lstBackupList.Items.Count,

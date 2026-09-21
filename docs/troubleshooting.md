@@ -149,10 +149,18 @@ Android 12 and newer. See [What it runs](what-it-runs.md#backing-up-and-restorin
 over anything: *write over them*, *send only the rest*, or *stop*. Nothing is sent until you
 answer.
 
-**An app refused to install.** The log says what the phone answered. `INSTALL_FAILED_USER_RESTRICTED`
-means installs over USB are blocked - on Xiaomi, Redmi and POCO turn on *Developer options >
-Install via USB*. `INSTALL_FAILED_VERSION_DOWNGRADE` means the phone already has a newer version
-than the backup's.
+**An app in the list says "not on the phone" - what do I do?** Nothing, if you do not want it:
+that line means the backup has the app and this phone does not. Those are ticked for you, so
+*Install ticked apps* puts them back. The other answers - *on the phone*, *older on the phone*,
+*newer on the phone* - say how the backup's version compares with what the phone has.
+
+**An app refused to install.** The log says what the phone answered, and what to do about it.
+`INSTALL_FAILED_USER_RESTRICTED` means installs over USB are blocked - on Xiaomi, Redmi and POCO
+turn on *Developer options > Install via USB*. `INSTALL_FAILED_VERSION_DOWNGRADE` means the
+phone has a newer version than the backup's, and Android will not put an older one over it:
+remove the app on the phone first if you want the backup's version. `INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+means the app on the phone was signed by someone else - a different build of the same app -
+and removing it takes its data with it.
 
 **Contacts came back but messages did not.** Android has no way for adb to write messages or
 the call log. They are saved in the backup (`personal\messages.json`, `calls.json`) to read and

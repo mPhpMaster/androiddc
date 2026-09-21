@@ -25,6 +25,8 @@ $null = New-Item -ItemType Directory -Path (Join-Path $folder 'files\Pictures') 
 $null = New-Item -ItemType Directory -Path (Join-Path $folder 'apps\com.example.app') -Force
 Set-Content -LiteralPath (Join-Path $folder 'files\Pictures\one.jpg') -Value 'picture one' -Encoding Ascii
 Set-Content -LiteralPath (Join-Path $folder 'apps\com.example.app\base.apk') -Value 'not really an apk' -Encoding Ascii
+Save-BackupText -Path (Join-Path $folder 'apps\apps.json') -Text (ConvertTo-Json -Depth 4 -InputObject @(
+    [PSCustomObject]@{ Package = 'com.example.app'; Name = 'Example'; Version = '42'; Files = @('base.apk'); Bytes = 17 }))
 Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
     Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-20T14:05:09'
     Parts = @('files', 'apps'); Files = [PSCustomObject]@{ Files = 1; Bytes = 11 }
@@ -37,7 +39,7 @@ Start-BackupRun
 $packed = Compress-BackupFolder -Folder $folder -ZipPath $zipPath
 Complete-BackupRun
 Say ("  {0} file(s) packed into {1}   {2}" -f $packed.Files, (Format-FileSize -Bytes $packed.Bytes),
-    (Mark ($packed.Ok -and $packed.Files -eq 3 -and (Test-Path -LiteralPath $zipPath -PathType Leaf))))
+    (Mark ($packed.Ok -and $packed.Files -eq 4 -and (Test-Path -LiteralPath $zipPath -PathType Leaf))))
 
 Show-Page -Page 'backup'
 $null = Wait-Idle
@@ -47,11 +49,23 @@ $shown = Show-BackupPageAt -Path $zipPath
 Say ("  it names the phone and what is in it: {0}" -f $ui.BackupInfo.Text)
 Say ("  opened from the .zip, and read no further than the manifest   {0}" -f (Mark (
     $shown -and $ui.BackupInfo.Text -match 'Redmi 13C' -and $ui.BackupInfo.Text -match 'Packed:' -and
-    $script:backupAppBoxes.Count -eq 0 -and $script:backupInsideRows.Count -eq 0)))
+    $script:backupAppRows.Count -eq 0 -and $script:backupInsideRows.Count -eq 0)))
 $ui.BackupTabs.SelectedItem = $ui.BackupTabApps
 $null = Wait-Idle
-Say ("  the apps tab reads them when it is looked at, and ticks the one this phone lacks   {0}" -f (Mark (
-    $script:backupAppBoxes.Count -eq 1 -and $script:backupAppBoxes[0].IsChecked)))
+$appRow = @($script:backupAppRows)[0]
+Say ("  the apps tab, read when it is looked at: {0} | {1} | {2} | {3}" -f $appRow.Shown, $appRow.Package,
+    $appRow.Held, $appRow.Says)
+Say ("  it says the app's name and its version, not just the package   {0}" -f (Mark (
+    $script:backupAppRows.Count -eq 1 -and $appRow.Shown -eq 'Example' -and $appRow.Held -eq 'version 42')))
+Say ("  the one this phone does not have is picked out, and the line says what to press: '{0}'   {1}" -f
+    $ui.BackupAppsCount.Text, (Mark (@($ui.BackupAppList.SelectedItems).Count -eq 1 -and
+        $ui.BackupAppsCount.Text -match 'Install picked apps')))
+$ui.BackupAppFind.Text = 'nothing like this'
+$null = Wait-Idle
+Say ("  the find box over the apps leaves {0} on screen   {1}" -f $ui.BackupAppList.Items.Count,
+    (Mark ($ui.BackupAppList.Items.Count -eq 0)))
+$ui.BackupAppFind.Text = ''
+$null = Wait-Idle
 Say ("  a folder without a manifest is refused   {0}" -f (Mark (
     (Show-BackupPageAt -Path $work) -eq $false -and $script:backupPath -eq $zipPath)))
 
@@ -59,9 +73,9 @@ Say ''
 Say '== what is inside it =='
 $ui.BackupTabs.SelectedItem = $ui.BackupTabInside
 $null = Wait-Idle
-Say ("  all three files are listed: {0}" -f ((@($script:backupInsideRows | ForEach-Object { $_.Path }) | Sort-Object) -join ', '))
+Say ("  all four files are listed: {0}" -f ((@($script:backupInsideRows | ForEach-Object { $_.Path }) | Sort-Object) -join ', '))
 Say ("  each says which part it is in   {0}" -f (Mark (
-    $script:backupInsideRows.Count -eq 3 -and
+    $script:backupInsideRows.Count -eq 4 -and
     @($script:backupInsideRows | Where-Object { $_.Path -eq '/sdcard/Pictures/one.jpg' -and $_.What -eq 'Files' }).Count -eq 1)))
 $ui.BackupFind.Text = 'Pictures'
 # the box waits a moment before it filters, so a word typed letter by letter
@@ -73,7 +87,7 @@ Say ("  the find box leaves {0}, and the line under it says so: '{1}'   {2}" -f 
 $ui.BackupFind.Text = ''
 Start-Sleep -Milliseconds 400
 $null = Wait-Idle
-Say ("  emptying it brings them all back   {0}" -f (Mark ($script:backupInsideRows.Count -eq 3)))
+Say ("  emptying it brings them all back   {0}" -f (Mark ($script:backupInsideRows.Count -eq 4)))
 
 $saved = Join-Path $work 'saved'
 $copy = Save-BackupCopy -Source $script:backupSource -Entries @('files/Pictures/one.jpg') -Destination $saved
@@ -130,7 +144,8 @@ Say ("  finishing says so in the log   {0}" -f (Mark ((Get-LogText) -match 'Back
 Set-BackupPageBusy -Running $true
 Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
     $ui.BackupCancel.IsEnabled -and -not $ui.BackupRun.IsEnabled -and -not $ui.BackupRestoreFiles.IsEnabled -and
-    -not $ui.BackupSaveCopy.IsEnabled -and -not $ui.BackupListOpen.IsEnabled -and -not $ui.BackupBrowse.IsEnabled)))
+    -not $ui.BackupSaveCopy.IsEnabled -and -not $ui.BackupListOpen.IsEnabled -and -not $ui.BackupBrowse.IsEnabled -and
+    -not $ui.BackupAppsMissing.IsEnabled)))
 Set-BackupPageBusy -Running $false
 Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $ui.BackupCancel.IsEnabled) -and $ui.BackupRun.IsEnabled -and $ui.BackupRestoreFiles.IsEnabled)))

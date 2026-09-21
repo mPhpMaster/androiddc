@@ -33,6 +33,17 @@
 * Cancel works while it packs, and a stopped pack leaves no half-written `.zip` behind: the
   pulled folder is kept. A drive without room for the packed copy says so and keeps the folder
   as well.
+* **The apps in a backup are a list you can read**: what each app is called, its package, the
+  version the backup holds, its size, and how it stands against the phone - *not on the phone*,
+  *on the phone*, *older on the phone*, *newer on the phone*. The ones the phone lacks come
+  first and are ticked for you, the line under the list says how many and which button to press,
+  and a find box narrows it by name or package while the ticks stay put. "missing" is gone: it
+  said nothing about what to do.
+* **A backup writes down what its apps are called**, from `scrcpy --list-apps`, while the phone
+  still has them - so a backup read a year later says *WhatsApp*, not `com.whatsapp`, even for
+  an app that phone no longer has. Backups taken before this show packages.
+* A refused install says what to do: a newer version on the phone has to be removed before an
+  older one goes on, and an app signed by someone else has to be removed with its data.
 * Smaller things found on the way: a list with no room for its "nothing here yet" line hides it
   instead of leaving it where it last stood, on top of the row above; Nova's Backup page scrolls
   when the window is too short for it, rather than cutting the buttons off the bottom; and the

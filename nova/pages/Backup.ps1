@@ -8,7 +8,6 @@ $script:backupPath = ''
 $script:backupSource = $null
 $script:backupManifest = $null
 $script:backupAppRows = @()
-$script:backupAppBoxes = @()
 $script:backupInsideRows = @()
 $script:backupListRows = @()
 # what is inside, and the apps, are read when their tab is looked at - a backup
@@ -57,7 +56,7 @@ function Set-BackupPageBusy {
 
     $ui.BackupCancel.IsEnabled = $Running
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps',
-        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse')) {
+        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing')) {
         $ui[$name].IsEnabled = -not $Running
     }
     if (-not $Running) {
@@ -97,30 +96,70 @@ function Update-BackupPageShownTab {
 }
 
 function Update-BackupPageApps {
-    # the apps in the opened backup, ticked where this phone does not have them
-    $ui.BackupAppList.Children.Clear()
-    $script:backupAppBoxes = @()
+    # the apps in the opened backup, with the ones this phone does not have
+    # picked out: those are the ones there is anything to do about
     $script:backupAppsStale = $false
-    if (-not $script:backupSource) { return }
+    $script:backupAppRows = @()
+    if (-not $script:backupSource) {
+        $ui.BackupAppList.ItemsSource = $null
+        $ui.BackupAppsCount.Text = 'Open a backup to see the apps in it.'
+        return
+    }
 
     Set-BackupPageReading -Running $true
     try {
         $serial = Get-SelectedSerial
-        $script:backupAppRows = @(Get-BackupAppRows -Source $script:backupSource -Serial $(if ($serial) { $serial } else { '' }))
-        $boxes = New-Object System.Collections.Generic.List[object]
-        foreach ($row in $script:backupAppRows) {
-            $box = New-Object System.Windows.Controls.CheckBox
-            $box.Content = ('{0}   {1}   {2}' -f $row.Package, $row.Size, $row.State)
-            $box.Tag = $row.Package
-            $box.IsChecked = ($row.State -eq 'missing')
-            $box.Margin = New-Object System.Windows.Thickness(0, 3, 0, 3)
-            $null = $ui.BackupAppList.Children.Add($box)
-            $null = $boxes.Add($box)
+        $rows = @(Get-BackupAppRows -Source $script:backupSource -Serial $(if ($serial) { $serial } else { '' }))
+        foreach ($row in $rows) {
+            # two columns the list binds to, so the grid holds no logic of its own
+            Add-Member -InputObject $row -NotePropertyName 'Held' -NotePropertyValue $(
+                if ($row.Version) { "version $($row.Version)" } else { $row.Parts }) -Force
+            Add-Member -InputObject $row -NotePropertyName 'Says' -NotePropertyValue $(
+                if ($row.State -eq 'on the phone' -and $row.Phone) { "on the phone (version $($row.Phone))" } else { $row.State }) -Force
         }
-        $script:backupAppBoxes = $boxes.ToArray()
+        $script:backupAppRows = $rows
+        $ui.BackupAppList.ItemsSource = $rows
+        Set-BackupPageAppFilter
+        Select-BackupPageMissing
     } finally {
         Set-BackupPageReading -Running $false
     }
+}
+
+function Set-BackupPageAppFilter {
+    # the find box over the app list; the picks are kept while you look
+    $find = "$($ui.BackupAppFind.Text)".Trim()
+    if ($find) {
+        Set-ListFilter -List $ui.BackupAppList -Accept {
+            param($row)
+            return ((Test-TextContains "$($row.Package)" $find) -or (Test-TextContains "$($row.Shown)" $find))
+        }.GetNewClosure()
+    } else {
+        Set-ListFilter -List $ui.BackupAppList -Accept $null
+    }
+    Update-BackupPageAppsCount
+}
+
+function Select-BackupPageMissing {
+    # picks out every app the phone does not have
+    $ui.BackupAppList.SelectedItems.Clear()
+    foreach ($row in $script:backupAppRows) {
+        if ($row.State -eq 'not on the phone') { $null = $ui.BackupAppList.SelectedItems.Add($row) }
+    }
+    Update-BackupPageAppsCount
+}
+
+function Update-BackupPageAppsCount {
+    $all = @($script:backupAppRows).Count
+    $picked = @($ui.BackupAppList.SelectedItems).Count
+    $missing = @($script:backupAppRows | Where-Object { $_.State -eq 'not on the phone' }).Count
+    if ($all -eq 0) {
+        $ui.BackupAppsCount.Text = 'This backup holds no apps.'
+    } else {
+        $ui.BackupAppsCount.Text = ('{0} app(s), {1} not on the phone, {2} picked - press "Install picked apps"' -f
+            $all, $missing, $picked)
+    }
+    $ui.BackupAppsCount.ToolTip = $ui.BackupAppsCount.Text
 }
 
 function Update-BackupPageInside {
@@ -193,9 +232,10 @@ function Show-BackupPageAt {
     $script:backupInsideStale = $true
     $script:backupAppsStale = $true
     $ui.BackupInside.ItemsSource = $null
-    $ui.BackupAppList.Children.Clear()
-    $script:backupAppBoxes = @()
+    $ui.BackupAppList.ItemsSource = $null
+    $script:backupAppRows = @()
     $ui.BackupInsideCount.Text = 'Open the tab to read what is inside.'
+    $ui.BackupAppsCount.Text = 'Open the tab to see the apps in it.'
     Update-BackupPageShownTab
     Write-Log "Backup opened: $($source.Path)" $colorInfo
     return $true
@@ -328,12 +368,11 @@ function Start-BackupPageApps {
     if (-not $serial) { return }
     if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
 
-    $picked = @()
-    foreach ($box in $script:backupAppBoxes) {
-        if (-not $box.IsChecked) { continue }
-        foreach ($row in $script:backupAppRows) { if ($row.Package -eq "$($box.Tag)") { $picked += $row } }
+    $picked = @($ui.BackupAppList.SelectedItems)
+    if ($picked.Count -eq 0) {
+        Write-Log 'Pick the apps to install first - the ones this phone does not have are picked for you.' $colorWarn
+        return
     }
-    if ($picked.Count -eq 0) { Write-Log 'Tick the apps to install first.' $colorWarn; return }
     Set-BackupPageBusy -Running $true
     try {
         $result = Restore-BackupApps -Rows $picked -Serial $serial -Source $script:backupSource
@@ -396,6 +435,9 @@ $ui.BackupListRefresh.Add_Click({ Update-BackupPageList })
 $ui.BackupListOpen.Add_Click({ Open-BackupPagePicked })
 $ui.BackupListShow.Add_Click({ Show-BackupPagePicked })
 $ui.BackupSaveCopy.Add_Click({ Save-BackupPageCopy })
+$ui.BackupAppsMissing.Add_Click({ Select-BackupPageMissing })
+$ui.BackupAppFind.Add_TextChanged({ Set-BackupPageAppFilter })
+$ui.BackupAppList.Add_SelectionChanged({ Update-BackupPageAppsCount })
 $ui.BackupList.Add_MouseDoubleClick({ Open-BackupPagePicked })
 $ui.BackupFind.Add_TextChanged({ Update-BackupPageFind })
 # a path typed in by hand: Enter reads it, and so does leaving the box
