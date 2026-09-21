@@ -99,7 +99,8 @@ else behaves the same.
 |---|---|
 | Your settings | `%APPDATA%\AndroidDC\settings.json` (classic) and `nova-settings.json` (Nova) |
 | Automation rules, for both windows | `%APPDATA%\AndroidDC\automation.json` |
-| Backups of a phone | The folder you pick each time, one folder per backup |
+| Backups of a phone | The folder you pick each time, one `.zip` file per backup |
+| The list of backups taken, for both windows | `%APPDATA%\AndroidDC\backups.json` - paths, not copies |
 | Start with Windows, only when you turn it on | the value `AndroidDC` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` |
 | Temporary captures, recordings, previews | `%TEMP%\androiddc-<pid>.*`, removed when the program closes |
 | Downloaded archives | `%TEMP%\upstream-downloads`, removed unless `-KeepArchives` |

@@ -1,11 +1,15 @@
 # The Backup page: it opens and fits, the tick boxes say what goes in, a
-# made-up backup folder is read back and its app listed, and the file plan
-# marks what a phone already has. Nothing is sent to a phone: the phone in the
-# checks is made up, and the page's buttons are not pressed.
+# made-up backup is packed into a .zip and read back out of it, the list of
+# backups this PC has fills, and the file plan marks what a phone already has.
+# Nothing is sent to a phone: the phone in the checks is made up, and the
+# page's buttons are not pressed.
 
 $work = Join-Path $TestOut 'backup-work'
 if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
 $null = New-Item -ItemType Directory -Path $work
+# one spelling of it: %TEMP% is handed out short (LONGNA~1) and everything the
+# program writes down says the long one, so the two would never compare equal
+$work = (Get-Item -LiteralPath $work).FullName
 
 Say '== loaded =='
 Say ("  shared\Backup.ps1 found in the project folder   {0}" -f (Mark (Test-BackupShared)))
@@ -15,36 +19,80 @@ Say ("  {0} parts: {1}   {2}" -f $parts.Count, ((@($parts | ForEach-Object { $_.
 Say ("  the page ticks all four by default   {0}" -f (Mark (((Get-BackupPageParts) -join ',') -eq 'files,apps,personal,settings')))
 
 Say ''
-Say '== a backup folder, read back =='
+Say '== a backup folder, packed into one .zip =='
 $folder = Join-Path $work 'AndroidDC-backup-test'
 $null = New-Item -ItemType Directory -Path (Join-Path $folder 'files\Pictures') -Force
 $null = New-Item -ItemType Directory -Path (Join-Path $folder 'apps\com.example.app') -Force
 Set-Content -LiteralPath (Join-Path $folder 'files\Pictures\one.jpg') -Value 'picture one' -Encoding Ascii
 Set-Content -LiteralPath (Join-Path $folder 'apps\com.example.app\base.apk') -Value 'not really an apk' -Encoding Ascii
 Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
-    Format = 1; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-20T14:05:09'
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-20T14:05:09'
     Parts = @('files', 'apps'); Files = [PSCustomObject]@{ Files = 1; Bytes = 11 }
     Apps = @([PSCustomObject]@{ Package = 'com.example.app'; Files = @('base.apk'); Bytes = 17 })
-    Personal = $null; Settings = @(); Bytes = 28
+    Personal = $null; Settings = @(); Bytes = 28; Complete = $true; Stopped = ''
 }))
+
+$zipPath = Join-Path $work 'AndroidDC-backup-test.zip'
+Start-BackupRun
+$packed = Compress-BackupFolder -Folder $folder -ZipPath $zipPath
+Complete-BackupRun
+Say ("  {0} file(s) packed into {1}   {2}" -f $packed.Files, (Format-FileSize -Bytes $packed.Bytes),
+    (Mark ($packed.Ok -and $packed.Files -eq 3 -and (Test-Path -LiteralPath $zipPath -PathType Leaf))))
 
 Show-Page -Page 'backup'
 $null = Wait-Idle
-$shown = Show-BackupPageAt -Folder $folder
+$shown = Show-BackupPageAt -Path $zipPath
 Say ("  it names the phone and what is in it: {0}" -f $ui.BackupInfo.Text)
-Say ("  opened, and its app is listed and ticked   {0}" -f (Mark (
-    $shown -and $ui.BackupInfo.Text -match 'Redmi 13C' -and $script:backupAppBoxes.Count -eq 1 -and $script:backupAppBoxes[0].IsChecked)))
-Say ("  a folder without a manifest is refused   {0}" -f (Mark ((Show-BackupPageAt -Folder $work) -eq $false -and $script:backupFolder -eq $folder)))
+Say ("  opened from the .zip, and its app is listed and ticked   {0}" -f (Mark (
+    $shown -and $ui.BackupInfo.Text -match 'Redmi 13C' -and $ui.BackupInfo.Text -match 'Packed:' -and
+    $script:backupAppBoxes.Count -eq 1 -and $script:backupAppBoxes[0].IsChecked)))
+Say ("  a folder without a manifest is refused   {0}" -f (Mark (
+    (Show-BackupPageAt -Path $work) -eq $false -and $script:backupPath -eq $zipPath)))
 
-Set-BackupPageProgress -Text 'Files: Pictures' -Done 3 -Total 10
-Say ("  the strip says '{0}' at {1} of {2}   {3}" -f $ui.BackupProgressText.Text, $ui.BackupProgress.Value, $ui.BackupProgress.Maximum,
-    (Mark ($ui.BackupProgressText.Text -eq 'Files: Pictures' -and $ui.BackupProgress.Value -eq 3 -and $ui.BackupProgress.Maximum -eq 10)))
+Say ''
+Say '== what is inside it =='
+Say ("  all three files are listed: {0}" -f ((@($script:backupInsideRows | ForEach-Object { $_.Path }) | Sort-Object) -join ', '))
+Say ("  each says which part it is in   {0}" -f (Mark (
+    $script:backupInsideRows.Count -eq 3 -and
+    @($script:backupInsideRows | Where-Object { $_.Path -eq '/sdcard/Pictures/one.jpg' -and $_.What -eq 'Files' }).Count -eq 1)))
+$ui.BackupFind.Text = 'Pictures'
+$null = Wait-Idle
+Say ("  the find box leaves {0}, and the line under it says so: '{1}'   {2}" -f $script:backupInsideRows.Count,
+    $ui.BackupInsideCount.Text, (Mark ($script:backupInsideRows.Count -eq 1 -and $ui.BackupInsideCount.Text -match '^1 file')))
+$ui.BackupFind.Text = ''
+$null = Wait-Idle
+Say ("  emptying it brings them all back   {0}" -f (Mark ($script:backupInsideRows.Count -eq 3)))
+
+$saved = Join-Path $work 'saved'
+$copy = Save-BackupCopy -Source $script:backupSource -Entries @('files/Pictures/one.jpg') -Destination $saved
+Say ("  a file saved out of the zip reads back   {0}" -f (Mark (
+    $copy.Saved -eq 1 -and (Get-Content -LiteralPath (Join-Path $saved 'files\Pictures\one.jpg') -Raw) -match 'picture one')))
+
+Say ''
+Say '== the backups this PC has =='
+Say ("  the list the test writes is its own, not yours   {0}" -f (Mark ((Get-BackupListFile) -like '*backups-backup.json')))
+$null = Add-BackupToList -Path $zipPath -Manifest $script:backupManifest -Kind 'zip'
+Update-BackupPageList
+$row = @($script:backupListRows | Where-Object { $_.Path -eq $zipPath })[0]
+Say ("  one line: {0} | {1} | {2} | {3}" -f $row.When, $row.Phone, $row.Holds, $row.State)
+Say ("  it says when, which phone, what it holds and that it is there   {0}" -f (Mark (
+    $script:backupListRows.Count -eq 1 -and $row.Phone -match 'Redmi 13C' -and $row.Holds -eq 'files, apps' -and
+    $row.State -eq 'complete' -and -not $row.Missing)))
+Say ("  and the page's list shows that line   {0}" -f (Mark (@($ui.BackupList.ItemsSource).Count -eq 1)))
+$null = Remove-BackupFromList -Path $zipPath
+Update-BackupPageList
+Say ("  forgetting it empties the list again   {0}" -f (Mark ($script:backupListRows.Count -eq 0)))
+$looked = Add-BackupFolderToList -Folder $work
+Update-BackupPageList
+Say ("  looking through a folder found {0}: the zip and the folder beside it   {1}" -f $looked,
+    (Mark ($looked -eq 2 -and $script:backupListRows.Count -eq 2)))
 
 Say ''
 Say '== which files a phone already has =='
-$plan = Get-BackupFilePlan -Folder $folder
+$plan = Get-BackupFilePlan -Source $script:backupSource
 Say ("  {0} file(s), going to {1}   {2}" -f $plan.Total, (@($plan.Items | ForEach-Object { $_.Remote }) -join ','),
     (Mark ($plan.Total -eq 1 -and $plan.Items[0].Remote -eq '/sdcard/Pictures/one.jpg')))
+Say ("  and it lies in the zip, not on this PC   {0}" -f (Mark (-not "$($plan.Items[0].Local)")))
 $plan = Set-BackupFilePlanKnown -Plan $plan -RemotePaths @('/sdcard/Pictures/one.jpg')
 Say ("  a phone that has it: {0} already there   {1}" -f $plan.Existing, (Mark ($plan.Existing -eq 1)))
 $plan = Set-BackupFilePlanKnown -Plan $plan -RemotePaths @()
@@ -59,7 +107,11 @@ Start-BackupRun
 Stop-BackupRun -Reason 'you cancelled it'
 Say ("  Cancel stops it and says why: '{0}'   {1}" -f (Get-BackupStopReason),
     (Mark ((Test-BackupStopped) -and (Get-BackupStopReason) -eq 'you cancelled it')))
+$halfZip = Join-Path $work 'half.zip'
+$half = Compress-BackupFolder -Folder $folder -ZipPath $halfZip
 Complete-BackupRun
+Say ("  packing stopped leaves no half zip behind   {0}" -f (Mark (
+    -not $half.Ok -and -not (Test-Path -LiteralPath $halfZip) -and (Test-Path -LiteralPath (Join-Path $folder 'manifest.json')))))
 
 $logBefore = @(Get-LogText -split "`n").Count
 Send-BackupNotice -Title 'Backup done' -Text '1 file from a made-up phone.'
@@ -67,7 +119,8 @@ Say ("  finishing says so in the log   {0}" -f (Mark ((Get-LogText) -match 'Back
 
 Set-BackupPageBusy -Running $true
 Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
-    $ui.BackupCancel.IsEnabled -and -not $ui.BackupRun.IsEnabled -and -not $ui.BackupRestoreFiles.IsEnabled)))
+    $ui.BackupCancel.IsEnabled -and -not $ui.BackupRun.IsEnabled -and -not $ui.BackupRestoreFiles.IsEnabled -and
+    -not $ui.BackupSaveCopy.IsEnabled -and -not $ui.BackupListOpen.IsEnabled)))
 Set-BackupPageBusy -Running $false
 Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $ui.BackupCancel.IsEnabled) -and $ui.BackupRun.IsEnabled -and $ui.BackupRestoreFiles.IsEnabled)))

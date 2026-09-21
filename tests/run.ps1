@@ -114,6 +114,9 @@ foreach ($name in $Test) {
     if (Test-Path -LiteralPath $report) { Remove-Item -LiteralPath $report -Force }
     $env:ANDROIDDC_AUTOMATION_FILE = Join-Path $output "automation-$name.json"
     if (Test-Path -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE) { Remove-Item -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE -Force }
+    # the list of backups the test writes is its own, never the user's
+    $env:ANDROIDDC_BACKUP_LIST = Join-Path $output "backups-$name.json"
+    if (Test-Path -LiteralPath $env:ANDROIDDC_BACKUP_LIST) { Remove-Item -LiteralPath $env:ANDROIDDC_BACKUP_LIST -Force }
     if (Test-Path -LiteralPath $realSettings) { Copy-Item -LiteralPath $realSettings -Destination $settings -Force }
     elseif (Test-Path -LiteralPath $settings) { Remove-Item -LiteralPath $settings -Force }
 
@@ -175,6 +178,12 @@ trap { Say ('TRAPPED: ' + `$_.Exception.Message); continue }
         $handle = [TestWindow]::FindWindow([NullString]::Value, $title)
         if ($handle -ne [IntPtr]::Zero) { [void][TestWindow]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
         $closed = $process.WaitForExit(30000)
+    }
+    # read once more: a test that wrote TEST DONE and closed the window inside
+    # the same half-second the loop sleeps was called unfinished although it had
+    # finished - the file is the truth, not the moment the process went
+    if (-not $done -and (Test-Path -LiteralPath $report)) {
+        try { $done = (Get-Content -LiteralPath $report -Raw -ErrorAction Stop) -match '(?m)^TEST DONE' } catch { }
     }
     $after = if (Test-Path -LiteralPath $realSettings) { (Get-FileHash -LiteralPath $realSettings).Hash } else { '' }
 

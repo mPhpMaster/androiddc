@@ -116,6 +116,22 @@ Drag it out next to the clock to keep it in sight.
 
 ## A backup or a restore did not do what I expected
 
+**Where is my backup?** It is one `.zip` file in the folder you picked, named after the phone
+and the time. *Advanced > Backup > My backups* lists every backup this PC has taken and where
+each one is; *Show in Explorer* opens its folder with the file picked out.
+
+**A backup is in the list but says *moved or deleted*.** The list holds paths, not copies, so
+a backup that was moved or deleted is still listed until you say otherwise. *Look in a folder*
+finds it again where it is now; *Forget* takes the line out and leaves the file alone.
+
+**I want one file out of a backup, not the whole thing.** Open the backup, go to *What is
+inside*, find the file, pick it and press *Save a copy ...*. Nothing goes near a phone.
+
+**It ended as a folder, not a `.zip`.** Either the packing was cancelled, or the drive had no
+room for the packed copy - the log says which. What was pulled is all there, and the folder
+opens with *From a folder ...* exactly as a `.zip` does. Backups taken before version 1.4.0
+are folders too.
+
 **Some folders were refused.** The log names them. `Android/data` and `Android/obb` have been
 closed to adb since Android 11, so they are skipped on purpose; anything else refused is
 usually a folder the phone keeps for another user or a second space.

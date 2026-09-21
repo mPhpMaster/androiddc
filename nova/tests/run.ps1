@@ -52,6 +52,9 @@ $results = @()
 foreach ($name in $Test) {
     $env:ANDROIDDC_AUTOMATION_FILE = Join-Path $work "automation-$name.json"
     if (Test-Path -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE) { Remove-Item -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE -Force }
+    # the list of backups the test writes is its own, never the user's
+    $env:ANDROIDDC_BACKUP_LIST = Join-Path $work "backups-$name.json"
+    if (Test-Path -LiteralPath $env:ANDROIDDC_BACKUP_LIST) { Remove-Item -LiteralPath $env:ANDROIDDC_BACKUP_LIST -Force }
     $wrapper = Join-Path $work "run-$name.ps1"
     $common = (Join-Path $PSScriptRoot 'common.ps1').Replace("'", "''")
     $body = (Join-Path $PSScriptRoot "$name.ps1").Replace("'", "''")

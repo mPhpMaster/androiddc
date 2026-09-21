@@ -4,6 +4,32 @@
 
 ## Unreleased
 
+### A backup is one file, and you can see what is in it
+
+* **A backup is a `.zip` now**, not a folder: one file named after the phone and the time, to
+  copy, to move, or to put on another drive. The files are still pulled into a folder first -
+  that is what adb writes - and the folder is packed and then removed. Photos, video and APKs
+  go in as they are rather than being squeezed again, so packing costs minutes, not hours.
+* **Restoring reads the `.zip`.** Nothing is unpacked whole: each file is taken out, sent to
+  the phone, and dropped again, and an app's APKs come out one app at a time.
+* **What is inside** lists every file in the opened backup - which part it belongs to, where it
+  was on the phone, how big it is - read from the zip's own index, with a find box over it.
+  Pick some lines and *Save a copy ...* writes those files onto this PC: one photo out of a
+  backup, with no phone in it at all.
+* **My backups** lists every backup this PC has taken, newest first, with when, which phone,
+  what it holds, its size and where the file is. One that was moved or deleted says so instead
+  of vanishing. *Look in a folder ...* adds backups made on another PC or moved since;
+  *Forget* takes a line out and leaves the file alone. The list is
+  `%APPDATA%\AndroidDCackups.json`, and holds paths, not copies.
+* **Older backups still open.** A backup kept as a folder - one taken before this, or one whose
+  packing was cancelled - opens with *From a folder ...* and behaves the same everywhere.
+* Cancel works while it packs, and a stopped pack leaves no half-written `.zip` behind: the
+  pulled folder is kept. A drive without room for the packed copy says so and keeps the folder
+  as well.
+* Two bugs found while doing it: the list of contacts in a backup was read back as one item
+  when it held several (so restoring several contacts would have made one), and a JSON list
+  read with `@(... | ConvertFrom-Json)` came back as a list of one array.
+
 ### The classic window, made easier to live with
 
 * **It opens where you left it**, at the size you left it, maximized if it was. A saved place

@@ -215,23 +215,47 @@ saves, an app's own settings - unless the phone is rooted. `adb backup`, the old
 returned almost nothing since Android 12, and `Android/data` and `Android/obb` have been closed
 to adb since Android 11. No tool without root gets past that.
 
-**Taking one.** Tick the parts, press *Back up now ...*, pick a folder. Each backup is its own
-folder named after the phone and the time, holding plain files and a `manifest.json` saying
-what is in it. The log names every folder as it is pulled, and the strip beside the button says
-where it has got to.
+**Taking one.** Tick the parts, press *Back up now ...*, pick a folder. Each backup is **one
+`.zip` file** named after the phone and the time, with a `manifest.json` inside it saying what
+it holds - one file to copy, to move, or to put on another drive. The files are pulled into a
+folder of that same name first, because that is what adb writes; the folder is packed and then
+removed. Photos, video and APKs go in as they are rather than being squeezed again, which is
+why the packed size is close to the size on the phone.
 
-**While it runs.** The bar beside the button fills as each folder is pulled, and the line above
-it names what is being copied and how much of it is done. **Cancel** stops the run where it is:
-adb is stopped mid-file, and everything already copied stays. A backup that was stopped is
-marked *not complete* in its `manifest.json`, and says so when you open it later.
+**While it runs.** The bar beside the button fills as each folder is pulled and again as the
+backup is packed, and the line above it names what is being copied and how much of it is done.
+**Cancel** stops the run where it is: adb is stopped mid-file, and everything already copied
+stays. A backup that was stopped is marked *not complete* in its `manifest.json`, and says so
+when you open it later. Cancelling while it packs leaves no half-written `.zip` behind - the
+pulled folder is kept instead, and opens exactly like a `.zip` does.
 
 **When something goes wrong.** If the phone is unplugged, or adb loses it, the run ends there
 instead of failing file after file, and the log says why. Whatever ends the run - finished,
 cancelled, or the phone gone - a notification appears by the clock and the log gives the count.
 
-**Putting one back.** Press *Open a backup ...* and pick a backup folder - the one with
-`manifest.json` in it. The box then says whose phone it was, when it was taken and what it
-holds.
+**The backups you have.** *My backups* lists every backup this PC has taken, newest first:
+when, which phone, what it holds, how big it is and where the file is. Each one is checked for
+still being there, and one that was moved or deleted says *moved or deleted* rather than
+disappearing from the list. Double-click a line, or press *Open this one*, to open it.
+
+* *Look in a folder ...* goes through a folder and adds the backups in it - for backups made on
+  another PC, or moved to a drive of their own.
+* *Forget* takes a line out of the list only. The backup file itself is never touched.
+* *Show in Explorer* opens the folder with the backup picked out.
+
+The list lives in `%APPDATA%\AndroidDC\backups.json` and holds paths, not copies.
+
+**Looking inside one.** *What is inside* lists every file in the opened backup - which part it
+belongs to, where it was on the phone, and how big it is - read from the zip's own index, so
+nothing is unpacked to show it. The *Find* box narrows the list to the paths holding what you
+type. Pick some lines and *Save a copy ...* writes those files out into a folder on this PC:
+one photo out of a backup, with no phone in it at all. A backup with tens of thousands of files
+lists the first 3000; the find box reaches the rest.
+
+**Putting one back.** Press *Open a backup ...* and pick the `.zip` file. (A backup kept as a
+folder - an older one, or one whose packing was cancelled - opens with *From a folder ...*.)
+The box then says whose phone it was, when it was taken and what it holds. Nothing is unpacked
+whole: each file is taken out of the zip, sent, and dropped again.
 
 * **Restore files** sends them back. When the phone already has some of them it asks first:
   write over them, send only the rest, or stop. Afterwards the gallery is told to look again.
@@ -241,7 +265,7 @@ holds.
 * **Restore contacts** adds the contacts the phone does not have, matched by name and number,
   so running it twice adds nothing twice. Messages and the call log are not put back: Android
   has no way for adb to write them.
-* **Show folder** opens the backup in Explorer.
+* **Show in Explorer** opens the folder with the backup file picked out.
 
 Nothing is written to the phone until you press one of those buttons.
 

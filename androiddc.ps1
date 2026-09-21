@@ -3846,11 +3846,128 @@ $lblBackupProgress.Size = New-Object System.Drawing.Size(286, 20)
 $lblBackupProgress.AutoEllipsis = $true
 $grpBackupMake.Controls.Add($lblBackupProgress)
 
+# three lists, one at a time: the backups this PC has, what is inside the one
+# that is open, and the apps in it. Added before the docked panels, so Fill
+# takes what the top and bottom rows leave.
+$tabsBackupView = New-Object System.Windows.Forms.TabControl
+$tabsBackupView.Dock = 'Fill'
+$grpBackupRestore.Controls.Add($tabsBackupView)
+
+$tabBackupList = New-Object System.Windows.Forms.TabPage
+$tabBackupList.Text = 'My backups'
+$tabBackupList.BackColor = [System.Drawing.SystemColors]::Control
+$tabsBackupView.TabPages.Add($tabBackupList)
+
+$lstBackupList = New-Object System.Windows.Forms.ListView
+$lstBackupList.View = 'Details'
+$lstBackupList.FullRowSelect = $true
+$lstBackupList.MultiSelect = $false
+$lstBackupList.HideSelection = $false
+$lstBackupList.Dock = 'Fill'
+$null = $lstBackupList.Columns.Add('Taken', 130)
+$null = $lstBackupList.Columns.Add('Phone', 150)
+$null = $lstBackupList.Columns.Add('Holds', 130)
+$null = $lstBackupList.Columns.Add('Size', 70)
+$null = $lstBackupList.Columns.Add('State', 100)
+$null = $lstBackupList.Columns.Add('Where it is', 260)
+$tabBackupList.Controls.Add($lstBackupList)
+
+$pnlBackupListButtons = New-Object System.Windows.Forms.Panel
+$pnlBackupListButtons.Dock = 'Bottom'
+$pnlBackupListButtons.Height = 32
+$tabBackupList.Controls.Add($pnlBackupListButtons)
+
+$btnBackupListRefresh = New-Object System.Windows.Forms.Button
+$btnBackupListRefresh.Text = 'Refresh'
+$btnBackupListRefresh.Location = New-Object System.Drawing.Point(4, 3)
+$btnBackupListRefresh.Size = New-Object System.Drawing.Size(84, 26)
+$pnlBackupListButtons.Controls.Add($btnBackupListRefresh)
+$toolTip.SetToolTip($btnBackupListRefresh, 'Reads the list again, and checks whether each backup is still where it was put')
+
+$btnBackupListOpen = New-Object System.Windows.Forms.Button
+$btnBackupListOpen.Text = 'Open this one'
+$btnBackupListOpen.Location = New-Object System.Drawing.Point(92, 3)
+$btnBackupListOpen.Size = New-Object System.Drawing.Size(116, 26)
+$pnlBackupListButtons.Controls.Add($btnBackupListOpen)
+$toolTip.SetToolTip($btnBackupListOpen, 'Opens the selected backup, so what is inside it can be read and put back')
+
+$btnBackupListShow = New-Object System.Windows.Forms.Button
+$btnBackupListShow.Text = 'Show in Explorer'
+$btnBackupListShow.Location = New-Object System.Drawing.Point(212, 3)
+$btnBackupListShow.Size = New-Object System.Drawing.Size(126, 26)
+$pnlBackupListButtons.Controls.Add($btnBackupListShow)
+$toolTip.SetToolTip($btnBackupListShow, 'Opens Explorer with the backup file picked out')
+
+$btnBackupListLook = New-Object System.Windows.Forms.Button
+$btnBackupListLook.Text = 'Look in a folder ...'
+$btnBackupListLook.Location = New-Object System.Drawing.Point(342, 3)
+$btnBackupListLook.Size = New-Object System.Drawing.Size(136, 26)
+$pnlBackupListButtons.Controls.Add($btnBackupListLook)
+$toolTip.SetToolTip($btnBackupListLook, 'Looks through a folder for backups and adds them to this list - for backups made on another PC, or moved')
+
+$btnBackupListForget = New-Object System.Windows.Forms.Button
+$btnBackupListForget.Text = 'Forget'
+$btnBackupListForget.Location = New-Object System.Drawing.Point(482, 3)
+$btnBackupListForget.Size = New-Object System.Drawing.Size(84, 26)
+$pnlBackupListButtons.Controls.Add($btnBackupListForget)
+$toolTip.SetToolTip($btnBackupListForget, 'Takes this line out of the list only; the backup file itself is left alone')
+
+$tabBackupInside = New-Object System.Windows.Forms.TabPage
+$tabBackupInside.Text = 'What is inside'
+$tabBackupInside.BackColor = [System.Drawing.SystemColors]::Control
+$tabsBackupView.TabPages.Add($tabBackupInside)
+
+$lstBackupInside = New-Object System.Windows.Forms.ListView
+$lstBackupInside.View = 'Details'
+$lstBackupInside.FullRowSelect = $true
+$lstBackupInside.HideSelection = $false
+$lstBackupInside.Dock = 'Fill'
+$null = $lstBackupInside.Columns.Add('What', 80)
+$null = $lstBackupInside.Columns.Add('Where it was', 500)
+$null = $lstBackupInside.Columns.Add('Size', 80)
+$tabBackupInside.Controls.Add($lstBackupInside)
+
+$pnlBackupInsideRow = New-Object System.Windows.Forms.Panel
+$pnlBackupInsideRow.Dock = 'Bottom'
+$pnlBackupInsideRow.Height = 32
+$tabBackupInside.Controls.Add($pnlBackupInsideRow)
+
+$lblBackupFind = New-Object System.Windows.Forms.Label
+$lblBackupFind.Text = 'Find:'
+$lblBackupFind.Location = New-Object System.Drawing.Point(4, 8)
+$lblBackupFind.Size = New-Object System.Drawing.Size(36, 20)
+$pnlBackupInsideRow.Controls.Add($lblBackupFind)
+
+$txtBackupFind = New-Object System.Windows.Forms.TextBox
+$txtBackupFind.Location = New-Object System.Drawing.Point(42, 5)
+$txtBackupFind.Size = New-Object System.Drawing.Size(160, 22)
+$pnlBackupInsideRow.Controls.Add($txtBackupFind)
+$toolTip.SetToolTip($txtBackupFind, 'Shows only the files whose path holds this text; empty it to see them all')
+
+$lblBackupInside = New-Object System.Windows.Forms.Label
+$lblBackupInside.Text = 'Nothing open.'
+$lblBackupInside.Location = New-Object System.Drawing.Point(210, 8)
+$lblBackupInside.Size = New-Object System.Drawing.Size(300, 20)
+$lblBackupInside.AutoEllipsis = $true
+$pnlBackupInsideRow.Controls.Add($lblBackupInside)
+
+$btnBackupSaveCopy = New-Object System.Windows.Forms.Button
+$btnBackupSaveCopy.Text = 'Save a copy ...'
+$btnBackupSaveCopy.Location = New-Object System.Drawing.Point(518, 3)
+$btnBackupSaveCopy.Size = New-Object System.Drawing.Size(126, 26)
+$pnlBackupInsideRow.Controls.Add($btnBackupSaveCopy)
+$toolTip.SetToolTip($btnBackupSaveCopy, 'Writes the picked files out of the backup into a folder on this PC; no phone is needed')
+
+$tabBackupApps = New-Object System.Windows.Forms.TabPage
+$tabBackupApps.Text = 'Apps to install'
+$tabBackupApps.BackColor = [System.Drawing.SystemColors]::Control
+$tabsBackupView.TabPages.Add($tabBackupApps)
+
 $clbBackupApps = New-Object System.Windows.Forms.CheckedListBox
 $clbBackupApps.Dock = 'Fill'
 $clbBackupApps.CheckOnClick = $true
 $clbBackupApps.IntegralHeight = $false
-$grpBackupRestore.Controls.Add($clbBackupApps)
+$tabBackupApps.Controls.Add($clbBackupApps)
 
 $pnlBackupTop = New-Object System.Windows.Forms.Panel
 $pnlBackupTop.Dock = 'Top'
@@ -3877,7 +3994,15 @@ $btnBackupOpen.Text = 'Open a backup ...'
 $btnBackupOpen.Location = New-Object System.Drawing.Point(10, 4)
 $btnBackupOpen.Size = New-Object System.Drawing.Size(140, 26)
 $pnlBackupOpen.Controls.Add($btnBackupOpen)
-$toolTip.SetToolTip($btnBackupOpen, 'Pick a backup folder - the one with manifest.json in it')
+$toolTip.SetToolTip($btnBackupOpen, 'Pick the .zip file a backup is')
+
+# backups taken before they were packed are folders, and still open
+$btnBackupOpenOld = New-Object System.Windows.Forms.Button
+$btnBackupOpenOld.Text = 'From a folder ...'
+$btnBackupOpenOld.Location = New-Object System.Drawing.Point(10, 34)
+$btnBackupOpenOld.Size = New-Object System.Drawing.Size(140, 26)
+$pnlBackupOpen.Controls.Add($btnBackupOpenOld)
+$toolTip.SetToolTip($btnBackupOpenOld, 'Opens a backup kept as a folder - one with manifest.json in it - instead of a .zip')
 
 $pnlBackupButtons = New-Object System.Windows.Forms.Panel
 $pnlBackupButtons.Dock = 'Bottom'
@@ -3905,11 +4030,11 @@ $pnlBackupButtons.Controls.Add($btnRestoreContacts)
 $toolTip.SetToolTip($btnRestoreContacts, 'Adds the contacts this phone does not have; messages and the call log cannot be written by adb')
 
 $btnBackupOpenFolder = New-Object System.Windows.Forms.Button
-$btnBackupOpenFolder.Text = 'Show folder'
+$btnBackupOpenFolder.Text = 'Show in Explorer'
 $btnBackupOpenFolder.Location = New-Object System.Drawing.Point(428, 4)
-$btnBackupOpenFolder.Size = New-Object System.Drawing.Size(110, 26)
+$btnBackupOpenFolder.Size = New-Object System.Drawing.Size(130, 26)
 $pnlBackupButtons.Controls.Add($btnBackupOpenFolder)
-$toolTip.SetToolTip($btnBackupOpenFolder, 'Opens the backup folder in Explorer')
+$toolTip.SetToolTip($btnBackupOpenFolder, 'Opens Explorer with the opened backup picked out')
 
 # --- what an empty list says --------------------------------------------------
 # A list that has never been read looks exactly like a list with nothing in it,
@@ -10247,6 +10372,7 @@ function Set-PageEnterKey {
         elseif ($tabsRadios.SelectedTab -eq $tabBt) { $button = $btnBtRefresh }
         elseif ($tabsRadios.SelectedTab -eq $tabNfc) { $button = $btnNfcRefresh }
     }
+    elseif ($page -eq $tabAdvanced -and $tabsAdvanced.SelectedTab -eq $tabBackup) { $button = $btnBackupListRefresh }
     $form.AcceptButton = $button
 }
 
@@ -11361,6 +11487,15 @@ $logFindTimer.Add_Tick({
     Update-LogView
 })
 
+# the same short pause for the backup's find box: a backup can hold tens of
+# thousands of files, and each letter would walk them all
+$backupFindTimer = New-Object System.Windows.Forms.Timer
+$backupFindTimer.Interval = 250
+$backupFindTimer.Add_Tick({
+    $backupFindTimer.Stop()
+    Update-BackupInside
+})
+
 $busyTimer = New-Object System.Windows.Forms.Timer
 $busyTimer.Interval = 200
 $busyTimer.Add_Tick({
@@ -12365,9 +12500,15 @@ $form.Add_Resize({
 # The tab's own work; the backup itself is shared\Backup.ps1, which the Nova
 # window uses as well.
 
-$script:backupFolder = ''
+$script:backupPath = ''
+$script:backupSource = $null
 $script:backupManifest = $null
 $script:backupAppRows = @()
+$script:backupInsideRows = @()
+$script:backupListRows = @()
+# a phone can hold tens of thousands of files; a list control cannot show them
+# all without a long pause, so the rest wait behind the find box
+$script:backupInsideMax = 3000
 
 function Set-BackupProgressUi {
     param([string]$Text, [int]$Done, [int]$Total)
@@ -12387,7 +12528,8 @@ function Set-BackupBusyUi {
     param([bool]$Running)
 
     $btnBackupCancel.Enabled = $Running
-    foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps, $btnRestoreContacts)) {
+    foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnBackupOpenOld, $btnRestoreFiles, $btnRestoreApps,
+        $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupListLook, $btnBackupListForget)) {
         $control.Enabled = -not $Running
     }
     if (-not $Running) {
@@ -12405,28 +12547,100 @@ function Get-BackupTickedParts {
 }
 
 function Show-BackupAt {
-    # what a backup folder holds, and the apps in it against this phone
-    param([string]$Folder)
+    # what a backup holds - the .zip it is, or the folder an older one was -
+    # the files in it, and its apps against this phone
+    param([Alias('Folder')][string]$Path)
 
-    $manifest = Read-BackupManifest -Folder $Folder
-    if ($null -eq $manifest) {
-        Write-Log "That folder has no manifest.json, so it is not a backup: $Folder" $colorBad
+    $source = Open-BackupSource -Path $Path
+    if ($null -eq $source) {
+        Write-Log "That holds no manifest.json, so it is not a backup: $Path" $colorBad
         return $false
     }
 
-    $script:backupFolder = $Folder
-    $script:backupManifest = $manifest
-    $txtBackupInfo.Text = ((@($Folder) + @(Get-BackupSummaryLines -Manifest $manifest)) -join [Environment]::NewLine)
+    $script:backupSource = $source
+    $script:backupPath = $source.Path
+    $script:backupManifest = $source.Manifest
+    $txtBackupInfo.Text = ((@($source.Path) + @(Get-BackupSummaryLines -Manifest $source.Manifest -Source $source)) -join
+        [Environment]::NewLine)
+
+    Update-BackupApps
+    Update-BackupInside
+    Write-Log "Backup opened: $($source.Path)" $colorInfo
+    return $true
+}
+
+function Update-BackupApps {
+    # the apps in the opened backup, ticked where this phone does not have them
+    $clbBackupApps.Items.Clear()
+    $script:backupAppRows = @()
+    if (-not $script:backupSource) { Update-ListHints; return }
 
     $serial = Get-SelectedSerial
-    $script:backupAppRows = @(Get-BackupAppRows -Folder $Folder -Serial $(if ($serial) { $serial } else { '' }))
-    $clbBackupApps.Items.Clear()
+    $script:backupAppRows = @(Get-BackupAppRows -Source $script:backupSource -Serial $(if ($serial) { $serial } else { '' }))
     foreach ($row in $script:backupAppRows) {
         # the apps this phone does not have are ticked; the rest are left alone
         $null = $clbBackupApps.Items.Add(('{0}   {1}   {2}' -f $row.Package, $row.Size, $row.State), ($row.State -eq 'missing'))
     }
-    Write-Log "Backup opened: $Folder" $colorInfo
-    return $true
+    Update-ListHints
+}
+
+function Update-BackupInside {
+    # every file in the opened backup, read from its index - nothing is unpacked
+    $lstBackupInside.BeginUpdate()
+    $lstBackupInside.Items.Clear()
+    $rows = @()
+    if ($script:backupSource) { $rows = @(Get-BackupInsideRows -Source $script:backupSource -Filter $txtBackupFind.Text) }
+    $script:backupInsideRows = $rows
+
+    $bytes = [long]0
+    foreach ($row in $rows) { $bytes += $row.Bytes }
+    $shown = $rows
+    if ($rows.Count -gt $script:backupInsideMax) { $shown = @($rows[0..($script:backupInsideMax - 1)]) }
+    foreach ($row in $shown) {
+        $item = New-Object System.Windows.Forms.ListViewItem($row.What)
+        $null = $item.SubItems.Add($row.Path)
+        $null = $item.SubItems.Add($row.Size)
+        $null = $lstBackupInside.Items.Add($item)
+    }
+    $lstBackupInside.EndUpdate()
+
+    if (-not $script:backupSource) {
+        $lblBackupInside.Text = 'Nothing open.'
+    } elseif ($rows.Count -gt $shown.Count) {
+        $lblBackupInside.Text = ('{0} file(s), {1} - the first {2} are listed' -f $rows.Count,
+            (Format-FileSize -Bytes $bytes), $shown.Count)
+    } else {
+        $lblBackupInside.Text = ('{0} file(s), {1}' -f $rows.Count, (Format-FileSize -Bytes $bytes))
+    }
+    $toolTip.SetToolTip($lblBackupInside, $lblBackupInside.Text)
+    Update-ListHints
+}
+
+function Update-BackupList {
+    # the backups this PC has taken, newest first, each checked for being there
+    $lstBackupList.BeginUpdate()
+    $lstBackupList.Items.Clear()
+    $script:backupListRows = @(Get-BackupListRows)
+    foreach ($row in $script:backupListRows) {
+        $item = New-Object System.Windows.Forms.ListViewItem($row.When)
+        $null = $item.SubItems.Add($row.Phone)
+        $null = $item.SubItems.Add($row.Holds)
+        $null = $item.SubItems.Add($row.Size)
+        $null = $item.SubItems.Add($row.State)
+        $null = $item.SubItems.Add($row.Path)
+        if ($row.Missing) { $item.ForeColor = [System.Drawing.Color]::FromArgb(150, 60, 60) }
+        $null = $lstBackupList.Items.Add($item)
+    }
+    $lstBackupList.EndUpdate()
+    Update-ListHints
+}
+
+function Get-BackupListPick {
+    # the backup picked in the list, or nothing when none is
+    if ($lstBackupList.SelectedIndices.Count -eq 0) { return $null }
+    $index = $lstBackupList.SelectedIndices[0]
+    if ($index -lt 0 -or $index -ge $script:backupListRows.Count) { return $null }
+    return $script:backupListRows[$index]
 }
 
 function Start-BackupNow {
@@ -12447,24 +12661,97 @@ function Start-BackupNow {
     } finally {
         Set-BackupBusyUi -Running $false
     }
-    if ($manifest) { $null = Show-BackupAt -Folder $manifest.Folder }
+    if ($manifest) {
+        $null = Show-BackupAt -Path $manifest.Path
+        Update-BackupList
+    }
+}
+
+function Open-BackupFile {
+    # a backup is one .zip file now; the dialog opens where the last one was
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Title = 'Open a backup'
+    $dialog.Filter = 'Backup (*.zip)|*.zip|Every file (*.*)|*.*'
+    if ($script:backupPath -and (Test-Path -LiteralPath $script:backupPath)) {
+        $dialog.InitialDirectory = Split-Path -Parent $script:backupPath
+    }
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    if (Show-BackupAt -Path $dialog.FileName) { $null = Add-BackupToList -Path $dialog.FileName -Manifest $script:backupManifest -Kind 'zip' }
+    Update-BackupList
 }
 
 function Open-BackupFolder {
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
     $dialog.Description = 'Pick a backup folder - the one with manifest.json in it'
-    if ($script:backupFolder -and (Test-Path -LiteralPath $script:backupFolder)) { $dialog.SelectedPath = $script:backupFolder }
+    if ($script:backupPath -and (Test-Path -LiteralPath $script:backupPath -PathType Container)) {
+        $dialog.SelectedPath = $script:backupPath
+    }
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
-    $null = Show-BackupAt -Folder $dialog.SelectedPath
+    if (Show-BackupAt -Path $dialog.SelectedPath) { $null = Add-BackupToList -Path $dialog.SelectedPath -Manifest $script:backupManifest -Kind 'folder' }
+    Update-BackupList
+}
+
+function Open-BackupFromList {
+    $row = Get-BackupListPick
+    if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
+    if ($row.Missing) {
+        Write-Log "That backup is not where it was put any more: $($row.Path)" $colorWarn
+        Write-Log '  Use "Look in a folder" to find it again, or Forget to take the line out.' $colorInfo
+        return
+    }
+    $null = Show-BackupAt -Path $row.Path
+    $tabsBackupView.SelectedTab = $tabBackupInside
+}
+
+function Show-BackupPickedInExplorer {
+    $row = Get-BackupListPick
+    if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
+    Show-BackupPathInExplorer -Path $row.Path
+}
+
+function Add-BackupFolderToTheList {
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = 'Which folder should be looked through for backups?'
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    $null = Add-BackupFolderToList -Folder $dialog.SelectedPath
+    Update-BackupList
+}
+
+function Remove-BackupFromTheList {
+    $row = Get-BackupListPick
+    if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
+    $null = Remove-BackupFromList -Path $row.Path
+    Write-Log "Forgotten (the file itself is untouched): $($row.Path)" $colorInfo
+    Update-BackupList
+}
+
+function Save-BackupPickedFiles {
+    # files out of the backup onto this PC, without a phone in it at all
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
+    $entries = @()
+    foreach ($index in $lstBackupInside.SelectedIndices) {
+        if ($index -ge 0 -and $index -lt $script:backupInsideRows.Count) { $entries += $script:backupInsideRows[$index].Entry }
+    }
+    if ($entries.Count -eq 0) { Write-Log 'Pick the files to save in the list first.' $colorWarn; return }
+
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = "Where should these $($entries.Count) file(s) be written?"
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+    Set-BackupBusyUi -Running $true
+    try {
+        $null = Save-BackupCopy -Source $script:backupSource -Entries $entries -Destination $dialog.SelectedPath
+    } finally {
+        Set-BackupBusyUi -Running $false
+    }
 }
 
 function Start-RestoreFiles {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
-    if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
 
     Write-Log 'Restore: reading what the phone already has ...' $colorStep
-    $plan = Get-BackupFilePlan -Folder $script:backupFolder
+    $plan = Get-BackupFilePlan -Source $script:backupSource
     if ($plan.Total -eq 0) { Write-Log 'This backup holds no files.' $colorWarn; return }
     $plan = Set-BackupFilePlanState -Plan $plan -Serial $serial
 
@@ -12491,7 +12778,7 @@ function Start-RestoreFiles {
 function Start-RestoreApps {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
-    if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
 
     $rows = @()
     foreach ($index in $clbBackupApps.CheckedIndices) {
@@ -12500,31 +12787,43 @@ function Start-RestoreApps {
     if ($rows.Count -eq 0) { Write-Log 'Tick the apps to install first.' $colorWarn; return }
     Set-BackupBusyUi -Running $true
     try {
-        $null = Restore-BackupApps -Rows $rows -Serial $serial
+        $null = Restore-BackupApps -Rows $rows -Serial $serial -Source $script:backupSource
     } finally {
         Set-BackupBusyUi -Running $false
     }
-    $null = Show-BackupAt -Folder $script:backupFolder
+    Update-BackupApps
 }
 
 function Start-RestoreContacts {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
-    if (-not $script:backupFolder) { Write-Log 'Open a backup first.' $colorWarn; return }
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
     Set-BackupBusyUi -Running $true
     try {
-        $null = Restore-BackupContacts -Folder $script:backupFolder -Serial $serial
+        $null = Restore-BackupContacts -Source $script:backupSource -Serial $serial
     } finally {
         Set-BackupBusyUi -Running $false
     }
 }
 
-function Show-BackupInExplorer {
-    if (-not $script:backupFolder -or -not (Test-Path -LiteralPath $script:backupFolder)) {
-        Write-Log 'Open a backup first.' $colorWarn
+function Show-BackupPathInExplorer {
+    # a file is picked out in its folder; a folder is opened
+    param([string]$Path)
+
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) {
+        Write-Log 'That backup is not there any more.' $colorWarn
         return
     }
-    Start-Process -FilePath 'explorer.exe' -ArgumentList ('"' + $script:backupFolder + '"')
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        Start-Process -FilePath 'explorer.exe' -ArgumentList ('"' + $Path + '"')
+    } else {
+        Start-Process -FilePath 'explorer.exe' -ArgumentList ('/select,"' + $Path + '"')
+    }
+}
+
+function Show-BackupInExplorer {
+    if (-not $script:backupPath) { Write-Log 'Open a backup first.' $colorWarn; return }
+    Show-BackupPathInExplorer -Path $script:backupPath
 }
 
 $btnBackupRun.Add_Click({ Start-BackupNow })
@@ -12532,11 +12831,21 @@ $btnBackupCancel.Add_Click({
     Write-Log 'Stopping ...' $colorWarn
     Stop-BackupRun -Reason 'you cancelled it'
 })
-$btnBackupOpen.Add_Click({ Open-BackupFolder })
+$btnBackupOpen.Add_Click({ Open-BackupFile })
+$btnBackupOpenOld.Add_Click({ Open-BackupFolder })
 $btnRestoreFiles.Add_Click({ Start-RestoreFiles })
 $btnRestoreApps.Add_Click({ Start-RestoreApps })
 $btnRestoreContacts.Add_Click({ Start-RestoreContacts })
 $btnBackupOpenFolder.Add_Click({ Show-BackupInExplorer })
+$btnBackupListRefresh.Add_Click({ Update-BackupList })
+$btnBackupListOpen.Add_Click({ Open-BackupFromList })
+$btnBackupListShow.Add_Click({ Show-BackupPickedInExplorer })
+$btnBackupListLook.Add_Click({ Add-BackupFolderToTheList })
+$btnBackupListForget.Add_Click({ Remove-BackupFromTheList })
+$btnBackupSaveCopy.Add_Click({ Save-BackupPickedFiles })
+$lstBackupList.Add_DoubleClick({ Open-BackupFromList })
+# the find box filters as it is typed, like the log's, after the same pause
+$txtBackupFind.Add_TextChanged({ $backupFindTimer.Stop(); $backupFindTimer.Start() })
 
 # --- what every button does, on hover ----------------------------------------
 # A button whose words cannot say the whole thing says it here: what it acts
@@ -12682,6 +12991,11 @@ Add-ListHint -List $lstBt -Text 'No paired devices read yet - press Refresh (F5)
 Add-ListHint -List $lstUsers -Text 'No users read yet - press Refresh (F5).'
 Add-ListHint -List $lstAutoRules -Text 'No rules yet - pick a phone above, then "Add the selected phone".'
 Add-ListHint -List $clbBackupApps -Text 'Open a backup to see the apps in it.'
+Add-ListHint -List $lstBackupList -Text 'No backups yet - take one above, or use "Look in a folder".'
+Add-ListHint -List $lstBackupInside -Text 'Open a backup to see every file inside it.'
+
+# the backups this PC has are there from the start, not after a button
+Update-BackupList
 
 $form.Add_FormClosing({
     Save-Settings

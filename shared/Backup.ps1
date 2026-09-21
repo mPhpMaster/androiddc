@@ -17,9 +17,21 @@
       settings  settings list, getprop, the installed packages and a device
                 report, as text to read while setting a phone up again.
 
-    A backup is a folder of ordinary files - no archive, no password, nothing
-    to unpack - with manifest.json saying what is in it. Restoring reads that
-    manifest, never the folder's name.
+    A backup is one .zip file with manifest.json inside it saying what it
+    holds. The files are pulled into a folder first, because that is what adb
+    writes; the folder is packed and then removed, so what is kept is a single
+    file to copy, to move, or to put on another drive. Already-packed things -
+    photos, video, APKs - are stored as they are rather than squeezed again.
+
+    Nothing has to be unpacked to use a backup: what is inside it is listed
+    from the zip's own index, and restoring takes one file out at a time.
+    Backups made before this - plain folders with manifest.json - open exactly
+    the same way, and a backup whose packing was cancelled stays a folder.
+
+    Every backup taken is written into %APPDATA%\AndroidDC\backups.json, so
+    both windows can show the backups this PC has without hunting for them;
+    that list holds paths, not copies, and a backup that was moved away says so
+    instead of disappearing quietly.
 
     Long work can be stopped, and never runs blind:
 
@@ -36,7 +48,11 @@
     what to ask before files already on the phone are written over.
 #>
 
-$script:backupFormat = 1
+# 1 was a folder of files; 2 is the same shape packed into one .zip
+$script:backupFormat = 2
+$script:backupListFile = if ($env:ANDROIDDC_BACKUP_LIST) { $env:ANDROIDDC_BACKUP_LIST } else {
+    Join-Path $env:APPDATA 'AndroidDC\backups.json' }
+$script:backupPump = ''
 $script:backupProgress = $null
 $script:backupStopped = $false
 $script:backupStopReason = ''
@@ -195,6 +211,172 @@ function Invoke-BackupAdb {
         $stopped = $true
     }
     return [PSCustomObject]@{ ExitCode = $code; Text = "$text".Trim(); Stopped = $stopped }
+}
+
+# --------------------------------------------------------------- the zip ----
+
+function Invoke-BackupPump {
+    # One turn of the window's message loop. Wait-Pumped sleeps 10 ms each
+    # turn, which is right while adb runs and wrong while this thread is the
+    # one working: packing a 4 GB video would spend minutes asleep.
+    if (-not $script:backupPump) {
+        $script:backupPump = if (Get-Command Invoke-Pump -ErrorAction SilentlyContinue) { 'nova' } else { 'forms' }
+    }
+    try {
+        if ($script:backupPump -eq 'nova') { Invoke-Pump } else { [System.Windows.Forms.Application]::DoEvents() }
+    } catch { }
+}
+
+function Initialize-BackupZip {
+    # Windows PowerShell loads neither zip assembly by itself, and it takes
+    # both: ZipFile and ExtractToFile come from ...Compression.FileSystem,
+    # while ZipArchive and ZipArchiveMode - what writing an entry at a time
+    # needs - come from ...Compression, which the first one does not drag in.
+    if (-not ('System.IO.Compression.ZipFile' -as [type])) {
+        try { Add-Type -AssemblyName System.IO.Compression.FileSystem } catch { }
+    }
+    if (-not ('System.IO.Compression.ZipArchiveMode' -as [type])) {
+        try { Add-Type -AssemblyName System.IO.Compression } catch { }
+    }
+    return [bool](('System.IO.Compression.ZipFile' -as [type]) -and ('System.IO.Compression.ZipArchiveMode' -as [type]))
+}
+
+function Get-BackupCompression {
+    # Photos, video and APKs are packed already: packing them again costs the
+    # whole backup's time and saves nothing, so they go in as they are.
+    param([string]$Name)
+
+    $packed = @('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.mp4', '.mkv', '.mov',
+        '.3gp', '.webm', '.avi', '.mp3', '.m4a', '.aac', '.ogg', '.opus', '.flac', '.wma',
+        '.zip', '.apk', '.apks', '.jar', '.7z', '.rar', '.gz', '.xz', '.bz2')
+    $extension = ([System.IO.Path]::GetExtension("$Name")).ToLowerInvariant()
+    if ($packed -contains $extension) { return [System.IO.Compression.CompressionLevel]::NoCompression }
+    return [System.IO.Compression.CompressionLevel]::Fastest
+}
+
+function Test-BackupRoom {
+    # Packing needs room for a second copy at worst. Answers $true when the
+    # drive has it, so a full drive is said out loud instead of half a zip.
+    param([string]$Path, [long]$Needed)
+
+    try {
+        $drive = New-Object System.IO.DriveInfo ([System.IO.Path]::GetPathRoot((Get-Item -LiteralPath (Split-Path -Parent $Path)).FullName))
+        return ($drive.AvailableFreeSpace -gt $Needed)
+    } catch {
+        return $true
+    }
+}
+
+function Compress-BackupFolder {
+    <#
+        The pulled folder into one .zip. Files are copied a megabyte at a time,
+        so a phone's worth of video never sits in memory, the window keeps
+        drawing, and Cancel lands inside a big file as well as between two.
+
+        A pack that fails or is stopped leaves no half zip behind: the folder
+        is what is kept, and it opens as a backup just as the zip does.
+    #>
+    param([string]$Folder, [string]$ZipPath)
+
+    $result = [PSCustomObject]@{ Ok = $false; Files = 0; Bytes = [long]0; Error = ''; Stopped = '' }
+    if (-not (Initialize-BackupZip)) { $result.Error = 'this PowerShell has no zip support'; return $result }
+
+    $files = @(Get-ChildItem -LiteralPath $Folder -Recurse -File -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) { $result.Error = 'there is nothing to pack'; return $result }
+    $needed = [long]0
+    foreach ($file in $files) { $needed += $file.Length }
+    if (-not (Test-BackupRoom -Path $ZipPath -Needed $needed)) {
+        $result.Error = 'the drive has no room for the packed copy'
+        return $result
+    }
+
+    # one spelling of the folder for both the walk and the cut - see Get-BackupFilePlan
+    $rootPath = (Get-Item -LiteralPath $Folder).FullName.TrimEnd([char]92)
+    $rootLength = $rootPath.Length + 1
+    Write-Log ("Backup: packing $($files.Count) file(s) into " + [System.IO.Path]::GetFileName($ZipPath) + ' ...') $colorStep
+
+    $archive = $null
+    $stream = $null
+    $buffer = New-Object byte[] 1048576
+    # named before the try: the catch below reads it, and a failure to open the
+    # zip at all happens before the loop has given it a value
+    $relative = ''
+    $script:busy++
+    $script:busyWhat = 'packing the backup'
+    try {
+        $stream = [System.IO.File]::Open($ZipPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+        $archive = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create)
+        $index = 0
+        foreach ($file in $files) {
+            if (Test-BackupStopped) { break }
+            $index++
+            $relative = $file.FullName.Substring($rootLength).Replace([char]92, [char]47)
+            Write-BackupProgress -Text "Packing: $relative" -Done $index -Total $files.Count
+            Invoke-BackupPump
+
+            $entry = $archive.CreateEntry($relative, (Get-BackupCompression -Name $file.Name))
+            try { $entry.LastWriteTime = $file.LastWriteTime } catch { }
+            $target = $entry.Open()
+            $source = $null
+            try {
+                $source = [System.IO.File]::Open($file.FullName, [System.IO.FileMode]::Open,
+                    [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+                while ($true) {
+                    $read = $source.Read($buffer, 0, $buffer.Length)
+                    if ($read -le 0) { break }
+                    $target.Write($buffer, 0, $read)
+                    if (Test-BackupStopped) { break }
+                    Invoke-BackupPump
+                }
+            } finally {
+                if ($source) { $source.Dispose() }
+                $target.Dispose()
+            }
+            $result.Files++
+        }
+    } catch {
+        # a file that cannot be read stops the packing rather than being left
+        # quietly out of it: the pulled folder is then what is kept, whole
+        $result.Error = "$relative : " + $_.Exception.Message
+    } finally {
+        if ($archive) { try { $archive.Dispose() } catch { } }
+        if ($stream) { try { $stream.Dispose() } catch { } }
+        $script:busy--
+        if ($script:busy -lt 0) { $script:busy = 0 }
+    }
+
+    if (Test-BackupStopped) { $result.Stopped = Get-BackupStopReason }
+    if (-not $result.Error -and -not $result.Stopped) {
+        # it is read back before the pulled files are let go of
+        $count = Test-BackupArchive -Path $ZipPath
+        if ($count -ne $files.Count) { $result.Error = "the packed file holds $count of $($files.Count) file(s)" }
+    }
+    if ($result.Error -or $result.Stopped) {
+        Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
+        return $result
+    }
+
+    $result.Bytes = (Get-Item -LiteralPath $ZipPath).Length
+    $result.Ok = $true
+    Write-Log ('  packed into ' + (Format-FileSize -Bytes $result.Bytes) +
+        ' from ' + (Format-FileSize -Bytes $needed)) $colorGood
+    return $result
+}
+
+function Test-BackupArchive {
+    # how many files a zip really holds; -1 when it cannot be read at all
+    param([string]$Path)
+
+    if (-not (Initialize-BackupZip)) { return -1 }
+    $archive = $null
+    try {
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+        return @($archive.Entries | Where-Object { $_.Name }).Count
+    } catch {
+        return -1
+    } finally {
+        if ($archive) { try { $archive.Dispose() } catch { } }
+    }
 }
 
 # ------------------------------------------------------------------ parts ----
@@ -496,9 +678,12 @@ function Invoke-PhoneBackup {
     if (-not (Test-Path -LiteralPath $Destination)) { $null = New-Item -ItemType Directory -Path $Destination -Force }
 
     $started = [datetime]::Now
-    $folder = Join-Path $Destination (ConvertTo-BackupName -Model $Model -Serial $Serial -When $started)
+    # the folder is where adb pulls; the .zip beside it is what is kept
+    $name = ConvertTo-BackupName -Model $Model -Serial $Serial -When $started
+    $folder = Join-Path $Destination $name
+    $zipPath = Join-Path $Destination ($name + '.zip')
     $null = New-Item -ItemType Directory -Path $folder -Force
-    Write-Log "Backup of $Serial into $folder" $colorStep
+    Write-Log "Backup of $Serial into $zipPath" $colorStep
     Start-BackupRun
 
     $manifest = [ordered]@{
@@ -518,56 +703,331 @@ function Invoke-PhoneBackup {
         Finished = ''
     }
 
+    # the packing is inside the run, so Cancel still works while it packs
+    $path = $folder
+    $kind = 'folder'
+    $packed = $null
     try {
-        if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Backup-PhoneFiles -Serial $Serial -Folder $folder }
-        if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder) }
-        if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
-        if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
+        try {
+            if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Backup-PhoneFiles -Serial $Serial -Folder $folder }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder) }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
+        } finally {
+            $manifest.Bytes = Get-BackupFolderSize -Path $folder
+            $manifest.Finished = ([datetime]::Now).ToString('s')
+            $manifest.Complete = -not (Test-BackupStopped)
+            $manifest.Stopped = Get-BackupStopReason
+            Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -InputObject $manifest -Depth 6)
+        }
+
+        if ($manifest.Complete) {
+            $packed = Compress-BackupFolder -Folder $folder -ZipPath $zipPath
+            if ($packed.Ok) {
+                $path = $zipPath
+                $kind = 'zip'
+                Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+            } elseif ($packed.Stopped) {
+                Write-Log "  Packing was stopped ($($packed.Stopped)); the files are kept in the folder." $colorWarn
+            } else {
+                Write-Log "  It could not be packed ($($packed.Error)); the files are kept in the folder." $colorWarn
+            }
+        }
     } finally {
-        $manifest.Bytes = Get-BackupFolderSize -Path $folder
-        $manifest.Finished = ([datetime]::Now).ToString('s')
-        $manifest.Complete = -not (Test-BackupStopped)
-        $manifest.Stopped = Get-BackupStopReason
-        Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -InputObject $manifest -Depth 6)
         Complete-BackupRun
     }
 
     $minutes = ([datetime]::Now - $started).TotalMinutes
     $size = Format-FileSize -Bytes $manifest.Bytes
+    $where = [System.IO.Path]::GetFileName($path)
     if ($manifest.Complete) {
-        Write-Log ("Backup done: $size" + (' in {0:N1} minute(s).' -f $minutes)) $colorGood
-        Send-BackupNotice -Title 'Backup done' -Text "$size from $Serial is in the folder."
+        $packedSize = if ($packed -and $packed.Ok) { ', ' + (Format-FileSize -Bytes $packed.Bytes) + ' packed' } else { '' }
+        Write-Log ("Backup done: $size$packedSize" + (' in {0:N1} minute(s).' -f $minutes)) $colorGood
+        Send-BackupNotice -Title 'Backup done' -Text "$size from $Serial is in $where."
     } else {
         Write-Log ("Backup stopped ($($manifest.Stopped)) after $size" + (' and {0:N1} minute(s).' -f $minutes)) $colorWarn
         Write-Log '  What was already pulled is kept, and the manifest says this backup is not complete.' $colorInfo
-        Send-BackupNotice -Title 'Backup stopped' -Text "$($manifest.Stopped). $size was kept."
+        Send-BackupNotice -Title 'Backup stopped' -Text "$($manifest.Stopped). $size was kept in $where."
     }
     Write-BackupProgress -Text $(if ($manifest.Complete) { 'Backup done' } else { "Backup stopped: $($manifest.Stopped)" }) -Done 1 -Total 1
 
     $result = [PSCustomObject]$manifest
-    Add-Member -InputObject $result -NotePropertyName 'Folder' -NotePropertyValue $folder -Force
+    Add-Member -InputObject $result -NotePropertyName 'Path' -NotePropertyValue $path -Force
+    Add-Member -InputObject $result -NotePropertyName 'Kind' -NotePropertyValue $kind -Force
+    $null = Add-BackupToList -Path $path -Manifest $result -Kind $kind
     return $result
 }
 
-# --------------------------------------------------------------- restoring ----
+# ---------------------------------------------------------- opening one ----
+
+function Open-BackupSource {
+    <#
+        A backup to read from: the .zip a backup is now, or the folder older
+        ones were. Answers $null when neither holds a manifest.json, which is
+        what makes a folder or a zip a backup - never its name.
+
+        Its entries are named the way the zip names them, files/Pictures/one.jpg,
+        whichever kind it is, so everything below reads one shape.
+    #>
+    param([Alias('Folder')][string]$Path)
+
+    if (-not "$Path" -or -not (Test-Path -LiteralPath $Path)) { return $null }
+    $full = (Get-Item -LiteralPath $Path).FullName
+    $source = [PSCustomObject]@{
+        Path     = $full
+        Kind     = 'folder'
+        Name     = [System.IO.Path]::GetFileName($full)
+        Manifest = $null
+        Entries  = @()
+        Bytes    = [long]0
+        Packed   = [long]0
+    }
+
+    if (Test-Path -LiteralPath $full -PathType Leaf) {
+        if (-not (Initialize-BackupZip)) { return $null }
+        $source.Kind = 'zip'
+        $source.Packed = (Get-Item -LiteralPath $full).Length
+        $entries = @()
+        $text = ''
+        $archive = $null
+        try {
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($full)
+            foreach ($entry in $archive.Entries) {
+                # a folder is an entry with no name of its own
+                if (-not $entry.Name) { continue }
+                $entries += [PSCustomObject]@{ Path = $entry.FullName; Bytes = [long]$entry.Length }
+                if ($entry.FullName -eq 'manifest.json') {
+                    $reader = New-Object System.IO.StreamReader($entry.Open(), (New-Object System.Text.UTF8Encoding($false)))
+                    try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+                }
+            }
+        } catch {
+            return $null
+        } finally {
+            if ($archive) { try { $archive.Dispose() } catch { } }
+        }
+        if (-not $text) { return $null }
+        try { $source.Manifest = ($text | ConvertFrom-Json) } catch { return $null }
+        $source.Entries = $entries
+    } else {
+        $manifestPath = Join-Path $full 'manifest.json'
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $null }
+        try { $source.Manifest = (Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+        $rootPath = $full.TrimEnd([char]92)
+        $rootLength = $rootPath.Length + 1
+        $entries = @()
+        foreach ($file in (Get-ChildItem -LiteralPath $rootPath -Recurse -File -ErrorAction SilentlyContinue)) {
+            $entries += [PSCustomObject]@{
+                Path  = $file.FullName.Substring($rootLength).Replace([char]92, [char]47)
+                Bytes = [long]$file.Length
+            }
+        }
+        $source.Entries = $entries
+    }
+
+    foreach ($entry in @($source.Entries)) { $source.Bytes += $entry.Bytes }
+    return $source
+}
+
+function ConvertTo-BackupSource {
+    # each of the functions below takes either an opened backup or its path
+    param($Source)
+
+    if ($null -eq $Source) { return $null }
+    if ($Source -is [string]) { return (Open-BackupSource -Path $Source) }
+    return $Source
+}
 
 function Read-BackupManifest {
-    # the manifest of a backup folder, or $null when that folder is not one
-    param([string]$Folder)
+    # what a backup says about itself, or $null when that path is not one
+    param([Alias('Folder')][string]$Path)
 
-    $path = Join-Path "$Folder" 'manifest.json'
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
-    try { return (Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+    $source = Open-BackupSource -Path $Path
+    if ($null -eq $source) { return $null }
+    return $source.Manifest
+}
+
+function Get-BackupEntryPath {
+    # where an entry of a folder backup is on this PC; nothing, for a zip
+    param($Source, [string]$Entry)
+
+    if ($Source.Kind -ne 'folder') { return '' }
+    return (Join-Path $Source.Path ("$Entry".Replace([char]47, [char]92)))
+}
+
+function Open-BackupArchive {
+    # one open zip for a whole loop: opening it per file reads its index again
+    param($Source)
+
+    if ($null -eq $Source -or $Source.Kind -ne 'zip') { return $null }
+    if (-not (Initialize-BackupZip)) { return $null }
+    try { return [System.IO.Compression.ZipFile]::OpenRead($Source.Path) } catch { return $null }
+}
+
+function Close-BackupArchive {
+    param($Archive)
+
+    if ($Archive) { try { $Archive.Dispose() } catch { } }
+}
+
+function Export-BackupEntry {
+    # one file out of a backup onto this PC; $true when it landed
+    param($Source, [string]$Entry, [string]$Destination, $Archive = $null)
+
+    $folder = Split-Path -Parent $Destination
+    if ($folder -and -not (Test-Path -LiteralPath $folder)) { $null = New-Item -ItemType Directory -Path $folder -Force }
+
+    if ($Source.Kind -eq 'folder') {
+        $from = Get-BackupEntryPath -Source $Source -Entry $Entry
+        if (-not (Test-Path -LiteralPath $from -PathType Leaf)) { return $false }
+        try { Copy-Item -LiteralPath $from -Destination $Destination -Force; return $true } catch { return $false }
+    }
+
+    $own = $null
+    if (-not $Archive) { $own = Open-BackupArchive -Source $Source; $Archive = $own }
+    if (-not $Archive) { return $false }
+    try {
+        $item = $Archive.GetEntry($Entry)
+        if (-not $item) { return $false }
+        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($item, $Destination, $true)
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($own) { Close-BackupArchive -Archive $own }
+    }
+}
+
+function Get-BackupEntryText {
+    # a text file inside a backup - the manifest, the contacts - as one string
+    param($Source, [string]$Entry, $Archive = $null)
+
+    if ($null -eq $Source) { return '' }
+    if ($Source.Kind -eq 'folder') {
+        $path = Get-BackupEntryPath -Source $Source -Entry $Entry
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return '' }
+        try { return (Get-Content -LiteralPath $path -Raw -Encoding UTF8) } catch { return '' }
+    }
+
+    $own = $null
+    if (-not $Archive) { $own = Open-BackupArchive -Source $Source; $Archive = $own }
+    if (-not $Archive) { return '' }
+    try {
+        $item = $Archive.GetEntry($Entry)
+        if (-not $item) { return '' }
+        $reader = New-Object System.IO.StreamReader($item.Open(), (New-Object System.Text.UTF8Encoding($false)))
+        try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } catch {
+        return ''
+    } finally {
+        if ($own) { Close-BackupArchive -Archive $own }
+    }
+}
+
+function Get-BackupTempFolder {
+    # where a file is unpacked to on its way to the phone, and cleared after
+    $path = Join-Path $env:TEMP 'AndroidDC-restore'
+    if (-not (Test-Path -LiteralPath $path)) { $null = New-Item -ItemType Directory -Path $path -Force }
+    return $path
+}
+
+# ------------------------------------------------------ what is inside it ----
+
+function Get-BackupEntryWhat {
+    # which part of the backup an entry belongs to
+    param([string]$Entry)
+
+    if ("$Entry" -like 'files/*') { return 'Files' }
+    if ("$Entry" -like 'apps/*') { return 'Apps' }
+    if ("$Entry" -like 'personal/*') { return 'Personal' }
+    if ("$Entry" -like 'settings/*') { return 'Settings' }
+    return 'Backup'
+}
+
+function Get-BackupEntryWhere {
+    # where that file was on the phone, when it came from one
+    param([string]$Entry)
+
+    if ("$Entry" -like 'files/*') { return '/sdcard/' + "$Entry".Substring(6) }
+    return "$Entry"
+}
+
+function Get-BackupInsideRows {
+    <#
+        Everything a backup holds, to read before anything is put back: which
+        part it belongs to, where it was on the phone, and how big it is.
+        Nothing is unpacked - a zip says all of this in its own index.
+
+        Filter is plain text matched anywhere in the path, not a wildcard.
+    #>
+    param($Source, [string]$Filter = '')
+
+    $source = ConvertTo-BackupSource -Source $Source
+    if ($null -eq $source) { return @() }
+
+    $text = "$Filter".Trim()
+    $rows = @()
+    foreach ($entry in @($source.Entries)) {
+        $where = Get-BackupEntryWhere -Entry $entry.Path
+        if ($text -and $where -notmatch [regex]::Escape($text)) { continue }
+        $rows += [PSCustomObject]@{
+            What  = (Get-BackupEntryWhat -Entry $entry.Path)
+            Path  = $where
+            Size  = (Format-FileSize -Bytes $entry.Bytes)
+            Bytes = $entry.Bytes
+            Entry = $entry.Path
+        }
+    }
+    return @($rows | Sort-Object What, Path)
+}
+
+function Save-BackupCopy {
+    # files out of a backup onto this PC, in the folders they were in, without
+    # a phone anywhere near it
+    param($Source, [string[]]$Entries, [string]$Destination)
+
+    $source = ConvertTo-BackupSource -Source $Source
+    $list = @(@($Entries) | Where-Object { $_ })
+    $result = [PSCustomObject]@{ Saved = 0; Failed = 0 }
+    if ($null -eq $source -or $list.Count -eq 0) { return $result }
+    if (-not (Test-Path -LiteralPath $Destination)) { $null = New-Item -ItemType Directory -Path $Destination -Force }
+
+    Write-Log "Saving $($list.Count) file(s) out of $($source.Name) ..." $colorStep
+    $archive = Open-BackupArchive -Source $source
+    try {
+        $index = 0
+        foreach ($entry in $list) {
+            $index++
+            Write-BackupProgress -Text "Saving: $entry" -Done $index -Total $list.Count
+            $target = Join-Path $Destination ("$entry".Replace([char]47, [char]92))
+            if (Export-BackupEntry -Source $source -Entry $entry -Destination $target -Archive $archive) {
+                $result.Saved++
+            } else {
+                $result.Failed++
+            }
+        }
+    } finally {
+        Close-BackupArchive -Archive $archive
+    }
+    Write-Log "  $($result.Saved) saved to $Destination, $($result.Failed) could not be read." `
+        $(if ($result.Failed -gt 0) { $colorWarn } else { $colorGood })
+    Write-BackupProgress -Text "$($result.Saved) file(s) saved" -Done 1 -Total 1
+    return $result
 }
 
 function Get-BackupSummaryLines {
     # what a backup holds, in words, to show before anything is put back
-    param($Manifest)
+    param($Manifest, $Source = $null)
 
-    if ($null -eq $Manifest) { return @('Not a backup folder: it has no manifest.json.') }
+    if ($null -eq $Manifest) { return @('Not a backup: it holds no manifest.json.') }
     $lines = @("$($Manifest.Model) ($($Manifest.Serial)), Android $($Manifest.Android), taken " +
         (("$($Manifest.Created)" -replace 'T', ' ')))
     if ($Manifest.PSObject.Properties['Bytes']) { $lines += 'Size: ' + (Format-FileSize -Bytes ([long]$Manifest.Bytes)) }
+    if ($Source -and $Source.Kind -eq 'zip') {
+        $lines += 'Packed: ' + (Format-FileSize -Bytes ([long]$Source.Packed)) + ' in one .zip'
+    } elseif ($Source) {
+        $lines += 'Kept as a folder, not packed'
+    }
     if ($Manifest.PSObject.Properties['Complete'] -and -not $Manifest.Complete) {
         $lines += "Not complete: this backup was stopped ($($Manifest.Stopped))"
     }
@@ -584,9 +1044,14 @@ function Get-BackupSummaryLines {
     return $lines
 }
 
+# --------------------------------------------------------------- restoring ----
+
 function Get-BackupAppRows {
     # the apps in a backup, and whether the phone has each one already
-    param([string]$Folder, [string]$Serial = '')
+    param([Alias('Folder')]$Source, [string]$Serial = '')
+
+    $source = ConvertTo-BackupSource -Source $Source
+    if ($null -eq $source) { return @() }
 
     $installed = @()
     if ($Serial) {
@@ -595,20 +1060,31 @@ function Get-BackupAppRows {
         }
     }
 
+    $byPackage = @{}
+    foreach ($entry in @($source.Entries)) {
+        if ($entry.Path -notmatch '^apps/([^/]+)/[^/]+\.apk$') { continue }
+        $package = $Matches[1]
+        if (-not $byPackage.ContainsKey($package)) { $byPackage[$package] = @() }
+        $byPackage[$package] += $entry
+    }
+
     $rows = @()
-    $appsFolder = Join-Path "$Folder" 'apps'
-    if (-not (Test-Path -LiteralPath $appsFolder)) { return $rows }
-    foreach ($appFolder in (Get-ChildItem -LiteralPath $appsFolder -Directory -ErrorAction SilentlyContinue | Sort-Object Name)) {
-        $apks = @(Get-ChildItem -LiteralPath $appFolder.FullName -Filter *.apk -File -ErrorAction SilentlyContinue)
-        if ($apks.Count -eq 0) { continue }
+    foreach ($package in @($byPackage.Keys | Sort-Object)) {
+        # the base APK goes first: install-multiple takes it before its splits
+        $entries = @($byPackage[$package] | Sort-Object { $_.Path -notmatch '/base[^/]*\.apk$' }, Path)
         $bytes = [long]0
-        foreach ($apk in $apks) { $bytes += $apk.Length }
+        foreach ($entry in $entries) { $bytes += $entry.Bytes }
+        $apks = @()
+        if ($source.Kind -eq 'folder') {
+            $apks = @($entries | ForEach-Object { Get-BackupEntryPath -Source $source -Entry $_.Path })
+        }
         $rows += [PSCustomObject]@{
-            Package = $appFolder.Name
-            # the base APK goes first: install-multiple takes it before its splits
-            Apks    = @($apks | Sort-Object { $_.Name -notlike 'base*' }, Name | ForEach-Object { $_.FullName })
+            Package = $package
+            Entries = @($entries | ForEach-Object { $_.Path })
+            Apks    = $apks
             Size    = (Format-FileSize -Bytes $bytes)
-            State   = $(if ($installed -contains $appFolder.Name) { 'installed' } else { 'missing' })
+            Bytes   = $bytes
+            State   = $(if ($installed -contains $package) { 'installed' } else { 'missing' })
         }
     }
     return $rows
@@ -620,31 +1096,31 @@ function Get-BackupFilePlan {
         it goes on the phone. Nothing is asked of the phone here, so this can
         be read on its own; Set-BackupFilePlanState marks what is already there.
     #>
-    param([string]$Folder)
+    param([Alias('Folder')]$Source)
 
-    $plan = [PSCustomObject]@{ Total = 0; Existing = 0; Items = @(); Tops = @() }
-    $root = Join-Path "$Folder" 'files'
-    if (-not (Test-Path -LiteralPath $root)) { return $plan }
+    $source = ConvertTo-BackupSource -Source $Source
+    $plan = [PSCustomObject]@{ Total = 0; Existing = 0; Items = @(); Tops = @(); Source = $source }
+    if ($null -eq $source) { return $plan }
 
-    # One spelling of the folder for both the walk and the cut: %TEMP% is handed
-    # out in its 8.3 form (LONGNA~1) while Resolve-Path answers the long one, and
-    # cutting a long prefix off a short path ate the first letters of every name.
-    # [char]92 is the backslash - as a quoted string it is one escape away from a
-    # regex that means nothing, which is how this line broke once already.
-    $rootPath = (Get-Item -LiteralPath $root).FullName.TrimEnd([char]92)
-    $rootLength = $rootPath.Length + 1
     $items = @()
-    foreach ($file in (Get-ChildItem -LiteralPath $rootPath -Recurse -File -ErrorAction SilentlyContinue)) {
-        $relative = $file.FullName.Substring($rootLength)
+    $tops = @{}
+    foreach ($entry in @($source.Entries)) {
+        if ($entry.Path -notlike 'files/*') { continue }
+        $relative = $entry.Path.Substring(6)
+        if (-not $relative) { continue }
+        $tops[($relative -split '/')[0]] = $true
         $items += [PSCustomObject]@{
-            Local  = $file.FullName
-            Remote = '/sdcard/' + $relative.Replace([char]92, [char]47)
+            Entry  = $entry.Path
+            # a folder backup pushes the file where it lies; a zip unpacks it first
+            Local  = (Get-BackupEntryPath -Source $source -Entry $entry.Path)
+            Remote = '/sdcard/' + $relative
+            Bytes  = $entry.Bytes
             Exists = $false
         }
     }
     $plan.Items = $items
     $plan.Total = $items.Count
-    $plan.Tops = @(Get-ChildItem -LiteralPath $rootPath -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    $plan.Tops = @($tops.Keys | Sort-Object)
     return $plan
 }
 
@@ -677,6 +1153,7 @@ function Set-BackupFilePlanState {
 function Restore-BackupFiles {
     # OnConflict: 'skip' leaves what the phone has, 'replace' writes over it.
     # Stops on Cancel and when the phone goes away, and says how far it got.
+    # A zip is not unpacked whole: one file is taken out, sent, and dropped.
     param($Plan, [string]$Serial, [ValidateSet('skip', 'replace')][string]$OnConflict = 'skip')
 
     $items = @($Plan.Items)
@@ -685,6 +1162,12 @@ function Restore-BackupFiles {
         Write-Log 'Restore: every file in the backup is already on the phone.' $colorInfo
         return [PSCustomObject]@{ Sent = 0; Failed = 0; Skipped = $Plan.Existing; Stopped = '' }
     }
+
+    $source = $null
+    if ($Plan.PSObject.Properties['Source']) { $source = $Plan.Source }
+    $archive = Open-BackupArchive -Source $source
+    $temp = ''
+    if ($archive) { $temp = Get-BackupTempFolder }
 
     Write-Log "Restore: sending $($items.Count) file(s) ..." $colorStep
     Start-BackupRun
@@ -696,7 +1179,21 @@ function Restore-BackupFiles {
             if (Test-BackupStopped) { break }
             $index++
             Write-BackupProgress -Text "Files: $($item.Remote)" -Done $index -Total $items.Count
-            $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'push', $item.Local, $item.Remote) -Caption 'Restore'
+
+            $local = "$($item.Local)"
+            $unpacked = ''
+            if (-not $local) {
+                $unpacked = Join-Path $temp ("$index-" + [System.IO.Path]::GetFileName($item.Remote))
+                if (-not (Export-BackupEntry -Source $source -Entry $item.Entry -Destination $unpacked -Archive $archive)) {
+                    $failed++
+                    Write-Log "  $($item.Entry) could not be read out of the backup." $colorWarn
+                    continue
+                }
+                $local = $unpacked
+            }
+
+            $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'push', $local, $item.Remote) -Caption 'Restore'
+            if ($unpacked) { Remove-Item -LiteralPath $unpacked -Force -ErrorAction SilentlyContinue }
             if ($result.Stopped) { break }
             if ($result.ExitCode -eq 0) {
                 $sent++
@@ -711,6 +1208,7 @@ function Restore-BackupFiles {
             }
         }
     } finally {
+        Close-BackupArchive -Archive $archive
         Complete-BackupRun
     }
 
@@ -732,11 +1230,14 @@ function Restore-BackupFiles {
 }
 
 function Restore-BackupApps {
-    # installs the apps whose rows were picked; a split app goes in one call
-    param($Rows, [string]$Serial)
+    # installs the apps whose rows were picked; a split app goes in one call.
+    # Source is needed for a zip: its APKs are taken out one app at a time.
+    param($Rows, [string]$Serial, $Source = $null)
 
     $rows = @($Rows)
     if ($rows.Count -eq 0) { return [PSCustomObject]@{ Installed = 0; Failed = 0; Stopped = '' } }
+    $source = ConvertTo-BackupSource -Source $Source
+    $archive = Open-BackupArchive -Source $source
     Write-Log "Restore: installing $($rows.Count) app(s) ..." $colorStep
     Start-BackupRun
 
@@ -749,12 +1250,27 @@ function Restore-BackupApps {
             $index++
             Write-BackupProgress -Text "Apps: $($row.Package)" -Done $index -Total $rows.Count
 
-            $apks = @($row.Apks)
+            $apks = @(@($row.Apks) | Where-Object { $_ })
+            $unpacked = ''
+            if ($apks.Count -eq 0 -and $source -and $row.PSObject.Properties['Entries']) {
+                $unpacked = Join-Path (Get-BackupTempFolder) "$($row.Package)"
+                foreach ($entry in @($row.Entries)) {
+                    $target = Join-Path $unpacked ([System.IO.Path]::GetFileName($entry))
+                    if (Export-BackupEntry -Source $source -Entry $entry -Destination $target -Archive $archive) { $apks += $target }
+                }
+            }
+            if ($apks.Count -eq 0) {
+                $failed++
+                Write-Log "  $($row.Package): its APK could not be read out of the backup." $colorBad
+                continue
+            }
+
             $arguments = @('-s', $Serial)
             $arguments += $(if ($apks.Count -gt 1) { @('install-multiple', '-r') } else { @('install', '-r') })
             $arguments += $apks
 
             $result = Invoke-BackupAdb -ArgumentList $arguments -Caption "Apps: $($row.Package)"
+            if ($unpacked) { Remove-Item -LiteralPath $unpacked -Recurse -Force -ErrorAction SilentlyContinue }
             if ($result.Stopped) { break }
             $text = $result.Text
             if ($text -match 'Success') {
@@ -773,6 +1289,7 @@ function Restore-BackupApps {
             }
         }
     } finally {
+        Close-BackupArchive -Archive $archive
         Complete-BackupRun
     }
 
@@ -790,15 +1307,19 @@ function Restore-BackupApps {
 
 function Restore-BackupContacts {
     # the contacts in the backup this phone does not have, by name and number
-    param([string]$Folder, [string]$Serial)
+    param([Alias('Folder')]$Source, [string]$Serial)
 
-    $path = Join-Path (Join-Path "$Folder" 'personal') 'contacts.json'
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+    $source = ConvertTo-BackupSource -Source $Source
+    $text = Get-BackupEntryText -Source $source -Entry 'personal/contacts.json'
+    if (-not $text) {
         Write-Log 'Restore: this backup holds no contacts.' $colorWarn
         return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0; Stopped = '' }
     }
     try {
-        $contacts = @(Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json)
+        # assigned first, wrapped after: ConvertFrom-Json hands a list back as
+        # one array object, and @(a pipe of it) is a list holding that array
+        $read = ($text | ConvertFrom-Json)
+        $contacts = @($read)
     } catch {
         Write-Log ('Restore: the contacts file could not be read: ' + $_.Exception.Message) $colorBad
         return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0; Stopped = '' }
@@ -865,4 +1386,158 @@ function Restore-BackupContacts {
     }
     Write-BackupProgress -Text $(if ($stopped) { "Contacts stopped: $stopped" } else { 'Contacts restored' }) -Done 1 -Total 1
     return [PSCustomObject]@{ Added = $added; Failed = $failed; Skipped = $skipped; Stopped = $stopped }
+}
+
+# -------------------------------------------------- the backups this PC has ----
+# A list of where the backups are, not a copy of them: taking one is written
+# here, so both windows can show them without asking where they were put. A
+# backup that was moved or deleted says so in the list and is forgotten when
+# you say to.
+
+function Get-BackupListFile {
+    return $script:backupListFile
+}
+
+function Read-BackupList {
+    # the rows as they were written, newest first; an empty list when there is
+    # no file yet, or when it cannot be read
+    $path = Get-BackupListFile
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return @() }
+    try {
+        # not @(a pipe): Windows PowerShell hands a JSON list back as one array
+        # object, and wrapping that pipe gives a list of one array instead
+        $data = (Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json)
+    } catch {
+        return @()
+    }
+    return @(@($data) | Where-Object { $_ -and $null -ne $_.PSObject.Properties['Path'] })
+}
+
+function Save-BackupList {
+    param($Rows)
+
+    $path = Get-BackupListFile
+    $folder = Split-Path -Parent $path
+    if ($folder -and -not (Test-Path -LiteralPath $folder)) { $null = New-Item -ItemType Directory -Path $folder -Force }
+    # -InputObject, not a pipe: one row down a pipe is written as an object,
+    # and reading it back then gives something that is not a list
+    Save-BackupText -Path $path -Text (ConvertTo-Json -InputObject @($Rows) -Depth 5)
+}
+
+function Add-BackupToList {
+    # a backup taken, or one found in a folder; the newest is first, and the
+    # same path is never listed twice
+    param([string]$Path, $Manifest = $null, [string]$Kind = '')
+
+    if (-not "$Path") { return $null }
+    $full = "$Path"
+    if (Test-Path -LiteralPath $full) { $full = (Get-Item -LiteralPath $full).FullName }
+    if (-not $Kind) { $Kind = $(if (Test-Path -LiteralPath $full -PathType Container) { 'folder' } else { 'zip' }) }
+
+    $row = [ordered]@{
+        Path     = $full
+        Kind     = $Kind
+        Serial   = "$($Manifest.Serial)"
+        Model    = "$($Manifest.Model)"
+        Created  = "$($Manifest.Created)"
+        Parts    = @(@($Manifest.Parts) | Where-Object { $_ })
+        Bytes    = [long]0
+        Complete = $true
+    }
+    if ($Manifest -and $Manifest.PSObject.Properties['Bytes']) { $row.Bytes = [long]$Manifest.Bytes }
+    if ($Manifest -and $Manifest.PSObject.Properties['Complete']) { $row.Complete = [bool]$Manifest.Complete }
+
+    $rows = @(@([PSCustomObject]$row) + @(Read-BackupList | Where-Object { "$($_.Path)" -ne $full }))
+    Save-BackupList -Rows $rows
+    return ([PSCustomObject]$row)
+}
+
+function Remove-BackupFromList {
+    # forgets a backup; the files themselves are never touched by this
+    param([string]$Path)
+
+    $before = @(Read-BackupList)
+    $rows = @($before | Where-Object { "$($_.Path)" -ne "$Path" })
+    Save-BackupList -Rows $rows
+    return ($before.Count - $rows.Count)
+}
+
+function Get-BackupPartWords {
+    # what a backup holds, in a few words for a list column
+    param($Parts)
+
+    $short = @{ files = 'files'; apps = 'apps'; personal = 'contacts'; settings = 'settings' }
+    $words = @()
+    foreach ($part in @($Parts)) {
+        $id = "$part"
+        $words += $(if ($short.ContainsKey($id)) { $short[$id] } else { $id })
+    }
+    if ($words.Count -eq 0) { return '' }
+    return ($words -join ', ')
+}
+
+function Get-BackupListRows {
+    # the list to show: when, which phone, how big, what it holds, and whether
+    # the file is still where it was put
+    $rows = @()
+    foreach ($row in (Read-BackupList)) {
+        $path = "$($row.Path)"
+        $there = Test-Path -LiteralPath $path
+        $bytes = [long]0
+        if ($there) {
+            try {
+                if (Test-Path -LiteralPath $path -PathType Container) { $bytes = Get-BackupFolderSize -Path $path }
+                else { $bytes = (Get-Item -LiteralPath $path).Length }
+            } catch { $bytes = [long]0 }
+        }
+        $complete = $true
+        if ($row.PSObject.Properties['Complete']) { $complete = [bool]$row.Complete }
+        $rows += [PSCustomObject]@{
+            Path    = $path
+            Name    = [System.IO.Path]::GetFileName($path)
+            Kind    = "$($row.Kind)"
+            When    = (("$($row.Created)") -replace 'T', ' ')
+            Phone   = (("$($row.Model) ($($row.Serial))").Trim())
+            Holds   = (Get-BackupPartWords -Parts $row.Parts)
+            Size    = $(if ($there) { Format-FileSize -Bytes $bytes } else { '-' })
+            Bytes   = $bytes
+            Missing = (-not $there)
+            State   = $(if (-not $there) { 'moved or deleted' } elseif ($complete) { 'complete' } else { 'stopped part way' })
+        }
+    }
+    return $rows
+}
+
+function Find-BackupsIn {
+    # every backup in a folder: the .zip files, and the folders older ones were
+    param([string]$Folder)
+
+    $found = @()
+    if (-not "$Folder" -or -not (Test-Path -LiteralPath $Folder)) { return $found }
+    foreach ($file in (Get-ChildItem -LiteralPath $Folder -Filter *.zip -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        $source = Open-BackupSource -Path $file.FullName
+        if ($source) { $found += $source }
+    }
+    foreach ($directory in (Get-ChildItem -LiteralPath $Folder -Directory -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        if (-not (Test-Path -LiteralPath (Join-Path $directory.FullName 'manifest.json') -PathType Leaf)) { continue }
+        $source = Open-BackupSource -Path $directory.FullName
+        if ($source) { $found += $source }
+    }
+    return $found
+}
+
+function Add-BackupFolderToList {
+    # a folder looked through, so backups made on another PC - or before this
+    # list existed - show up with the rest. Answers how many were new.
+    param([string]$Folder)
+
+    $known = @{}
+    foreach ($row in (Read-BackupList)) { $known["$($row.Path)".ToLowerInvariant()] = $true }
+    $added = 0
+    foreach ($source in (Find-BackupsIn -Folder $Folder)) {
+        if (-not $known.ContainsKey($source.Path.ToLowerInvariant())) { $added++ }
+        $null = Add-BackupToList -Path $source.Path -Manifest $source.Manifest -Kind $source.Kind
+    }
+    Write-Log "$added backup(s) added to the list from $Folder" $(if ($added -gt 0) { $colorGood } else { $colorInfo })
+    return $added
 }

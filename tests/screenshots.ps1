@@ -29,3 +29,5 @@ $tabsAdvanced.SelectedTab = $tabRoot;                                      Save-
 $tabs.SelectedTab = $tabCamera;                                            Save-Shot 'min-cam-mic'
 $tabs.SelectedTab = $tabShellHost; $tabsShell.SelectedTab = $tabLogcat;    Save-Shot 'min-logcat'
 $tabsShell.SelectedTab = $tabShell;                                        Save-Shot 'min-shell'
+$tabs.SelectedTab = $tabAdvanced; $tabsAdvanced.SelectedTab = $tabAutomation; Save-Shot 'min-automation'
+$tabsAdvanced.SelectedTab = $tabBackup;                                    Save-Shot 'min-backup'

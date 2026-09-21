@@ -1,8 +1,9 @@
 <!--
-  Backup: a copy of the phone on this PC, and putting one back. Top card takes
-  the backup, bottom card opens one and puts parts of it back. The classic
-  window has the same under Advanced > Backup; the work itself is
-  ..\shared\Backup.ps1.
+  Backup: a copy of the phone on this PC, and putting one back. The top card
+  takes the backup - one .zip file. The bottom card holds the one that is open
+  and three lists of it: the backups this PC has, every file inside the open
+  one, and its apps. The classic window has the same under Advanced > Backup;
+  the work itself is ..\shared\Backup.ps1.
 -->
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -33,7 +34,7 @@
         </Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <Button x:Name="BackupRun" Style="{StaticResource Primary}" Content="Back up now ..."
-                  ToolTip="Asks where to keep it, then writes a folder named after this phone and the time"/>
+                  ToolTip="Asks where to keep it, then writes one .zip named after this phone and the time"/>
           <Button x:Name="BackupCancel" Content="Cancel" Margin="8,0,0,0" IsEnabled="False"
                   ToolTip="Stops the backup or the restore where it is; what was already done stays"/>
         </StackPanel>
@@ -60,25 +61,102 @@
       <Grid Grid.Row="1" Margin="0,0,0,10">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Button x:Name="BackupOpen" Content="Open a backup ..." VerticalAlignment="Top"
-                ToolTip="Pick a backup folder - the one with manifest.json in it"/>
-        <TextBlock x:Name="BackupInfo" Grid.Column="1" Margin="14,0,0,0" Style="{StaticResource MutedLine}"
+                ToolTip="Pick the .zip file a backup is"/>
+        <Button x:Name="BackupOpenFolder" Grid.Column="1" Margin="8,0,0,0" Content="From a folder ..." VerticalAlignment="Top"
+                ToolTip="Opens a backup kept as a folder - one with manifest.json in it - instead of a .zip"/>
+        <TextBlock x:Name="BackupInfo" Grid.Column="2" Margin="14,0,0,0" Style="{StaticResource MutedLine}"
                    TextWrapping="Wrap" Text="No backup opened yet."/>
       </Grid>
 
-      <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel x:Name="BackupAppList"/>
-      </ScrollViewer>
+      <TabControl x:Name="BackupTabs" Grid.Row="2">
+        <TabItem x:Name="BackupTabList" Header="My backups">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <ListView x:Name="BackupList" SelectionMode="Single"
+                      ToolTip="Every backup this PC has taken, newest first - double-click one to open it">
+              <ListView.View>
+                <GridView>
+                  <GridViewColumn Header="TAKEN" Width="140" DisplayMemberBinding="{Binding When}"/>
+                  <GridViewColumn Header="PHONE" Width="170" DisplayMemberBinding="{Binding Phone}"/>
+                  <GridViewColumn Header="HOLDS" Width="150" DisplayMemberBinding="{Binding Holds}"/>
+                  <GridViewColumn Header="SIZE" Width="80" DisplayMemberBinding="{Binding Size}"/>
+                  <GridViewColumn Header="STATE" Width="120" DisplayMemberBinding="{Binding State}"/>
+                  <GridViewColumn Header="WHERE IT IS" Width="360" DisplayMemberBinding="{Binding Path}"/>
+                </GridView>
+              </ListView.View>
+            </ListView>
+            <WrapPanel Grid.Row="1" Margin="0,8,0,0">
+              <Button x:Name="BackupListRefresh" Content="Refresh" Margin="0,4,8,0"
+                      ToolTip="Reads the list again, and checks whether each backup is still where it was put"/>
+              <Button x:Name="BackupListOpen" Style="{StaticResource Primary}" Content="Open this one" Margin="0,4,8,0"
+                      ToolTip="Opens the selected backup, so what is inside it can be read and put back"/>
+              <Button x:Name="BackupListShow" Content="Show in Explorer" Margin="0,4,8,0"
+                      ToolTip="Opens Explorer with the backup file picked out"/>
+              <Button x:Name="BackupListLook" Content="Look in a folder ..." Margin="0,4,8,0"
+                      ToolTip="Looks through a folder for backups and adds them to this list - for ones made on another PC, or moved"/>
+              <Button x:Name="BackupListForget" Content="Forget" Margin="0,4,8,0"
+                      ToolTip="Takes this line out of the list only; the backup file itself is left alone"/>
+            </WrapPanel>
+          </Grid>
+        </TabItem>
+
+        <TabItem x:Name="BackupTabInside" Header="What is inside">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <ListView x:Name="BackupInside" SelectionMode="Extended"
+                      ToolTip="Every file in the opened backup, read from the zip itself - nothing is unpacked to show it">
+              <ListView.View>
+                <GridView>
+                  <GridViewColumn Header="WHAT" Width="90" DisplayMemberBinding="{Binding What}"/>
+                  <GridViewColumn Header="WHERE IT WAS" Width="560" DisplayMemberBinding="{Binding Path}"/>
+                  <GridViewColumn Header="SIZE" Width="90" DisplayMemberBinding="{Binding Size}"/>
+                </GridView>
+              </ListView.View>
+            </ListView>
+            <Grid Grid.Row="1" Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Find:" VerticalAlignment="Center" Style="{StaticResource MutedLine}"/>
+              <TextBox x:Name="BackupFind" Grid.Column="1" Width="180" Margin="8,0,0,0"
+                       ToolTip="Shows only the files whose path holds this text; empty it to see them all"/>
+              <TextBlock x:Name="BackupInsideCount" Grid.Column="2" Margin="14,0,8,0" VerticalAlignment="Center"
+                         Style="{StaticResource MutedLine}" TextTrimming="CharacterEllipsis" Text="Nothing open."/>
+              <Button x:Name="BackupSaveCopy" Grid.Column="3" Content="Save a copy ..."
+                      ToolTip="Writes the picked files out of the backup into a folder on this PC; no phone is needed"/>
+            </Grid>
+          </Grid>
+        </TabItem>
+
+        <TabItem x:Name="BackupTabApps" Header="Apps to install">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="BackupAppList"/>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
 
       <WrapPanel Grid.Row="3" Margin="0,10,0,0">
         <Button x:Name="BackupRestoreFiles" Style="{StaticResource Primary}" Content="Restore files ..." Margin="0,4,8,0"
                 ToolTip="Sends the files back; it asks first about the ones the phone already has"/>
-        <Button x:Name="BackupInstallApps" Content="Install ticked apps" Margin="0,4,8,0"/>
+        <Button x:Name="BackupInstallApps" Content="Install ticked apps" Margin="0,4,8,0"
+                ToolTip="Installs the apps ticked under Apps to install; a split app goes in one call"/>
         <Button x:Name="BackupRestoreContacts" Content="Restore contacts" Margin="0,4,8,0"
                 ToolTip="Adds the contacts this phone does not have; messages and the call log cannot be written by adb"/>
-        <Button x:Name="BackupShowFolder" Content="Show folder" Margin="0,4,8,0" ToolTip="Opens the backup folder in Explorer"/>
+        <Button x:Name="BackupShowFolder" Content="Show in Explorer" Margin="0,4,8,0"
+                ToolTip="Opens Explorer with the opened backup picked out"/>
       </WrapPanel>
     </Grid>
   </Border>

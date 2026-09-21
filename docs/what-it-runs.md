@@ -162,6 +162,9 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 | Installing an app from a backup | `adb install -r <apk>`, or `adb install-multiple -r <base.apk> <split...>` |
 | Adding a contact back | `content insert` into `raw_contacts`, then two `content insert` calls into `data`, for the name and the number |
 
+| Packing what was pulled | no adb at all: `System.IO.Compression`, a file at a time, already-packed kinds (`.jpg`, `.mp4`, `.apk`, ...) stored rather than squeezed |
+| Reading a backup, and taking one file out | the zip's own index, and one entry at a time - a backup is never unpacked whole |
+
 `adb backup` is **not** used: Android 12 and newer return almost nothing for it. What is inside
 an app cannot be read without root, by this or any other tool.
 
