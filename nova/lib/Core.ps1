@@ -10,7 +10,7 @@
 #>
 
 $script:appName = 'AndroidDC Nova'
-$script:appVersion = '1.3.0'
+$script:appVersion = '1.4.0'
 $script:packageName = 'com.genymobile.gnirehtet'
 # its own file: the WinForms AndroidDC keeps settings.json, and neither must
 # overwrite the other's keys

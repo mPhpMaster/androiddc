@@ -81,13 +81,13 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-83fae3e50d5c67d9  androiddc.ps1
+7c33ec4ba653e144  androiddc.ps1
 574f70700b74dec2  androiddc.vbs
 95c311cc87896c05  androiddc-nova.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
 3d6170dd68549c6f  avutil-60.dll
-4cd76b44233f768a  CHANGELOG.md
+51be2d9e6592d317  CHANGELOG.md
 e394873cd3e2cc3a  disconnected.png
 b5e5354ae222bd71  get-upstream.bat
 63f3fa6196d817aa  get-upstream.ps1

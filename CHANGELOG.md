@@ -2,7 +2,7 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.4.0
 
 ### A backup is one file, and you can see what is in it
 

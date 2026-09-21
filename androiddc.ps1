@@ -40,7 +40,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic   # InputBox for rename / new folde
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # the release this file is; CHANGELOG.md says what each one changed
-$appVersion = '1.3.0'
+$appVersion = '1.4.0'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
