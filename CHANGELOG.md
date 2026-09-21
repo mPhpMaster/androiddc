@@ -16,16 +16,27 @@
   was on the phone, how big it is - read from the zip's own index, with a find box over it.
   Pick some lines and *Save a copy ...* writes those files onto this PC: one photo out of a
   backup, with no phone in it at all.
-* **My backups** lists every backup this PC has taken, newest first, with when, which phone,
-  what it holds, its size and where the file is. One that was moved or deleted says so instead
-  of vanishing. *Look in a folder ...* adds backups made on another PC or moved since;
-  *Forget* takes a line out and leaves the file alone. The list is
-  `%APPDATA%\AndroidDCackups.json`, and holds paths, not copies.
+* **My backups** shows one folder - the box at the top says which, *Browse ...* changes it, and
+  it starts at wherever your last backup went. The list under it is what is in that folder at
+  this moment, newest first: when, which phone, what it holds, its size and the file's name.
+  Nothing is remembered about the backups themselves, so one moved into that folder appears and
+  one taken out of it is gone, with no list to tidy. Both windows follow the same folder, kept
+  in `%APPDATA%\AndroidDCackups.json`.
+* **Opening a backup is quick whatever is in it**: the manifest is read and nothing more, so a
+  backup of forty thousand photos names its phone at once. *What is inside* and *Apps to
+  install* read the backup itself, and only when you look at them, with the bar rolling and a
+  count while they do. A backup of six thousand files opened in 39 ms and listed in 1.4 s where
+  it used to freeze the window for minutes: an array that grows by `+=` copies itself every
+  time, and a phone's worth of files made that thousands of copies.
 * **Older backups still open.** A backup kept as a folder - one taken before this, or one whose
   packing was cancelled - opens with *From a folder ...* and behaves the same everywhere.
 * Cancel works while it packs, and a stopped pack leaves no half-written `.zip` behind: the
   pulled folder is kept. A drive without room for the packed copy says so and keeps the folder
   as well.
+* Smaller things found on the way: a list with no room for its "nothing here yet" line hides it
+  instead of leaving it where it last stood, on top of the row above; Nova's Backup page scrolls
+  when the window is too short for it, rather than cutting the buttons off the bottom; and the
+  bar rolls, instead of sitting at zero, while something is running whose length is not known.
 * Two bugs found while doing it: the list of contacts in a backup was read back as one item
   when it held several (so restoring several contacts would have made one), and a JSON list
   read with `@(... | ConvertFrom-Json)` came back as a list of one array.

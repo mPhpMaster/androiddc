@@ -233,17 +233,20 @@ pulled folder is kept instead, and opens exactly like a `.zip` does.
 instead of failing file after file, and the log says why. Whatever ends the run - finished,
 cancelled, or the phone gone - a notification appears by the clock and the log gives the count.
 
-**The backups you have.** *My backups* lists every backup this PC has taken, newest first:
-when, which phone, what it holds, how big it is and where the file is. Each one is checked for
-still being there, and one that was moved or deleted says *moved or deleted* rather than
-disappearing from the list. Double-click a line, or press *Open this one*, to open it.
+**The backups you have.** *My backups* has a box at the top saying which folder it is looking
+in, and a *Browse ...* beside it. It starts at the folder your last backup went to; point it
+anywhere - an external drive, a folder of backups from another PC - by typing a path and
+pressing Enter, or with *Browse ...*. Both windows follow the same folder, which is remembered
+in `%APPDATA%\AndroidDC\backups.json`.
 
-* *Look in a folder ...* goes through a folder and adds the backups in it - for backups made on
-  another PC, or moved to a drive of their own.
-* *Forget* takes a line out of the list only. The backup file itself is never touched.
-* *Show in Explorer* opens the folder with the backup picked out.
+The list under it is what is in that folder at this moment, newest first: when, which phone,
+what it holds, how big it is and the file's name. Backups kept as folders - older ones, and
+ones whose packing was cancelled - are listed beside the `.zip` files. Nothing is remembered
+about them, so a backup moved into that folder appears and one taken out of it is simply gone.
 
-The list lives in `%APPDATA%\AndroidDC\backups.json` and holds paths, not copies.
+* Double-click a line, or press *Open this one*, to open it.
+* *Show in Explorer* opens the folder with that backup picked out.
+* *Refresh* reads the folder again.
 
 **Looking inside one.** *What is inside* lists every file in the opened backup - which part it
 belongs to, where it was on the phone, and how big it is - read from the zip's own index, so
@@ -252,10 +255,15 @@ type. Pick some lines and *Save a copy ...* writes those files out into a folder
 one photo out of a backup, with no phone in it at all. A backup with tens of thousands of files
 lists the first 3000; the find box reaches the rest.
 
-**Putting one back.** Press *Open a backup ...* and pick the `.zip` file. (A backup kept as a
-folder - an older one, or one whose packing was cancelled - opens with *From a folder ...*.)
-The box then says whose phone it was, when it was taken and what it holds. Nothing is unpacked
-whole: each file is taken out of the zip, sent, and dropped again.
+**Opening is quick, whatever is in it.** Opening a backup reads its manifest and stops there,
+so the box says whose phone it was at once even for a backup of forty thousand photos. The two
+lists under it - *What is inside* and *Apps to install* - read the backup itself, and only when
+you look at them; while that happens the bar beside *Back up now* rolls and says how far it has
+got.
+
+**Putting one back.** Press *Open a backup ...* and pick the `.zip` file, or open one from the
+list. The box then says whose phone it was, when it was taken and what it holds. Nothing is
+unpacked whole: each file is taken out of the zip, sent, and dropped again.
 
 * **Restore files** sends them back. When the phone already has some of them it asks first:
   write over them, send only the rest, or stop. Afterwards the gallery is told to look again.

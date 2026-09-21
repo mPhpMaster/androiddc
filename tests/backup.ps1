@@ -85,23 +85,29 @@ Say ("  a jpg goes in as it is, a txt is squeezed   {0}" -f (Mark (
     (Get-BackupCompression -Name 'two.txt') -eq [System.IO.Compression.CompressionLevel]::Fastest)))
 
 $zip = Open-BackupSource -Path $zipPath
-Say ("  opened: {0}, {1} file(s), manifest says {2}   {3}" -f $zip.Kind, @($zip.Entries).Count, $zip.Manifest.Model,
-    (Mark ($zip.Kind -eq 'zip' -and @($zip.Entries).Count -eq 6 -and $zip.Manifest.Serial -eq 'ABC123')))
+Say ("  opened: {0}, manifest says {1}, and its index is not read yet   {2}" -f $zip.Kind, $zip.Manifest.Model,
+    (Mark ($zip.Kind -eq 'zip' -and $null -eq $zip.Entries -and $zip.Manifest.Serial -eq 'ABC123')))
+$entries = Get-BackupSourceEntries -Source $zip
+Say ("  asked for it: {0} file(s), and it is kept   {1}" -f $entries.Count,
+    (Mark ($entries.Count -eq 6 -and $null -ne $zip.Entries)))
 Say ("  its words say it is packed   {0}" -f (Mark (
     ((@(Get-BackupSummaryLines -Manifest $zip.Manifest -Source $zip)) -join ' ') -match 'Packed:')))
 Say ("  a .zip that is not a backup is refused   {0}" -f (Mark ($null -eq (Open-BackupSource -Path (Join-Path $folder 'manifest.json')))))
 
 Say ''
 Say '== looking inside one, without unpacking it =='
-$inside = @(Get-BackupInsideRows -Source $zip)
-Say ("  {0} line(s): {1}" -f $inside.Count, ((@($inside | ForEach-Object { $_.Path }) | Sort-Object) -join ', '))
-$picture = @($inside | Where-Object { $_.Entry -eq 'files/Pictures/one.jpg' })[0]
+$inside = Get-BackupInsideRows -Source $zip
+Say ("  {0} line(s): {1}" -f $inside.Total, ((@($inside.Rows | ForEach-Object { $_.Path }) | Sort-Object) -join ', '))
+$picture = @($inside.Rows | Where-Object { $_.Entry -eq 'files/Pictures/one.jpg' })[0]
 Say ("  a file says which part it is in and where it was: {0} / {1}   {2}" -f $picture.What, $picture.Path,
-    (Mark ($inside.Count -eq 6 -and $picture.What -eq 'Files' -and $picture.Path -eq '/sdcard/Pictures/one.jpg')))
-$found = @(Get-BackupInsideRows -Source $zip -Filter 'Pictures')
-Say ("  looking for Pictures leaves {0}   {1}" -f $found.Count, (Mark ($found.Count -eq 1)))
+    (Mark ($inside.Total -eq 6 -and $picture.What -eq 'Files' -and $picture.Path -eq '/sdcard/Pictures/one.jpg')))
+$found = Get-BackupInsideRows -Source $zip -Filter 'Pictures'
+Say ("  looking for Pictures leaves {0}   {1}" -f $found.Total, (Mark ($found.Total -eq 1)))
 Say ("  looking for something not in it leaves none   {0}" -f (
-    Mark (@(Get-BackupInsideRows -Source $zip -Filter 'no-such-thing').Count -eq 0)))
+    Mark ((Get-BackupInsideRows -Source $zip -Filter 'no-such-thing').Total -eq 0)))
+$capped = Get-BackupInsideRows -Source $zip -Limit 2
+Say ("  a limit lists 2 of {0}, and still says how many there are   {1}" -f $capped.Total,
+    (Mark ($capped.Rows.Count -eq 2 -and $capped.Total -eq 6)))
 
 $saved = Join-Path $work 'saved'
 $copy = Save-BackupCopy -Source $zip -Entries @('files/Pictures/one.jpg') -Destination $saved
@@ -207,41 +213,85 @@ Say ("  a split app goes in one install-multiple: '{0}'   {1}" -f $installed.Ran
     (Mark ($installed.Result.Installed -eq 1 -and $installed.Ran -match 'install-multiple -r' -and $installed.Ran -match 'base\.apk')))
 
 Say ''
-Say '== the backups this PC has =='
-Say ("  the list the test writes is its own, not yours   {0}" -f (Mark ((Get-BackupListFile) -like '*backups-backup.json')))
-$null = Add-BackupToList -Path $zipPath -Manifest $zip.Manifest -Kind 'zip'
-$listRows = @(Get-BackupListRows)
-$row = @($listRows | Where-Object { $_.Path -eq $zipPath })[0]
+Say '== a backup of six thousand files, opened =='
+# a phone's worth of photos, without pulling one: the point is that opening a
+# backup reads its manifest and stops there, however many files are in it
+# in a folder of its own: the checks below count what is in $work
+$bigFolder = Join-Path $work 'big'
+$null = New-Item -ItemType Directory -Path $bigFolder -Force
+$bigPath = Join-Path $bigFolder 'AndroidDC-backup-big.zip'
+$null = Initialize-BackupZip
+$bigStream = [System.IO.File]::Open($bigPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+$bigZip = New-Object System.IO.Compression.ZipArchive($bigStream, [System.IO.Compression.ZipArchiveMode]::Create)
+$bytes = [System.Text.Encoding]::ASCII.GetBytes('a picture')
+$manifestText = ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-20T14:05:09'
+    Parts = @('files'); Files = [PSCustomObject]@{ Files = 6000; Bytes = 54000 }
+    Apps = @(); Personal = $null; Settings = @(); Bytes = 54000; Complete = $true; Stopped = ''
+})
+$entry = $bigZip.CreateEntry('manifest.json', [System.IO.Compression.CompressionLevel]::Fastest)
+$writer = $entry.Open()
+$manifestBytes = [System.Text.Encoding]::UTF8.GetBytes($manifestText)
+$writer.Write($manifestBytes, 0, $manifestBytes.Length)
+$writer.Dispose()
+for ($i = 0; $i -lt 6000; $i++) {
+    $entry = $bigZip.CreateEntry("files/DCIM/Camera/photo-$i.jpg", [System.IO.Compression.CompressionLevel]::NoCompression)
+    $writer = $entry.Open()
+    $writer.Write($bytes, 0, $bytes.Length)
+    $writer.Dispose()
+}
+$bigZip.Dispose()
+$bigStream.Dispose()
+
+$watch = [System.Diagnostics.Stopwatch]::StartNew()
+$big = Open-BackupSource -Path $bigPath
+$openMs = $watch.ElapsedMilliseconds
+Say ("  opened in {0} ms, without reading its index   {1}" -f $openMs,
+    (Mark ($null -ne $big -and $null -eq $big.Entries -and $openMs -lt 2000)))
+$watch.Restart()
+$bigInside = Get-BackupInsideRows -Source $big -Limit 3000
+$readMs = $watch.ElapsedMilliseconds
+Say ("  its 6001 files read and the first 3000 made into rows in {0} ms   {1}" -f $readMs,
+    (Mark ($bigInside.Total -eq 6001 -and $bigInside.Rows.Count -eq 3000 -and $readMs -lt 25000)))
+$watch.Restart()
+$bigFound = Get-BackupInsideRows -Source $big -Filter 'photo-4242.jpg'
+$findMs = $watch.ElapsedMilliseconds
+Say ("  and looking for one of them takes {0} ms, off the index it kept   {1}" -f $findMs,
+    (Mark ($bigFound.Total -eq 1 -and $findMs -lt 5000)))
+
+Say ''
+Say '== the backups in a folder =='
+Say ("  the file the test writes is its own, not yours   {0}" -f (Mark ((Get-BackupListFile) -like '*backups-backup.json')))
+$rows = @(Get-BackupsInFolder -Folder $work)
+$row = @($rows | Where-Object { $_.Path -eq $zipPath })[0]
 Say ("  one line: {0} | {1} | {2} | {3} | {4}" -f $row.When, $row.Phone, $row.Holds, $row.Size, $row.State)
-Say ("  it says when, which phone, what it holds and that it is there   {0}" -f (Mark (
-    $listRows.Count -eq 1 -and $row.Phone -match 'Redmi 13C' -and $row.Holds -eq 'files, apps, contacts' -and
-    $row.State -eq 'complete' -and -not $row.Missing)))
-$null = Add-BackupToList -Path $zipPath -Manifest $zip.Manifest -Kind 'zip'
-Say ("  the same backup twice is still one line   {0}" -f (Mark (@(Get-BackupListRows).Count -eq 1)))
-
-$null = Add-BackupToList -Path (Join-Path $work 'gone.zip') -Manifest $zip.Manifest -Kind 'zip'
-$gone = @(Get-BackupListRows | Where-Object { $_.Name -eq 'gone.zip' })[0]
-Say ("  one that was moved away says so: '{0}'   {1}" -f $gone.State, (Mark ($gone.Missing -and $gone.State -eq 'moved or deleted')))
-Say ("  forgetting it takes one line out   {0}" -f (Mark (
-    (Remove-BackupFromList -Path (Join-Path $work 'gone.zip')) -eq 1 -and @(Get-BackupListRows).Count -eq 1)))
-
-$null = Remove-BackupFromList -Path $zipPath
-$looked = Add-BackupFolderToList -Folder $work
-$afterLook = @(Get-BackupListRows)
-Say ("  looking through a folder found {0}: the zip and the folder beside it   {1}" -f $looked,
-    (Mark ($looked -eq 2 -and $afterLook.Count -eq 2 -and
-        @($afterLook | Where-Object { $_.Kind -eq 'folder' }).Count -eq 1)))
+Say ("  the zip and the folder beside it, and each says what it holds   {0}" -f (Mark (
+    $rows.Count -eq 2 -and $row.Phone -match 'Redmi 13C' -and $row.Holds -eq 'files, apps, contacts' -and
+    $row.State -eq 'complete' -and @($rows | Where-Object { $_.Kind -eq 'folder' }).Count -eq 1)))
+Say ("  a folder with nothing in it lists nothing   {0}" -f (Mark (
+    @(Get-BackupsInFolder -Folder $saved).Count -eq 0)))
+Say ("  a folder that is not there lists nothing   {0}" -f (Mark (
+    @(Get-BackupsInFolder -Folder (Join-Path $work 'no-such-folder')).Count -eq 0)))
+$null = Set-BackupFolderPath -Folder $work
+Say ("  the folder is remembered for both windows   {0}" -f (Mark ((Get-BackupFolderPath) -eq $work)))
 
 Say ''
 Say '== the tab =='
 $tabs.SelectedTab = $tabAdvanced
 $tabsAdvanced.SelectedTab = $tabBackup
 Wait-Pumped -Milliseconds 400
+$tabsBackupView.SelectedTab = $tabBackupList
 $shown = Show-BackupAt -Path $zipPath
-Say ("  opening the backup fills the box and lists its app   {0}" -f (Mark (
-    $shown -and $txtBackupInfo.Text -match 'Redmi 13C' -and $clbBackupApps.Items.Count -eq 1)))
-Say ("  the app this phone lacks is ticked   {0}" -f (Mark ($clbBackupApps.CheckedIndices.Count -eq 1)))
-Say ("  and What is inside lists all six   {0}" -f (Mark ($lstBackupInside.Items.Count -eq 6)))
+Say ("  opening it fills the box, and reads no further than the manifest   {0}" -f (Mark (
+    $shown -and $txtBackupInfo.Text -match 'Redmi 13C' -and $lstBackupInside.Items.Count -eq 0 -and
+    $clbBackupApps.Items.Count -eq 0)))
+$tabsBackupView.SelectedTab = $tabBackupApps
+Wait-Pumped -Milliseconds 300
+Say ("  the apps tab reads them when it is looked at, and ticks the one this phone lacks   {0}" -f (Mark (
+    $clbBackupApps.Items.Count -eq 1 -and $clbBackupApps.CheckedIndices.Count -eq 1)))
+$tabsBackupView.SelectedTab = $tabBackupInside
+Wait-Pumped -Milliseconds 300
+Say ("  and What is inside lists all six when it is looked at   {0}" -f (Mark ($lstBackupInside.Items.Count -eq 6)))
 $txtBackupFind.Text = 'Pictures'
 # the box waits a moment before it filters, so a word typed letter by letter
 # does not walk the whole backup five times
@@ -251,9 +301,15 @@ Say ("  typing in the find box leaves {0} of them   {1}" -f $lstBackupInside.Ite
 $txtBackupFind.Text = ''
 Wait-Pumped -Milliseconds 600
 Say ("  emptying it brings them all back   {0}" -f (Mark ($lstBackupInside.Items.Count -eq 6)))
-Update-BackupList
-Say ("  My backups shows the {0} this PC knows of   {1}" -f $lstBackupList.Items.Count,
-    (Mark ($lstBackupList.Items.Count -eq 2)))
+
+Set-BackupFolderUi -Folder $work
+Say ("  the box says where to look, and the list shows what is in it: {0} of them   {1}" -f $lstBackupList.Items.Count,
+    (Mark ($txtBackupWhere.Text -eq $work -and $lstBackupList.Items.Count -eq 2)))
+Set-BackupFolderUi -Folder (Join-Path $work 'no-such-folder')
+$hint = @($script:listHints | Where-Object { $_.List -eq $lstBackupList })[0]
+Say ("  a folder that is not there: no rows, and the list says why - '{0}'   {1}" -f $hint.Label.Text,
+    (Mark ($lstBackupList.Items.Count -eq 0 -and $hint.Label.Text -match 'no such folder')))
+Set-BackupFolderUi -Folder $work
 Set-BackupProgressUi -Text 'Files: Pictures' -Done 3 -Total 10
 Say ("  the strip says '{0}' at {1} of {2}   {3}" -f $lblBackupProgress.Text, $prgBackup.Value, $prgBackup.Maximum,
     (Mark ($lblBackupProgress.Text -eq 'Files: Pictures' -and $prgBackup.Value -eq 3 -and $prgBackup.Maximum -eq 10)))
@@ -328,7 +384,7 @@ Say ("  finishing says so in the log   {0}" -f (Mark ($said -match 'Backup done'
 Set-BackupBusyUi -Running $true
 Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
     $btnBackupCancel.Enabled -and -not $btnBackupRun.Enabled -and -not $btnRestoreFiles.Enabled -and
-    -not $btnBackupSaveCopy.Enabled -and -not $btnBackupListOpen.Enabled)))
+    -not $btnBackupSaveCopy.Enabled -and -not $btnBackupListOpen.Enabled -and -not $btnBackupWhereBrowse.Enabled)))
 Set-BackupBusyUi -Running $false
 Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $btnBackupCancel.Enabled) -and $btnBackupRun.Enabled -and $btnRestoreFiles.Enabled -and $prgBackup.Value -eq 0)))
@@ -345,14 +401,16 @@ if (-not $TestSerial -or -not $attached) {
         (Mark ($real.Kind -eq 'zip' -and (Test-Path -LiteralPath $real.Path -PathType Leaf) -and
             -not (Test-Path -LiteralPath ($real.Path -replace '\.zip$', '')))))
     $realSource = Open-BackupSource -Path $real.Path
-    $written = @(@($realSource.Entries) | Where-Object { $_.Path -like 'settings/*' })
+    $realEntries = @(Get-BackupSourceEntries -Source $realSource)
+    $written = @($realEntries | Where-Object { $_.Path -like 'settings/*' })
     $properties = (Get-BackupEntryText -Source $realSource -Entry 'settings/properties.txt')
     Say ("  {0} file(s) of settings inside it, properties among them   {1}" -f $written.Count,
         (Mark ($written.Count -ge 6 -and $properties -match 'ro.build.version.release')))
     Say ("  its manifest reads back: parts {0}, serial matches   {1}" -f (@($realSource.Manifest.Parts) -join ','),
         (Mark ((@($realSource.Manifest.Parts) -join ',') -eq 'settings' -and $realSource.Manifest.Serial -eq $TestSerial)))
     Say ("  nothing was written to the phone: only settings were asked for   {0}" -f (Mark (
-        @(@($realSource.Entries) | Where-Object { $_.Path -like 'files/*' -or $_.Path -like 'apps/*' }).Count -eq 0)))
-    Say ("  and it is in the list of backups this PC has   {0}" -f (Mark (
-        @(Get-BackupListRows | Where-Object { $_.Path -eq $real.Path }).Count -eq 1)))
+        @($realEntries | Where-Object { $_.Path -like 'files/*' -or $_.Path -like 'apps/*' }).Count -eq 0)))
+    Say ("  the list looks where it was put, and finds it   {0}" -f (Mark (
+        (Get-BackupFolderPath) -eq $work -and
+        @(Get-BackupsInFolder -Folder $work | Where-Object { $_.Path -eq $real.Path }).Count -eq 1)))
 }

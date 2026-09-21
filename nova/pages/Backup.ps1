@@ -11,13 +11,26 @@ $script:backupAppRows = @()
 $script:backupAppBoxes = @()
 $script:backupInsideRows = @()
 $script:backupListRows = @()
+# what is inside, and the apps, are read when their tab is looked at - a backup
+# of forty thousand files would otherwise be read before the card even says
+# whose phone it is
+$script:backupInsideStale = $true
+$script:backupAppsStale = $true
+# named here, not where it is made: reading a variable that was never assigned
+# is an error under Set-StrictMode
+$script:backupFindTimer = $null
 # a phone can hold tens of thousands of files; a list that long takes a visible
 # pause to fill, so the rest wait behind the find box
 $script:backupInsideMax = 3000
 
 $backupPage = Register-Page -Key 'backup' -Title 'Backup' -Glyph 'E8F7' -Section 'System' -Xaml 'Backup.xaml' `
-    -OnShow { Update-BackupPageApps; Update-BackupPageList } `
-    -OnDeviceChanged { if (Test-PageShown -Key 'backup') { Update-BackupPageApps } }
+    -OnShow { Update-BackupPageShownTab } `
+    -OnDeviceChanged {
+        # the phone decides which apps are ticked, so they are read again - but
+        # only if that tab is the one being looked at
+        $script:backupAppsStale = $true
+        if (Test-PageShown -Key 'backup') { Update-BackupPageShownTab }
+    }
 
 function Test-BackupShared {
     # shared\Backup.ps1 was found and loaded
@@ -43,8 +56,8 @@ function Set-BackupPageBusy {
     param([bool]$Running)
 
     $ui.BackupCancel.IsEnabled = $Running
-    foreach ($name in @('BackupRun', 'BackupOpen', 'BackupOpenFolder', 'BackupRestoreFiles', 'BackupInstallApps',
-        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupListLook', 'BackupListForget')) {
+    foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps',
+        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse')) {
         $ui[$name].IsEnabled = -not $Running
     }
     if (-not $Running) {
@@ -62,52 +75,95 @@ function Get-BackupPageParts {
     return $parts
 }
 
+function Set-BackupPageReading {
+    # reading a backup is not a run that can be cancelled, but it can take a
+    # moment, and the page says so instead of going quiet
+    param([bool]$Running)
+
+    if ($Running) {
+        $ui.BackupProgressText.Text = 'Reading the backup ...'
+        $ui.BackupProgress.IsIndeterminate = $true
+    } else {
+        $ui.BackupProgress.IsIndeterminate = $false
+        $ui.BackupProgress.Value = 0
+    }
+    $null = Wait-Pumped -Milliseconds 1
+}
+
+function Update-BackupPageShownTab {
+    # fills the tab that is on screen, once, and leaves the others alone
+    if ($ui.BackupTabs.SelectedItem -eq $ui.BackupTabInside -and $script:backupInsideStale) { Update-BackupPageInside }
+    elseif ($ui.BackupTabs.SelectedItem -eq $ui.BackupTabApps -and $script:backupAppsStale) { Update-BackupPageApps }
+}
+
 function Update-BackupPageApps {
     # the apps in the opened backup, ticked where this phone does not have them
     $ui.BackupAppList.Children.Clear()
     $script:backupAppBoxes = @()
+    $script:backupAppsStale = $false
     if (-not $script:backupSource) { return }
 
-    $serial = Get-SelectedSerial
-    $script:backupAppRows = @(Get-BackupAppRows -Source $script:backupSource -Serial $(if ($serial) { $serial } else { '' }))
-    foreach ($row in $script:backupAppRows) {
-        $box = New-Object System.Windows.Controls.CheckBox
-        $box.Content = ('{0}   {1}   {2}' -f $row.Package, $row.Size, $row.State)
-        $box.Tag = $row.Package
-        $box.IsChecked = ($row.State -eq 'missing')
-        $box.Margin = New-Object System.Windows.Thickness(0, 3, 0, 3)
-        $null = $ui.BackupAppList.Children.Add($box)
-        $script:backupAppBoxes += $box
+    Set-BackupPageReading -Running $true
+    try {
+        $serial = Get-SelectedSerial
+        $script:backupAppRows = @(Get-BackupAppRows -Source $script:backupSource -Serial $(if ($serial) { $serial } else { '' }))
+        $boxes = New-Object System.Collections.Generic.List[object]
+        foreach ($row in $script:backupAppRows) {
+            $box = New-Object System.Windows.Controls.CheckBox
+            $box.Content = ('{0}   {1}   {2}' -f $row.Package, $row.Size, $row.State)
+            $box.Tag = $row.Package
+            $box.IsChecked = ($row.State -eq 'missing')
+            $box.Margin = New-Object System.Windows.Thickness(0, 3, 0, 3)
+            $null = $ui.BackupAppList.Children.Add($box)
+            $null = $boxes.Add($box)
+        }
+        $script:backupAppBoxes = $boxes.ToArray()
+    } finally {
+        Set-BackupPageReading -Running $false
     }
 }
 
 function Update-BackupPageInside {
     # every file in the opened backup, read from its index - nothing is unpacked
-    $rows = @()
-    if ($script:backupSource) { $rows = @(Get-BackupInsideRows -Source $script:backupSource -Filter $ui.BackupFind.Text) }
-    $script:backupInsideRows = $rows
-
-    $bytes = [long]0
-    foreach ($row in $rows) { $bytes += $row.Bytes }
-    $shown = $rows
-    if ($rows.Count -gt $script:backupInsideMax) { $shown = @($rows[0..($script:backupInsideMax - 1)]) }
-    $ui.BackupInside.ItemsSource = $shown
-
+    $script:backupInsideStale = $false
     if (-not $script:backupSource) {
+        $ui.BackupInside.ItemsSource = $null
+        $script:backupInsideRows = @()
         $ui.BackupInsideCount.Text = 'Nothing open.'
-    } elseif ($rows.Count -gt $shown.Count) {
-        $ui.BackupInsideCount.Text = ('{0} file(s), {1} - the first {2} are listed' -f $rows.Count,
-            (Format-FileSize -Bytes $bytes), $shown.Count)
-    } else {
-        $ui.BackupInsideCount.Text = ('{0} file(s), {1}' -f $rows.Count, (Format-FileSize -Bytes $bytes))
+        return
+    }
+
+    Set-BackupPageReading -Running $true
+    try {
+        $found = Get-BackupInsideRows -Source $script:backupSource -Filter $ui.BackupFind.Text -Limit $script:backupInsideMax
+        $script:backupInsideRows = $found.Rows
+        $ui.BackupInside.ItemsSource = $found.Rows
+        if ($found.Total -gt $found.Rows.Count) {
+            $ui.BackupInsideCount.Text = ('{0} file(s), {1} - the first {2} are listed' -f $found.Total,
+                (Format-FileSize -Bytes $found.Bytes), $found.Rows.Count)
+        } else {
+            $ui.BackupInsideCount.Text = ('{0} file(s), {1}' -f $found.Total, (Format-FileSize -Bytes $found.Bytes))
+        }
+    } finally {
+        Set-BackupPageReading -Running $false
     }
     $ui.BackupInsideCount.ToolTip = $ui.BackupInsideCount.Text
 }
 
 function Update-BackupPageList {
-    # the backups this PC has taken, newest first, each checked for being there
-    $script:backupListRows = @(Get-BackupListRows)
+    # the backups in the folder the box above says, newest first
+    $folder = "$($ui.BackupWhere.Text)".Trim()
+    $script:backupListRows = @(Get-BackupsInFolder -Folder $folder)
     $ui.BackupList.ItemsSource = $script:backupListRows
+}
+
+function Set-BackupPageFolder {
+    # the folder the list looks in, remembered for both windows
+    param([string]$Folder, [switch]$Remember)
+
+    $ui.BackupWhere.Text = "$Folder"
+    if ($Remember) { $null = Set-BackupFolderPath -Folder $Folder }
+    Update-BackupPageList
 }
 
 function Get-BackupPagePick {
@@ -132,8 +188,15 @@ function Show-BackupPageAt {
     $script:backupManifest = $source.Manifest
     $ui.BackupInfo.Text = ((@($source.Path) + @(Get-BackupSummaryLines -Manifest $source.Manifest -Source $source)) -join '   |   ')
     $ui.BackupInfo.ToolTip = $ui.BackupInfo.Text
-    Update-BackupPageApps
-    Update-BackupPageInside
+    # the manifest is read here and nothing else; the two lists below read the
+    # backup itself, and only when they are looked at
+    $script:backupInsideStale = $true
+    $script:backupAppsStale = $true
+    $ui.BackupInside.ItemsSource = $null
+    $ui.BackupAppList.Children.Clear()
+    $script:backupAppBoxes = @()
+    $ui.BackupInsideCount.Text = 'Open the tab to read what is inside.'
+    Update-BackupPageShownTab
     Write-Log "Backup opened: $($source.Path)" $colorInfo
     return $true
 }
@@ -157,38 +220,37 @@ function Start-BackupPageNow {
     }
     if ($manifest) {
         $null = Show-BackupPageAt -Path $manifest.Path
-        Update-BackupPageList
+        # the list follows the backup just taken
+        Set-BackupPageFolder -Folder $where
         if ($manifest.Complete) { Show-Toast -Text 'Backup done' -Color 'good' }
         else { Show-Toast -Text "Backup stopped: $($manifest.Stopped)" -Color 'warn' }
     }
 }
 
 function Open-BackupPageFile {
-    $folder = ''
+    $folder = "$($ui.BackupWhere.Text)".Trim()
     if ($script:backupPath -and (Test-Path -LiteralPath $script:backupPath)) { $folder = Split-Path -Parent $script:backupPath }
     $picked = @(Select-OpenFiles -Filter 'Backup (*.zip)|*.zip|Every file (*.*)|*.*' -InitialDirectory $folder)
     if ($picked.Count -eq 0) { return }
     if (Show-BackupPageAt -Path $picked[0]) {
-        $null = Add-BackupToList -Path $picked[0] -Manifest $script:backupManifest -Kind 'zip'
+        # the list follows the backup that was opened
+        Set-BackupPageFolder -Folder (Split-Path -Parent $picked[0]) -Remember
     }
-    Update-BackupPageList
 }
 
-function Open-BackupPageFolder {
-    $where = Select-Folder -Description 'Pick a backup folder - the one with manifest.json in it' -Selected $script:backupPath
+function Select-BackupPageFolder {
+    $now = "$($ui.BackupWhere.Text)".Trim()
+    $where = Select-Folder -Description 'Which folder are your backups kept in?' -Selected $now
     if (-not $where) { return }
-    if (Show-BackupPageAt -Path $where) {
-        $null = Add-BackupToList -Path $where -Manifest $script:backupManifest -Kind 'folder'
-    }
-    Update-BackupPageList
+    Set-BackupPageFolder -Folder $where -Remember
 }
 
 function Open-BackupPagePicked {
     $row = Get-BackupPagePick
     if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
-    if ($row.Missing) {
-        Write-Log "That backup is not where it was put any more: $($row.Path)" $colorWarn
-        Write-Log '  Use "Look in a folder" to find it again, or Forget to take the line out.' $colorInfo
+    if (-not (Test-Path -LiteralPath $row.Path)) {
+        Write-Log "That backup is not there any more: $($row.Path)" $colorWarn
+        Update-BackupPageList
         return
     }
     $null = Show-BackupPageAt -Path $row.Path
@@ -214,22 +276,6 @@ function Show-BackupPagePicked {
     $row = Get-BackupPagePick
     if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
     Show-BackupPagePath -Path $row.Path
-}
-
-function Add-BackupPageFolder {
-    $where = Select-Folder -Description 'Which folder should be looked through for backups?'
-    if (-not $where) { return }
-    $added = Add-BackupFolderToList -Folder $where
-    Update-BackupPageList
-    Show-Toast -Text "$added backup(s) added to the list" -Color $(if ($added -gt 0) { 'good' } else { 'warn' })
-}
-
-function Remove-BackupPagePicked {
-    $row = Get-BackupPagePick
-    if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
-    $null = Remove-BackupFromList -Path $row.Path
-    Write-Log "Forgotten (the file itself is untouched): $($row.Path)" $colorInfo
-    Update-BackupPageList
 }
 
 function Save-BackupPageCopy {
@@ -299,6 +345,21 @@ function Start-BackupPageApps {
     Update-BackupPageApps
 }
 
+function Update-BackupPageFind {
+    # the find box waits a moment: a backup can hold tens of thousands of files,
+    # and each letter would walk them all
+    if ($null -eq $script:backupFindTimer) {
+        $script:backupFindTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:backupFindTimer.Interval = [TimeSpan]::FromMilliseconds(250)
+        $null = $script:backupFindTimer.Add_Tick({
+            $script:backupFindTimer.Stop()
+            Update-BackupPageInside
+        })
+    }
+    $script:backupFindTimer.Stop()
+    $script:backupFindTimer.Start()
+}
+
 function Start-BackupPageContacts {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -326,7 +387,7 @@ $ui.BackupCancel.Add_Click({
     Stop-BackupRun -Reason 'you cancelled it'
 })
 $ui.BackupOpen.Add_Click({ Open-BackupPageFile })
-$ui.BackupOpenFolder.Add_Click({ Open-BackupPageFolder })
+$ui.BackupBrowse.Add_Click({ Select-BackupPageFolder })
 $ui.BackupRestoreFiles.Add_Click({ Start-BackupPageFiles })
 $ui.BackupInstallApps.Add_Click({ Start-BackupPageApps })
 $ui.BackupRestoreContacts.Add_Click({ Start-BackupPageContacts })
@@ -334,21 +395,38 @@ $ui.BackupShowFolder.Add_Click({ Show-BackupPageFolder })
 $ui.BackupListRefresh.Add_Click({ Update-BackupPageList })
 $ui.BackupListOpen.Add_Click({ Open-BackupPagePicked })
 $ui.BackupListShow.Add_Click({ Show-BackupPagePicked })
-$ui.BackupListLook.Add_Click({ Add-BackupPageFolder })
-$ui.BackupListForget.Add_Click({ Remove-BackupPagePicked })
 $ui.BackupSaveCopy.Add_Click({ Save-BackupPageCopy })
 $ui.BackupList.Add_MouseDoubleClick({ Open-BackupPagePicked })
-# the find box filters as it is typed
-$ui.BackupFind.Add_TextChanged({ Update-BackupPageInside })
+$ui.BackupFind.Add_TextChanged({ Update-BackupPageFind })
+# a path typed in by hand: Enter reads it, and so does leaving the box
+$ui.BackupWhere.Add_KeyDown({
+    param($eventSender, $eventArgs)
+    if ($eventArgs.Key -eq [System.Windows.Input.Key]::Return) {
+        $eventArgs.Handled = $true
+        Set-BackupPageFolder -Folder "$($ui.BackupWhere.Text)".Trim() -Remember
+    }
+})
+$ui.BackupWhere.Add_LostFocus({
+    if ("$($ui.BackupWhere.Text)".Trim() -ne "$(Get-BackupFolderPath)") {
+        Set-BackupPageFolder -Folder "$($ui.BackupWhere.Text)".Trim() -Remember
+    }
+})
+# a tab is filled when it is looked at, not when the backup is opened
+$ui.BackupTabs.Add_SelectionChanged({
+    param($eventSender, $eventArgs)
+    if ($eventArgs.OriginalSource -ne $ui.BackupTabs) { return }
+    Update-BackupPageShownTab
+})
 
 if (Test-BackupShared) {
     Initialize-Backup -Progress { param($Text, $Done, $Total) Set-BackupPageProgress -Text $Text -Done $Done -Total $Total }
+    # the folder of the last backup, and what is in it, are there from the start
+    $ui.BackupWhere.Text = Get-BackupFolderPath
     Update-BackupPageList
 } else {
     $ui.BackupInfo.Text = 'shared\Backup.ps1 is not in the project folder: no backups from here.'
-    foreach ($name in @('BackupRun', 'BackupOpen', 'BackupOpenFolder', 'BackupRestoreFiles', 'BackupInstallApps',
-        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen', 'BackupListShow',
-        'BackupListLook', 'BackupListForget')) {
+    foreach ($name in @('BackupRun', 'BackupOpen', 'BackupBrowse', 'BackupRestoreFiles', 'BackupInstallApps',
+        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen', 'BackupListShow')) {
         $ui[$name].IsEnabled = $false
     }
 }

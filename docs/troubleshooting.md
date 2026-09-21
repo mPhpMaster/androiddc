@@ -117,12 +117,13 @@ Drag it out next to the clock to keep it in sight.
 ## A backup or a restore did not do what I expected
 
 **Where is my backup?** It is one `.zip` file in the folder you picked, named after the phone
-and the time. *Advanced > Backup > My backups* lists every backup this PC has taken and where
-each one is; *Show in Explorer* opens its folder with the file picked out.
+and the time. *Advanced > Backup > My backups* lists what is in that folder; *Show in Explorer*
+opens it with the file picked out.
 
-**A backup is in the list but says *moved or deleted*.** The list holds paths, not copies, so
-a backup that was moved or deleted is still listed until you say otherwise. *Look in a folder*
-finds it again where it is now; *Forget* takes the line out and leaves the file alone.
+**My backups is empty, or lists the wrong ones.** It shows one folder, the one named in the box
+at the top - by default where your last backup went. Point it somewhere else with *Browse ...*,
+or type the path and press Enter. A folder that is not there says so instead of listing
+nothing quietly.
 
 **I want one file out of a backup, not the whole thing.** Open the backup, go to *What is
 inside*, find the file, pick it and press *Save a copy ...*. Nothing goes near a phone.

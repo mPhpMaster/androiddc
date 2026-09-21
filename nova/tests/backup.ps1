@@ -41,25 +41,37 @@ Say ("  {0} file(s) packed into {1}   {2}" -f $packed.Files, (Format-FileSize -B
 
 Show-Page -Page 'backup'
 $null = Wait-Idle
+$ui.BackupTabs.SelectedItem = $ui.BackupTabList
+$null = Wait-Idle
 $shown = Show-BackupPageAt -Path $zipPath
 Say ("  it names the phone and what is in it: {0}" -f $ui.BackupInfo.Text)
-Say ("  opened from the .zip, and its app is listed and ticked   {0}" -f (Mark (
+Say ("  opened from the .zip, and read no further than the manifest   {0}" -f (Mark (
     $shown -and $ui.BackupInfo.Text -match 'Redmi 13C' -and $ui.BackupInfo.Text -match 'Packed:' -and
+    $script:backupAppBoxes.Count -eq 0 -and $script:backupInsideRows.Count -eq 0)))
+$ui.BackupTabs.SelectedItem = $ui.BackupTabApps
+$null = Wait-Idle
+Say ("  the apps tab reads them when it is looked at, and ticks the one this phone lacks   {0}" -f (Mark (
     $script:backupAppBoxes.Count -eq 1 -and $script:backupAppBoxes[0].IsChecked)))
 Say ("  a folder without a manifest is refused   {0}" -f (Mark (
     (Show-BackupPageAt -Path $work) -eq $false -and $script:backupPath -eq $zipPath)))
 
 Say ''
 Say '== what is inside it =='
+$ui.BackupTabs.SelectedItem = $ui.BackupTabInside
+$null = Wait-Idle
 Say ("  all three files are listed: {0}" -f ((@($script:backupInsideRows | ForEach-Object { $_.Path }) | Sort-Object) -join ', '))
 Say ("  each says which part it is in   {0}" -f (Mark (
     $script:backupInsideRows.Count -eq 3 -and
     @($script:backupInsideRows | Where-Object { $_.Path -eq '/sdcard/Pictures/one.jpg' -and $_.What -eq 'Files' }).Count -eq 1)))
 $ui.BackupFind.Text = 'Pictures'
+# the box waits a moment before it filters, so a word typed letter by letter
+# does not walk the whole backup five times
+Start-Sleep -Milliseconds 400
 $null = Wait-Idle
 Say ("  the find box leaves {0}, and the line under it says so: '{1}'   {2}" -f $script:backupInsideRows.Count,
     $ui.BackupInsideCount.Text, (Mark ($script:backupInsideRows.Count -eq 1 -and $ui.BackupInsideCount.Text -match '^1 file')))
 $ui.BackupFind.Text = ''
+Start-Sleep -Milliseconds 400
 $null = Wait-Idle
 Say ("  emptying it brings them all back   {0}" -f (Mark ($script:backupInsideRows.Count -eq 3)))
 
@@ -69,23 +81,21 @@ Say ("  a file saved out of the zip reads back   {0}" -f (Mark (
     $copy.Saved -eq 1 -and (Get-Content -LiteralPath (Join-Path $saved 'files\Pictures\one.jpg') -Raw) -match 'picture one')))
 
 Say ''
-Say '== the backups this PC has =='
-Say ("  the list the test writes is its own, not yours   {0}" -f (Mark ((Get-BackupListFile) -like '*backups-backup.json')))
-$null = Add-BackupToList -Path $zipPath -Manifest $script:backupManifest -Kind 'zip'
-Update-BackupPageList
+Say '== the backups in a folder =='
+Say ("  the file the test writes is its own, not yours   {0}" -f (Mark ((Get-BackupListFile) -like '*backups-backup.json')))
+Set-BackupPageFolder -Folder $work -Remember
+$null = Wait-Idle
 $row = @($script:backupListRows | Where-Object { $_.Path -eq $zipPath })[0]
 Say ("  one line: {0} | {1} | {2} | {3}" -f $row.When, $row.Phone, $row.Holds, $row.State)
-Say ("  it says when, which phone, what it holds and that it is there   {0}" -f (Mark (
-    $script:backupListRows.Count -eq 1 -and $row.Phone -match 'Redmi 13C' -and $row.Holds -eq 'files, apps' -and
-    $row.State -eq 'complete' -and -not $row.Missing)))
-Say ("  and the page's list shows that line   {0}" -f (Mark (@($ui.BackupList.ItemsSource).Count -eq 1)))
-$null = Remove-BackupFromList -Path $zipPath
-Update-BackupPageList
-Say ("  forgetting it empties the list again   {0}" -f (Mark ($script:backupListRows.Count -eq 0)))
-$looked = Add-BackupFolderToList -Folder $work
-Update-BackupPageList
-Say ("  looking through a folder found {0}: the zip and the folder beside it   {1}" -f $looked,
-    (Mark ($looked -eq 2 -and $script:backupListRows.Count -eq 2)))
+Say ("  the box says where to look, and the list shows the zip and the folder beside it   {0}" -f (Mark (
+    $ui.BackupWhere.Text -eq $work -and $script:backupListRows.Count -eq 2 -and
+    $row.Phone -match 'Redmi 13C' -and $row.Holds -eq 'files, apps' -and $row.State -eq 'complete')))
+Say ("  and the page's list shows those lines   {0}" -f (Mark (@($ui.BackupList.ItemsSource).Count -eq 2)))
+Say ("  the folder is remembered for both windows   {0}" -f (Mark ((Get-BackupFolderPath) -eq $work)))
+Set-BackupPageFolder -Folder (Join-Path $work 'no-such-folder')
+$null = Wait-Idle
+Say ("  a folder that is not there lists nothing   {0}" -f (Mark ($script:backupListRows.Count -eq 0)))
+Set-BackupPageFolder -Folder $work
 
 Say ''
 Say '== which files a phone already has =='
@@ -120,7 +130,7 @@ Say ("  finishing says so in the log   {0}" -f (Mark ((Get-LogText) -match 'Back
 Set-BackupPageBusy -Running $true
 Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
     $ui.BackupCancel.IsEnabled -and -not $ui.BackupRun.IsEnabled -and -not $ui.BackupRestoreFiles.IsEnabled -and
-    -not $ui.BackupSaveCopy.IsEnabled -and -not $ui.BackupListOpen.IsEnabled)))
+    -not $ui.BackupSaveCopy.IsEnabled -and -not $ui.BackupListOpen.IsEnabled -and -not $ui.BackupBrowse.IsEnabled)))
 Set-BackupPageBusy -Running $false
 Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $ui.BackupCancel.IsEnabled) -and $ui.BackupRun.IsEnabled -and $ui.BackupRestoreFiles.IsEnabled)))
