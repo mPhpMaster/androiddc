@@ -522,3 +522,28 @@ The stream is drained on a timer, so a chatty phone never freezes the window; on
 emitting roughly 740 lines a second it kept every line. If a log storm ever does outrun it,
 the oldest lines are dropped and the status line says how many, rather than the window
 stalling to keep up.
+
+# Phone FTP and filesystem access
+
+Open the separate **FTP** page in Classic or Nova. AndroidDC generates a random
+username and password automatically; you can edit both, regenerate them, and
+change the port before choosing **Start server**. The default port is 2121.
+AndroidDC builds its small Java server, copies its DEX file to `/data/local/tmp`,
+and runs it with Android's built-in `app_process`. It installs no APK and needs
+no FTP application. The server exposes `/sdcard` and creates a verification
+file at `AndroidDC-FTP/connection-test.txt`.
+
+**Test connection** logs in and requests a passive directory listing.
+**Open in Explorer** checks the login and opens the FTP address with the generated
+or edited credentials in Windows File Explorer. **Copy address** copies the plain
+address. The server requires the displayed username and password. FTP traffic,
+including the credentials and file contents, is not encrypted: use a trusted
+local network. Phone and PC must be mutually reachable. Closing AndroidDC
+does not stop the phone server; choose **Stop server** when finished.
+
+The Files page starts at `/sdcard`, which is shared internal storage, not
+necessarily a removable SD card. The quick-path list also includes `/` (the
+filesystem root), `/storage`, `/system`, `/data` and `/sdcard/Android/data`.
+Readable entries remain visible when Android denies access to other entries.
+Directory links can be opened by double-click. Protected app data remains subject
+to Android permissions; neither choosing `/` nor running the FTP server grants root.

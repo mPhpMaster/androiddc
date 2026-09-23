@@ -1,0 +1,44 @@
+<ScrollViewer xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              Background="{StaticResource Cloud}"
+              VerticalScrollBarVisibility="Auto">
+  <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+    <TextBlock Text="Phone FTP" Style="{StaticResource H1}" Margin="0,0,0,4"/>
+    <TextBlock Text="Share phone storage with this PC. AndroidDC creates login details for you; you can change them before starting."
+               Style="{StaticResource MutedLine}" Margin="0,0,0,16"/>
+
+    <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+      <StackPanel>
+        <TextBlock Text="CONNECTION" Style="{StaticResource Caps}"/>
+        <TextBlock Text="Username" Style="{StaticResource FieldLabel}"/>
+        <TextBox x:Name="FtpUsername" Margin="0,0,0,10"/>
+        <TextBlock Text="Password" Style="{StaticResource FieldLabel}"/>
+        <TextBox x:Name="FtpPassword" Margin="0,0,0,10"/>
+        <TextBlock Text="Port" Style="{StaticResource FieldLabel}"/>
+        <TextBox x:Name="FtpPort" Text="2121" Width="120" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+        <StackPanel Orientation="Horizontal">
+          <Button x:Name="FtpGenerate" Content="Generate new login" Style="{StaticResource Ghost}" Margin="0,0,8,0"/>
+          <Button x:Name="FtpStart" Content="Start server" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+          <Button x:Name="FtpStop" Content="Stop server"/>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+      <StackPanel>
+        <TextBlock Text="PHONE ADDRESS" Style="{StaticResource Caps}"/>
+        <TextBox x:Name="FtpAddress" IsReadOnly="True" Text="Start the server to get its address." Margin="0,0,0,12"/>
+        <StackPanel Orientation="Horizontal">
+          <Button x:Name="FtpExplorer" Content="Open in Explorer" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
+          <Button x:Name="FtpTest" Content="Test connection" Margin="0,0,8,0"/>
+          <Button x:Name="FtpCopy" Content="Copy address"/>
+        </StackPanel>
+        <TextBlock x:Name="FtpStatus" Text="Select a phone, then start the server."
+                   Style="{StaticResource MutedLine}" Margin="0,12,0,0"/>
+      </StackPanel>
+    </Border>
+
+    <TextBlock Text="The shared folder is the phone's internal storage. FTP is unencrypted; use it only on a trusted network and stop the server when finished."
+               Style="{StaticResource MutedLine}"/>
+  </StackPanel>
+</ScrollViewer>
