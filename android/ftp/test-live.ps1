@@ -1,4 +1,4 @@
-param([string]$Serial, [switch]$Explorer, [switch]$Custom, [switch]$Default)
+param([string]$Serial, [switch]$Explorer, [switch]$Custom, [switch]$Default, [switch]$KeepRunning)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $script:adbPath = Join-Path $root 'adb.exe'
@@ -74,5 +74,5 @@ try {
     }
 } finally {
     $null = Invoke-DeviceShellText -Serial $Serial -Command "rm -f /sdcard/AndroidDC-FTP/$marker"
-    if ($started) { $null = Stop-AndroidDcRawFtp -Serial $Serial }
+    if ($started -and -not $KeepRunning) { $null = Stop-AndroidDcRawFtp -Serial $Serial }
 }

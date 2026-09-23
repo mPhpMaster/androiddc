@@ -1,5 +1,5 @@
-# AndroidDC raw FTP integration. The phone server runs from /data/local/tmp via
-# app_process; no APK or third-party FTP program is installed.
+# AndroidDC FTP integration. The server runs through app_process, while the
+# optional AndroidDC companion shows a persistent notification and Stop action.
 
 function ConvertTo-FilesFtpUri {
     param([string]$Address)
@@ -151,16 +151,21 @@ function New-AndroidDcFtpCredentials {
     } finally { $rng.Dispose() }
 }
 
-# The login a fresh FTP page starts with; "Generate new login" still offers a random one.
 function Get-AndroidDcFtpDefaultCredentials {
-    return [PSCustomObject]@{ Username = 'pc'; Password = 'pc123' }
+    return New-AndroidDcFtpCredentials
 }
 
 # The address the server will have, shown before it starts. $null when the phone has no Wi-Fi address.
 function Get-AndroidDcFtpPreviewAddress {
     param([string]$Serial, [string]$Port)
     if (-not $Serial) { return $null }
-    $ip = Get-DeviceIp -Serial $Serial
+    $ip = $null
+    $address = Invoke-DeviceCommand -Serial $Serial -Arguments @('ip', '-f', 'inet', 'addr', 'show', 'wlan0')
+    if ($address.Text -match 'inet\s+(\d+\.\d+\.\d+\.\d+)') { $ip = $Matches[1] }
+    if (-not $ip) {
+        $route = Invoke-DeviceCommand -Serial $Serial -Arguments @('ip', 'route')
+        if ($route.Text -match 'wlan0.+src\s+(\d+\.\d+\.\d+\.\d+)') { $ip = $Matches[1] }
+    }
     if (-not $ip) { return $null }
     $number = 0
     if (-not [int]::TryParse($Port, [ref]$number)) { $number = 2121 }
@@ -195,9 +200,89 @@ function Get-RawFtpDexPath {
     return $dex
 }
 
+function Get-AndroidDcFtpSavedPath {
+    param([string]$Serial)
+    $directory = Join-Path $env:LOCALAPPDATA 'AndroidDC\Ftp'
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($Serial))
+    return Join-Path $directory (([BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant()) + '.json')
+}
+
+function Save-AndroidDcFtpLogin {
+    param([string]$Serial, [string]$Username, [string]$Password)
+    $secure = ConvertTo-SecureString -String $Password -AsPlainText -Force
+    $saved = [PSCustomObject]@{ Username = $Username; Password = ConvertFrom-SecureString $secure }
+    $saved | ConvertTo-Json -Compress | Set-Content -LiteralPath (Get-AndroidDcFtpSavedPath $Serial) -Encoding UTF8
+}
+
+function Get-AndroidDcFtpSavedLogin {
+    param([string]$Serial)
+    $path = Get-AndroidDcFtpSavedPath $Serial
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    try {
+        $saved = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        $secure = ConvertTo-SecureString $saved.Password
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        try { $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
+        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
+        return [PSCustomObject]@{ Username = $saved.Username; Password = $password }
+    } catch { return $null }
+}
+
+function Get-AndroidDcRawFtpStatus {
+    param([string]$Serial)
+    if (-not $Serial) { return $null }
+    $probe = 'for pid in $(pidof app_process 2>/dev/null); do if cat "/proc/$pid/cmdline" 2>/dev/null | tr "\000" " " | grep -q "com.androiddc.RawFtpServer"; then echo RUNNING; break; fi; done'
+    $process = Invoke-DeviceShellText -Serial $Serial -Command $probe
+    if ($process.ExitCode -ne 0 -or $process.Text -notmatch '(?m)^RUNNING\s*$') { return $null }
+    $log = Invoke-DeviceCommand -Serial $Serial -Arguments @('cat', '/data/local/tmp/androiddc-rawftp.log')
+    if ($log.Text -notmatch '(?m)^READY ftp://([^/\s]+)/') { return $null }
+    return [PSCustomObject]@{ Uri = [Uri]("ftp://" + $Matches[1] + '/'); Log = $log.Text }
+}
+
+function Get-AndroidDcFtpCompanionApk {
+    $directory = Join-Path (Split-Path $PSScriptRoot -Parent) 'android\ftp\companion'
+    $apk = Join-Path $directory 'out\androiddc-ftp-control.apk'
+    $source = Join-Path $directory 'src\com\androiddc\ftpcontrol\FtpControlService.java'
+    $manifest = Join-Path $directory 'AndroidManifest.xml'
+    if (-not (Test-Path $apk) -or (Get-Item $source).LastWriteTimeUtc -gt (Get-Item $apk).LastWriteTimeUtc -or
+        (Get-Item $manifest).LastWriteTimeUtc -gt (Get-Item $apk).LastWriteTimeUtc) {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $directory 'build.ps1') | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $apk)) { throw 'Could not build the AndroidDC FTP phone companion.' }
+    }
+    return $apk
+}
+
+function Install-AndroidDcFtpCompanion {
+    param([string]$Serial)
+    $apk = Get-AndroidDcFtpCompanionApk
+    $result = Invoke-Adb -CommandArguments @('-s', $Serial, 'install', '-r', $apk)
+    if ($result.Text -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE') {
+        $null = Invoke-Adb -CommandArguments @('-s', $Serial, 'uninstall', 'com.androiddc.ftpcontrol')
+        $result = Invoke-Adb -CommandArguments @('-s', $Serial, 'install', $apk)
+    }
+    if ($result.ExitCode -ne 0 -or $result.Text -notmatch 'Success') { throw "Could not install the AndroidDC FTP phone companion. $($result.Text)" }
+    $permission = Invoke-Adb -CommandArguments @('-s', $Serial, 'shell', 'pm', 'grant', 'com.androiddc.ftpcontrol', 'android.permission.POST_NOTIFICATIONS')
+    if ($permission.ExitCode -ne 0 -and $permission.Text -notmatch 'Unknown permission') {
+        throw "Could not allow the FTP notification on the phone. $($permission.Text)"
+    }
+}
+
+function Remove-AndroidDcFtpCompanion {
+    param([string]$Serial)
+    $null = Stop-AndroidDcRawFtp -Serial $Serial
+    $result = Invoke-Adb -CommandArguments @('-s', $Serial, 'uninstall', 'com.androiddc.ftpcontrol')
+    if ($result.Text -notmatch 'Success|not installed|Unknown package') { throw "Could not remove the FTP phone companion. $($result.Text)" }
+    $clean = Invoke-DeviceShellText -Serial $Serial -Command 'rm -f /data/local/tmp/androiddc-rawftp.dex /data/local/tmp/androiddc-rawftp.log /data/local/tmp/androiddc-rawftp.pid /data/local/tmp/androiddc-rawftp-credentials /sdcard/AndroidDC-FTP/connection-test.txt'
+    if ($clean.ExitCode -ne 0) { throw "The FTP app was removed, but temporary FTP files could not be cleared. $($clean.Text)" }
+    return 'AndroidDC FTP phone companion removed.'
+}
+
 function Start-AndroidDcRawFtp {
     param([string]$Serial, [string]$Username, [string]$Password, [int]$Port = 2121)
     Assert-AndroidDcFtpSettings -Username $Username -Password $Password -Port $Port
+    Install-AndroidDcFtpCompanion -Serial $Serial
+    $stopToken = ([Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N'))
     $dex = Get-RawFtpDexPath
     $remoteDex = '/data/local/tmp/androiddc-rawftp.dex'
     $remoteCredentials = '/data/local/tmp/androiddc-rawftp-credentials'
@@ -209,7 +294,7 @@ function Start-AndroidDcRawFtp {
     } finally { Remove-Item -LiteralPath $localCredentials -Force -ErrorAction SilentlyContinue }
     $stopExisting = 'for pid in $(pidof app_process 2>/dev/null); do if cat "/proc/$pid/cmdline" 2>/dev/null | tr "\000" " " | grep -q "com.androiddc.RawFtpServer"; then kill "$pid" 2>/dev/null || true; fi; done; '
     $command = $stopExisting + "chmod 600 $remoteCredentials || exit 1; mkdir -p /sdcard/AndroidDC-FTP; printf 'AndroidDC raw FTP test file\n' > /sdcard/AndroidDC-FTP/connection-test.txt; " +
-        "CLASSPATH=$remoteDex app_process /system/bin com.androiddc.RawFtpServer /sdcard $Port $remoteCredentials </dev/null >/data/local/tmp/androiddc-rawftp.log 2>&1 & echo `$! >/data/local/tmp/androiddc-rawftp.pid"
+        "CLASSPATH=$remoteDex app_process /system/bin com.androiddc.RawFtpServer /sdcard $Port $remoteCredentials $stopToken </dev/null >/data/local/tmp/androiddc-rawftp.log 2>&1 & echo `$! >/data/local/tmp/androiddc-rawftp.pid"
     try {
         $push = Invoke-Adb -CommandArguments @('-s', $Serial, 'push', $dex, $remoteDex)
         if ($push.ExitCode -ne 0) { throw $push.Text }
@@ -220,8 +305,16 @@ function Start-AndroidDcRawFtp {
             Wait-Pumped -Milliseconds 100
             $log = Invoke-DeviceCommand -Serial $Serial -Arguments @('cat', '/data/local/tmp/androiddc-rawftp.log')
         } until ($log.Text -match '(?m)^READY ftp://' -or $watch.ElapsedMilliseconds -gt 7000)
-        if ($log.Text -notmatch '(?m)^READY ftp://([^/\s]+)') { throw "The phone FTP server did not start. $($log.Text)" }
-        return [PSCustomObject]@{ Uri = [Uri]("ftp://" + $Matches[1] + '/'); Log = $log.Text }
+        if ($log.Text -notmatch '(?m)^READY ftp://([^/\s]+)/(?:\s+control=(\d+))') { throw "The phone FTP server did not start. $($log.Text)" }
+        $uri = [Uri]("ftp://" + $Matches[1] + '/')
+        $controlPort = [int]$Matches[2]
+        $service = Invoke-Adb -CommandArguments @('-s', $Serial, 'shell', 'am', 'start-foreground-service', '-n', 'com.androiddc.ftpcontrol/.FtpControlService', '--ei', 'control_port', "$controlPort", '--es', 'stop_token', $stopToken)
+        if ($service.ExitCode -ne 0 -or $service.Text -match 'Error|Exception') {
+            $null = Stop-AndroidDcRawFtp -Serial $Serial
+            throw "Could not show the FTP notification on the phone. $($service.Text)"
+        }
+        Save-AndroidDcFtpLogin -Serial $Serial -Username $Username -Password $Password
+        return [PSCustomObject]@{ Uri = $uri; Log = $log.Text }
     } finally { $null = Invoke-DeviceShellText -Serial $Serial -Command "rm -f $remoteCredentials" }
 }
 
@@ -230,5 +323,7 @@ function Stop-AndroidDcRawFtp {
     $command = 'for pid in $(pidof app_process 2>/dev/null); do if cat "/proc/$pid/cmdline" 2>/dev/null | tr "\000" " " | grep -q "com.androiddc.RawFtpServer"; then kill "$pid" 2>/dev/null || true; fi; done; rm -f /data/local/tmp/androiddc-rawftp.pid /data/local/tmp/androiddc-rawftp-credentials'
     $result = Invoke-DeviceShellText -Serial $Serial -Command $command
     if ($result.ExitCode -ne 0) { throw $result.Text }
+    $null = Invoke-Adb -CommandArguments @('-s', $Serial, 'shell', 'am', 'stopservice', '-n', 'com.androiddc.ftpcontrol/.FtpControlService')
+    Remove-Item -LiteralPath (Get-AndroidDcFtpSavedPath $Serial) -Force -ErrorAction SilentlyContinue
     return 'AndroidDC raw FTP server stopped.'
 }

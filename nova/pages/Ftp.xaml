@@ -4,7 +4,7 @@
               VerticalScrollBarVisibility="Auto">
   <StackPanel MaxWidth="760" HorizontalAlignment="Left">
     <TextBlock Text="Phone FTP" Style="{StaticResource H1}" Margin="0,0,0,4"/>
-    <TextBlock Text="Share phone storage with this PC. The login starts as pc / pc123; change it or generate a random one before starting."
+    <TextBlock Text="Share phone storage with this PC. A random login is ready; you can change it before starting."
                Style="{StaticResource MutedLine}" Margin="0,0,0,16"/>
 
     <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
@@ -21,6 +21,7 @@
           <Button x:Name="FtpStart" Content="Start server" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
           <Button x:Name="FtpStop" Content="Stop server"/>
         </StackPanel>
+        <Button x:Name="FtpRemoveCompanion" Content="Uninstall FTP phone app" Style="{StaticResource Ghost}" HorizontalAlignment="Left" Margin="0,12,0,0"/>
       </StackPanel>
     </Border>
 

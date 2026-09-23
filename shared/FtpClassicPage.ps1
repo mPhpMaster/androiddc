@@ -48,6 +48,7 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Generate = New-ClassicFtpButton $settings 'Generate new login' 14 109 155
     $script:classicFtp.Start = New-ClassicFtpButton $settings 'Start server' 182 109 112
     $script:classicFtp.Stop = New-ClassicFtpButton $settings 'Stop server' 307 109 112
+    $script:classicFtp.Remove = New-ClassicFtpButton $settings 'Uninstall FTP phone app' 432 109 200
 
     $access = New-Object Windows.Forms.GroupBox
     $access.Text = 'Phone address'
@@ -85,6 +86,7 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Test.Add_Click({ Invoke-ClassicFtpAction -Action Test })
     $script:classicFtp.Explorer.Add_Click({ Invoke-ClassicFtpAction -Action Explorer })
     $script:classicFtp.Copy.Add_Click({ Invoke-ClassicFtpAction -Action Copy })
+    $script:classicFtp.Remove.Add_Click({ Invoke-ClassicFtpAction -Action Remove })
     Update-ClassicFtpPage
 }
 
@@ -100,14 +102,39 @@ function Update-ClassicFtpAddress {
         else { 'Select a phone to see its address.' }
 }
 
+function Restore-ClassicFtpPage {
+    $ui = $script:classicFtp
+    $serial = @(Get-SelectedSerials)[0]
+    $status = if ($serial) { try { Get-AndroidDcRawFtpStatus -Serial $serial } catch { $null } }
+    if (-not $status) {
+        $ui.Serial = $null; $ui.Uri = $null
+        $ui.ActiveUsername = $null; $ui.ActivePassword = $null
+        if ($serial) { $ui.Status.Text = 'Server is stopped.' }
+    } elseif ($ui.Serial -ne $serial -or -not $ui.Uri) {
+        $saved = Get-AndroidDcFtpSavedLogin -Serial $serial
+        $ui.Serial = $serial; $ui.Uri = $status.Uri
+        $ui.ActiveUsername = if ($saved) { $saved.Username } else { $null }
+        $ui.ActivePassword = if ($saved) { $saved.Password } else { $null }
+        $ui.Address.Text = $status.Uri.AbsoluteUri
+        $ui.Port.Text = [string]$status.Uri.Port
+        if ($saved) { $ui.Username.Text = $saved.Username; $ui.Password.Text = $saved.Password }
+        $ui.Status.Text = if ($saved) { 'FTP server is already running on this phone.' }
+            else { 'FTP is running. The login is unavailable on this PC; stop it or remove the companion.' }
+    }
+    Update-ClassicFtpPage
+}
+
 function Update-ClassicFtpPage {
     $running = $null -ne $script:classicFtp.Uri
     foreach ($key in @('Username','Password','Port','Generate','Start')) { $script:classicFtp[$key].Enabled = -not $running }
-    foreach ($key in @('Stop','Test','Explorer','Copy')) { $script:classicFtp[$key].Enabled = $running }
+    foreach ($key in @('Stop','Copy')) { $script:classicFtp[$key].Enabled = $running }
+    foreach ($key in @('Test','Explorer')) { $script:classicFtp[$key].Enabled = $running -and $null -ne $script:classicFtp.ActiveUsername }
+    $script:classicFtp.Remove.Enabled = (Get-Command Get-SelectedSerials -ErrorAction SilentlyContinue) -and
+        ($null -ne @(Get-SelectedSerials)[0])
 }
 
 function Invoke-ClassicFtpAction {
-    param([ValidateSet('Start','Stop','Test','Explorer','Copy')][string]$Action)
+    param([ValidateSet('Start','Stop','Test','Explorer','Copy','Remove')][string]$Action)
     $ui = $script:classicFtp
     $ui.Status.Text = 'Working...'
     $ui.Start.Enabled = $false
@@ -146,6 +173,14 @@ function Invoke-ClassicFtpAction {
             'Copy' {
                 [Windows.Forms.Clipboard]::SetText($ui.Uri.AbsoluteUri)
                 $ui.Status.Text = 'Address copied.'
+            }
+            'Remove' {
+                $serial = Get-TargetSerial
+                if (-not $serial) { throw 'Select a phone first.' }
+                $ui.Status.Text = Remove-AndroidDcFtpCompanion -Serial $serial
+                $ui.Serial = $null; $ui.Uri = $null
+                $ui.ActiveUsername = $null; $ui.ActivePassword = $null
+                Update-ClassicFtpAddress
             }
         }
     } catch { $ui.Status.Text = $_.Exception.Message }
