@@ -905,10 +905,13 @@ function Initialize-ShellEvents {
                 Invoke-AutomationQueue -Enter { param($Serial) Enter-AutomationDevice -Serial $Serial } `
                     -Leave { param($State) Exit-AutomationDevice -State $State }
             }
+            $ftpDue = -not $script:ftpLastPoll -or
+                ([DateTime]::UtcNow - $script:ftpLastPoll).TotalSeconds -ge 10
             if ((Get-Command Restore-FtpPage -ErrorAction SilentlyContinue) -and
-                ($script:ftpUri -or $ui.PillFtp.Visibility -eq 'Visible')) {
+                ($script:ftpUri -or ($ui.PillFtp.Visibility -eq 'Visible' -and $ftpDue))) {
                 Restore-FtpPage
                 Update-FtpPage
+                $script:ftpLastPoll = [DateTime]::UtcNow
             }
         } finally {
             $script:deviceWatchTimer.Start()

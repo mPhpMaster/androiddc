@@ -156,10 +156,11 @@
             </Popup>
 
             <WrapPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="16,0,12,0">
-              <Border x:Name="PillFtp" Style="{StaticResource Pill}" Background="{StaticResource SuccessSoft}" Margin="0,2,8,2" Visibility="Collapsed">
+              <Border x:Name="PillFtp" Style="{StaticResource Pill}" Background="{StaticResource Muted}" Margin="0,2,8,2" Visibility="Collapsed"
+                      Cursor="Hand" ToolTip="Click to open FTP. Right-click to start or stop the server.">
                 <StackPanel Orientation="Horizontal">
-                  <TextBlock Text="&#xE8B7;" Style="{StaticResource Glyph}" FontSize="12" Foreground="{StaticResource Success}"/>
-                  <TextBlock x:Name="PillFtpText" Text="FTP running" FontSize="12" FontWeight="Medium" Margin="6,0,0,0"/>
+                  <TextBlock x:Name="PillFtpGlyph" Text="&#xE8B7;" Style="{StaticResource Glyph}" FontSize="12" Foreground="{StaticResource MutedText}"/>
+                  <TextBlock x:Name="PillFtpText" Text="FTP off" FontSize="12" FontWeight="Medium" Margin="6,0,0,0"/>
                 </StackPanel>
               </Border>
               <Border x:Name="PillBattery" Style="{StaticResource Pill}" Background="{StaticResource Muted}" Margin="0,2,8,2" Visibility="Collapsed">

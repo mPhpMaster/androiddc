@@ -542,7 +542,12 @@ address. The server requires the displayed username and password. FTP traffic,
 including the credentials and file contents, is not encrypted: use a trusted
 local network. Phone and PC must be mutually reachable. Closing AndroidDC
 does not stop the phone server. When you reopen AndroidDC, it detects a server
-still running on the selected phone and Nova shows **FTP running** in the header.
+still running on the selected phone. Nova shows **FTP running** or **FTP off**
+in the header: click that indicator to open the FTP page, or right-click it
+to confirm starting or stopping the server.
+The AndroidDC icon beside the Windows clock has an **FTP** menu showing the
+selected phone's status. From there you can open the FTP page or confirm
+starting or stopping the server.
 The login is restored on the same Windows account. On another PC, AndroidDC can
 detect and stop the server but cannot recover its password.
 

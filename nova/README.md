@@ -30,8 +30,9 @@ does the reverse. If a tool is missing, the program offers to fetch it with the 
   plugged in. The rules and the start-up entry are the classic window's too
   (`..\shared\Automation.ps1`, `%APPDATA%\AndroidDC\automation.json`); see the user guide's
   *Advanced > Automation*.
-* **Device card** - the phone the pages act on, its battery, signal, screen and a **FTP running**
-  indicator when that server is active. Click the name
+* **Device card** - the phone the pages act on, its battery, signal, screen and an FTP
+  indicator. Click the indicator to open the FTP page; right-click it to confirm starting
+  or stopping the server. Click the name
   to pick another, or several with `Ctrl`/`Shift`; a double-click picks one and closes the
   list, on whatever page is open. The list follows the cable by itself.
 * The window opens on the page you used last, which is remembered as soon as you open it.

@@ -8,15 +8,28 @@ $script:ftpSerial = $null
 $script:ftpUri = $null
 $script:ftpUsername = $null
 $script:ftpPassword = $null
+$script:ftpLastPoll = $null
+
+function Set-FtpHeaderState {
+    param([bool]$HasDevice, [bool]$Running)
+    if (-not $HasDevice) { $ui.PillFtp.Visibility = 'Collapsed'; return }
+    if ($Running) {
+        Set-StatusPill $ui.PillFtp $ui.PillFtpText 'FTP running' 'ok'
+        $ui.PillFtpGlyph.Foreground = Get-Resource 'Success'
+    } else {
+        Set-StatusPill $ui.PillFtp $ui.PillFtpText 'FTP off' 'plain'
+        $ui.PillFtpGlyph.Foreground = Get-Resource 'MutedText'
+    }
+}
 
 function Update-FtpHeader {
     $device = Get-SelectedDevice
     $running = $false
-    if ($device -and $device.State -eq 'device') {
+    $hasDevice = $device -and $device.State -eq 'device'
+    if ($hasDevice) {
         try { $running = $null -ne (Get-AndroidDcRawFtpStatus -Serial $device.Serial) } catch {}
     }
-    if ($running) { Set-StatusPill $ui.PillFtp $ui.PillFtpText 'FTP running' 'ok' }
-    else { $ui.PillFtp.Visibility = 'Collapsed' }
+    Set-FtpHeaderState -HasDevice $hasDevice -Running $running
 }
 
 function Restore-FtpPage {
@@ -38,8 +51,21 @@ function Restore-FtpPage {
         $ui.FtpStatus.Text = if ($saved) { 'FTP server is already running on this phone.' }
             else { 'FTP is running. The login is unavailable on this PC; you can stop it or remove the companion.' }
     }
-    if ($status) { Set-StatusPill $ui.PillFtp $ui.PillFtpText 'FTP running' 'ok' }
-    else { $ui.PillFtp.Visibility = 'Collapsed' }
+    Set-FtpHeaderState -HasDevice ([bool]$serial) -Running ($null -ne $status)
+}
+
+function Invoke-FtpHeaderToggle {
+    $device = Get-SelectedDevice
+    if (-not $device -or $device.State -ne 'device') { return }
+    Show-Page -Page 'ftp'
+    Restore-FtpPage
+    Update-FtpPage
+    $action = if ($script:ftpUri) { 'Stop' } else { 'Start' }
+    $message = if ($action -eq 'Stop') { 'Stop the FTP server on this phone?' }
+        else { 'Start the FTP server on this phone with the login shown on the FTP page?' }
+    $answer = [System.Windows.MessageBox]::Show($script:window, $message, 'AndroidDC FTP',
+        [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+    if ($answer -eq [System.Windows.MessageBoxResult]::Yes) { Invoke-NovaFtpAction -Action $action }
 }
 
 # Before the server runs, the address box shows where it will be: the phone's Wi-Fi IP and the port.
@@ -142,4 +168,6 @@ $ui.FtpTest.Add_Click({ Invoke-NovaFtpAction -Action Test })
 $ui.FtpExplorer.Add_Click({ Invoke-NovaFtpAction -Action Explorer })
 $ui.FtpCopy.Add_Click({ Invoke-NovaFtpAction -Action Copy })
 $ui.FtpRemoveCompanion.Add_Click({ Invoke-NovaFtpAction -Action Remove })
+$ui.PillFtp.Add_MouseLeftButtonUp({ Show-Page -Page 'ftp' })
+$ui.PillFtp.Add_MouseRightButtonUp({ Invoke-FtpHeaderToggle })
 Update-FtpPage

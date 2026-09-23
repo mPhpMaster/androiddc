@@ -124,6 +124,17 @@ function Restore-ClassicFtpPage {
     Update-ClassicFtpPage
 }
 
+function Invoke-ClassicFtpTrayToggle {
+    $tabs.SelectedTab = $tabFtp
+    Restore-ClassicFtpPage
+    $action = if ($script:classicFtp.Uri) { 'Stop' } else { 'Start' }
+    $message = if ($action -eq 'Stop') { 'Stop the FTP server on this phone?' }
+        else { 'Start the FTP server on this phone with the login shown on the FTP tab?' }
+    $answer = [Windows.Forms.MessageBox]::Show($form, $message, 'AndroidDC FTP',
+        [Windows.Forms.MessageBoxButtons]::YesNo, [Windows.Forms.MessageBoxIcon]::Question)
+    if ($answer -eq [Windows.Forms.DialogResult]::Yes) { Invoke-ClassicFtpAction -Action $action }
+}
+
 function Update-ClassicFtpPage {
     $running = $null -ne $script:classicFtp.Uri
     foreach ($key in @('Username','Password','Port','Generate','Start')) { $script:classicFtp[$key].Enabled = -not $running }

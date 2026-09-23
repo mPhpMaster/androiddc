@@ -133,7 +133,15 @@ if (Get-Command Initialize-Automation -ErrorAction SilentlyContinue) {
 if (Get-Command Initialize-Tray -ErrorAction SilentlyContinue) {
     Initialize-Tray -Title $script:appName -ProjectRoot $script:toolsRoot `
         -GetHandle { (New-Object System.Windows.Interop.WindowInteropHelper($script:window)).EnsureHandle() } `
-        -OnExit { $script:window.Close() } -OnOpenRules { Show-Page -Page 'automation' }
+        -OnExit { $script:window.Close() } -OnOpenRules { Show-Page -Page 'automation' } `
+        -GetFtpState {
+            $device = Get-SelectedDevice
+            if (-not $device -or $device.State -ne 'device') { return 'No phone' }
+            if (Get-AndroidDcRawFtpStatus -Serial $device.Serial) { return 'Running' }
+            return 'Off'
+        } `
+        -OnOpenFtp { Show-Page -Page 'ftp' } `
+        -OnToggleFtp { Invoke-FtpHeaderToggle }
     # minimized means into the tray: off the taskbar, still watching for phones
     $script:window.Add_StateChanged({
         if ($script:window.WindowState -eq 'Minimized' -and -not (Test-TrayHidden)) { Hide-TrayWindow }

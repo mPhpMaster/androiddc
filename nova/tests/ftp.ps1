@@ -10,7 +10,10 @@ if ($script:ftpUri -and $script:ftpUsername) {
     Say ("  random login filled   {0}" -f (Mark ($ui.FtpUsername.Text -match '^androiddc_[A-Za-z0-9_-]{8}$' -and $ui.FtpPassword.Text.Length -ge 16)))
 }
 Say ("  stop follows recovered server state   {0}" -f (Mark ($ui.FtpStop.IsEnabled -eq ($null -ne $script:ftpUri))))
-Say ("  header follows recovered server state   {0}" -f (Mark (($ui.PillFtp.Visibility -eq 'Visible') -eq ($null -ne $script:ftpUri))))
+if (Get-SelectedDevice) {
+    $headerText = if ($script:ftpUri) { 'FTP running' } else { 'FTP off' }
+    Say ("  header follows recovered server state   {0}" -f (Mark ($ui.PillFtp.Visibility -eq 'Visible' -and $ui.PillFtpText.Text -eq $headerText)))
+}
 if (Get-SelectedDevice) {
     $hasAddress = $ui.FtpAddress.Text -match '^ftp://\d+\.\d+\.\d+\.\d+:\d+/$'
     $noWifi = $ui.FtpAddress.Text -like 'The phone has no Wi-Fi address*'

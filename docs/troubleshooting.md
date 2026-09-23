@@ -32,7 +32,7 @@ with a replug or **Restart adb server**.
 * If the phone says installation is not allowed, enable **Install via USB** in its Developer options and approve any prompt on the phone. AndroidDC installs the FTP companion only when you start FTP on that phone.
 * Phone and PC need to reach each other on the local network. FTP is unencrypted; use a trusted network.
 * Expand the **AndroidDC FTP** notification to see **Stop FTP**. Stopping sharing leaves the phone app installed. Use **Uninstall FTP phone app** on the FTP page to remove it.
-* If you reopen AndroidDC while the server is running, select that phone. The FTP page detects it and Nova shows **FTP running** in the header. Login details can be restored only under the Windows account that started it.
+* If you reopen AndroidDC while the server is running, select that phone. The FTP page detects it and Nova shows **FTP running** in the header. When stopped, the header says **FTP off**. Click that indicator to open FTP, or right-click it to confirm a start or stop. Login details can be restored only under the Windows account that started it.
 
 ## "Own scrcpy window" opens nothing
 

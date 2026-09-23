@@ -38,17 +38,26 @@ $script:trayOnOpenRules = $null
 $script:trayRulesItem = $null
 $script:trayShowItem = $null
 $script:trayHideItem = $null
+$script:trayFtpItem = $null
+$script:trayGetFtpState = $null
+$script:trayOnOpenFtp = $null
+$script:trayOnToggleFtp = $null
 
 function Initialize-Tray {
     # Title: the icon's tooltip. GetHandle: returns the window's handle. OnExit:
     # closes the window the normal way, so its settings are saved. OnOpenRules:
     # opens the page where the rules are set.
-    param([string]$Title, [string]$ProjectRoot, [scriptblock]$GetHandle, [scriptblock]$OnExit, [scriptblock]$OnOpenRules)
+    param([string]$Title, [string]$ProjectRoot, [scriptblock]$GetHandle, [scriptblock]$OnExit,
+        [scriptblock]$OnOpenRules, [scriptblock]$GetFtpState, [scriptblock]$OnOpenFtp,
+        [scriptblock]$OnToggleFtp)
 
     $script:trayTitle = $Title
     $script:trayGetHandle = $GetHandle
     $script:trayOnExit = $OnExit
     $script:trayOnOpenRules = $OnOpenRules
+    $script:trayGetFtpState = $GetFtpState
+    $script:trayOnOpenFtp = $OnOpenFtp
+    $script:trayOnToggleFtp = $OnToggleFtp
     try {
         $icon = New-Object System.Windows.Forms.NotifyIcon
         $file = if ($ProjectRoot) { Join-Path $ProjectRoot 'assets\androiddc.ico' } else { '' }
@@ -61,6 +70,10 @@ function Initialize-Tray {
         # other window may have changed it
         $script:trayRulesItem = New-Object System.Windows.Forms.ToolStripMenuItem('Automation')
         $null = $menu.Items.Add($script:trayRulesItem)
+        if ($script:trayGetFtpState) {
+            $script:trayFtpItem = New-Object System.Windows.Forms.ToolStripMenuItem('FTP')
+            $null = $menu.Items.Add($script:trayFtpItem)
+        }
         $null = $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
         $script:trayShowItem = $menu.Items.Add('Show the window')
         $script:trayHideItem = $menu.Items.Add('Hide to the tray')
@@ -101,6 +114,7 @@ function Update-TrayMenu {
     # Show or Hide, whichever does something now, and the rules as they are set
     if ($script:trayShowItem) { $script:trayShowItem.Visible = $script:trayHidden }
     if ($script:trayHideItem) { $script:trayHideItem.Visible = -not $script:trayHidden }
+    Update-TrayFtpMenu
     $rulesItem = $script:trayRulesItem
     if (-not $rulesItem) { return }
     if (-not (Get-Command Get-AutomationOverview -ErrorAction SilentlyContinue)) { $rulesItem.Visible = $false; return }
@@ -123,6 +137,30 @@ function Update-TrayMenu {
     $open.Font = New-Object System.Drawing.Font($open.Font, [System.Drawing.FontStyle]::Bold)
     $open.Add_Click({ Open-TrayRules })
     Update-TrayText
+}
+
+function Update-TrayFtpMenu {
+    if (-not $script:trayFtpItem -or -not $script:trayGetFtpState) { return }
+    $state = try { & $script:trayGetFtpState } catch { 'No phone' }
+    if (@('Running', 'Off') -notcontains $state) { $state = 'No phone' }
+    $script:trayFtpItem.Text = "FTP: $($state.ToLowerInvariant())"
+    $script:trayFtpItem.DropDownItems.Clear()
+    $open = $script:trayFtpItem.DropDownItems.Add('Open FTP page')
+    $open.Add_Click({ Open-TrayFtp })
+    $toggle = $script:trayFtpItem.DropDownItems.Add($(if ($state -eq 'Running') { 'Stop server ...' } else { 'Start server ...' }))
+    $toggle.Enabled = $state -ne 'No phone'
+    $toggle.Add_Click({ Invoke-TrayFtpToggle })
+}
+
+function Open-TrayFtp {
+    Show-TrayWindow
+    if ($script:trayOnOpenFtp) { & $script:trayOnOpenFtp }
+}
+
+function Invoke-TrayFtpToggle {
+    Show-TrayWindow
+    if ($script:trayOnToggleFtp) { & $script:trayOnToggleFtp }
+    Update-TrayFtpMenu
 }
 
 function Open-TrayRules {
