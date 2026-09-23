@@ -151,10 +151,26 @@ function New-AndroidDcFtpCredentials {
     } finally { $rng.Dispose() }
 }
 
+# The login a fresh FTP page starts with; "Generate new login" still offers a random one.
+function Get-AndroidDcFtpDefaultCredentials {
+    return [PSCustomObject]@{ Username = 'pc'; Password = 'pc123' }
+}
+
+# The address the server will have, shown before it starts. $null when the phone has no Wi-Fi address.
+function Get-AndroidDcFtpPreviewAddress {
+    param([string]$Serial, [string]$Port)
+    if (-not $Serial) { return $null }
+    $ip = Get-DeviceIp -Serial $Serial
+    if (-not $ip) { return $null }
+    $number = 0
+    if (-not [int]::TryParse($Port, [ref]$number)) { $number = 2121 }
+    return "ftp://${ip}:$number/"
+}
+
 function Assert-AndroidDcFtpSettings {
     param([string]$Username, [string]$Password, [int]$Port)
     if ($Username -notmatch '^[A-Za-z0-9_.-]{1,64}$') { throw 'Username must be 1-64 letters, numbers, dots, underscores or dashes.' }
-    if ($Password.Length -lt 8 -or $Password.Length -gt 128 -or $Password -match '[\x00-\x1f\x7f]') { throw 'Password must be 8-128 characters without control characters.' }
+    if ($Password.Length -lt 1 -or $Password.Length -gt 128 -or $Password -match '[\x00-\x1f\x7f]') { throw 'Password must be 1-128 characters without control characters.' }
     if ($Port -lt 1024 -or $Port -gt 65535) { throw 'Port must be between 1024 and 65535.' }
 }
 

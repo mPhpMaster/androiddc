@@ -4,7 +4,7 @@
               VerticalScrollBarVisibility="Auto">
   <StackPanel MaxWidth="760" HorizontalAlignment="Left">
     <TextBlock Text="Phone FTP" Style="{StaticResource H1}" Margin="0,0,0,4"/>
-    <TextBlock Text="Share phone storage with this PC. AndroidDC creates login details for you; you can change them before starting."
+    <TextBlock Text="Share phone storage with this PC. The login starts as pc / pc123; change it or generate a random one before starting."
                Style="{StaticResource MutedLine}" Margin="0,0,0,16"/>
 
     <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
@@ -27,7 +27,7 @@
     <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
       <StackPanel>
         <TextBlock Text="PHONE ADDRESS" Style="{StaticResource Caps}"/>
-        <TextBox x:Name="FtpAddress" IsReadOnly="True" Text="Start the server to get its address." Margin="0,0,0,12"/>
+        <TextBox x:Name="FtpAddress" IsReadOnly="True" Text="Select a phone to see its address." Margin="0,0,0,12"/>
         <StackPanel Orientation="Horizontal">
           <Button x:Name="FtpExplorer" Content="Open in Explorer" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
           <Button x:Name="FtpTest" Content="Test connection" Margin="0,0,8,0"/>

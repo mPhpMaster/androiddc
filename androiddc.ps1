@@ -575,6 +575,7 @@ $tabFtp.BackColor = [System.Drawing.SystemColors]::Control
 $tabFtp.AutoScroll = $true
 $tabs.TabPages.Add($tabFtp)
 Initialize-ClassicFtpPage -Tab $tabFtp
+$tabs.Add_SelectedIndexChanged({ if ($tabs.SelectedTab -eq $tabFtp) { Update-ClassicFtpAddress } })
 
 $tabRunning = New-Object System.Windows.Forms.TabPage
 $tabRunning.Text = 'Running'

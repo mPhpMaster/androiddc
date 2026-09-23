@@ -525,9 +525,12 @@ stalling to keep up.
 
 # Phone FTP and filesystem access
 
-Open the separate **FTP** page in Classic or Nova. AndroidDC generates a random
-username and password automatically; you can edit both, regenerate them, and
-change the port before choosing **Start server**. The default port is 2121.
+Open the separate **FTP** page in Classic or Nova. The login starts as username
+`pc` and password `pc123`; you can edit both, choose **Generate new login** for a
+random pair, and change the port before choosing **Start server**. The default
+port is 2121. As soon as a phone is selected, the address box shows where the
+server will be, for example `ftp://192.168.1.20:2121/`: the phone's Wi-Fi address
+and the port, updated as you type a new port.
 AndroidDC builds its small Java server, copies its DEX file to `/data/local/tmp`,
 and runs it with Android's built-in `app_process`. It installs no APK and needs
 no FTP application. The server exposes `/sdcard` and creates a verification

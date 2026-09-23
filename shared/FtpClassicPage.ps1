@@ -56,7 +56,7 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Address = New-Object Windows.Forms.TextBox
     $script:classicFtp.Address.SetBounds(14, 27, 620, 26)
     $script:classicFtp.Address.ReadOnly = $true
-    $script:classicFtp.Address.Text = 'Start the server to get its address.'
+    $script:classicFtp.Address.Text = 'Select a phone to see its address.'
     $access.Controls.Add($script:classicFtp.Address)
     $script:classicFtp.Explorer = New-ClassicFtpButton $access 'Open in Explorer' 14 67 130
     $script:classicFtp.Test = New-ClassicFtpButton $access 'Test connection' 157 67 122
@@ -65,10 +65,16 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Status.AutoEllipsis = $true
 
     $null = New-ClassicFtpLabel $Tab 'FTP is unencrypted. Use a trusted network and stop the server when finished.' 18 320 640
-    $generated = New-AndroidDcFtpCredentials
-    $script:classicFtp.Username.Text = $generated.Username
-    $script:classicFtp.Password.Text = $generated.Password
+    $defaults = Get-AndroidDcFtpDefaultCredentials
+    $script:classicFtp.Username.Text = $defaults.Username
+    $script:classicFtp.Password.Text = $defaults.Password
 
+    $script:classicFtp.Port.Add_TextChanged({
+        $ui = $script:classicFtp
+        if (-not $ui.Uri -and $ui.Address.Text -match '^ftp://([^:/]+):\d*/$') {
+            $ui.Address.Text = "ftp://$($Matches[1]):$($ui.Port.Text.Trim())/"
+        }
+    })
     $script:classicFtp.Generate.Add_Click({
         $generated = New-AndroidDcFtpCredentials
         $script:classicFtp.Username.Text = $generated.Username
@@ -80,6 +86,18 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Explorer.Add_Click({ Invoke-ClassicFtpAction -Action Explorer })
     $script:classicFtp.Copy.Add_Click({ Invoke-ClassicFtpAction -Action Copy })
     Update-ClassicFtpPage
+}
+
+# Before the server runs, the address box shows where it will be: the phone's Wi-Fi IP and the port.
+function Update-ClassicFtpAddress {
+    $ui = $script:classicFtp
+    if ($ui.Uri) { return }
+    $serial = @(Get-SelectedSerials)[0]
+    $address = $null
+    try { $address = Get-AndroidDcFtpPreviewAddress -Serial $serial -Port $ui.Port.Text } catch {}
+    $ui.Address.Text = if ($address) { $address }
+        elseif ($serial) { 'The phone has no Wi-Fi address. Connect it to the same network as this PC.' }
+        else { 'Select a phone to see its address.' }
 }
 
 function Update-ClassicFtpPage {
@@ -118,7 +136,7 @@ function Invoke-ClassicFtpAction {
                 $ui.Uri = $null
                 $ui.ActiveUsername = $null
                 $ui.ActivePassword = $null
-                $ui.Address.Text = 'Start the server to get its address.'
+                Update-ClassicFtpAddress
             }
             'Test' { $ui.Status.Text = Test-FilesFtpEndpoint -Uri $ui.Uri -Username $ui.ActiveUsername -Password $ui.ActivePassword }
             'Explorer' {

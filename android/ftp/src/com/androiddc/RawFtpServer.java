@@ -188,7 +188,9 @@ public final class RawFtpServer {
     private static void copy(InputStream in, OutputStream out) throws IOException { byte[] buf = new byte[65536]; int n; while ((n = in.read(buf)) >= 0) out.write(buf, 0, n); out.flush(); }
     private static void close(Closeable c) { if (c != null) try { c.close(); } catch (IOException ignored) {} }
 
+    // Wi-Fi first: the PC reaches the phone over the LAN, not over mobile data (rmnet).
     private static String lanAddress() throws SocketException {
+        String fallback = null;
         Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
         while (interfaces.hasMoreElements()) {
             NetworkInterface net = interfaces.nextElement();
@@ -196,9 +198,11 @@ public final class RawFtpServer {
             Enumeration<InetAddress> addresses = net.getInetAddresses();
             while (addresses.hasMoreElements()) {
                 InetAddress address = addresses.nextElement();
-                if (address instanceof Inet4Address && !address.isLoopbackAddress()) return address.getHostAddress();
+                if (!(address instanceof Inet4Address) || address.isLoopbackAddress()) continue;
+                if (net.getName().startsWith("wlan")) return address.getHostAddress();
+                if (fallback == null) fallback = address.getHostAddress();
             }
         }
-        return "127.0.0.1";
+        return fallback != null ? fallback : "127.0.0.1";
     }
 }

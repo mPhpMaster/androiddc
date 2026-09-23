@@ -1,4 +1,4 @@
-param([string]$Serial, [switch]$Explorer, [switch]$Custom)
+param([string]$Serial, [switch]$Explorer, [switch]$Custom, [switch]$Default)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $script:adbPath = Join-Path $root 'adb.exe'
@@ -36,12 +36,18 @@ if ($Custom) {
     $credentials.Password = 'Custom password 123!'
     $port = 22345
 }
+if ($Default) { $credentials = Get-AndroidDcFtpDefaultCredentials }
 $marker = 'androiddc-ftp-test-' + [Guid]::NewGuid().ToString('N') + '.txt'
 $remote = '/AndroidDC-FTP/' + $marker
 $started = $null
 try {
     $started = Start-AndroidDcRawFtp -Serial $Serial -Username $credentials.Username -Password $credentials.Password -Port $port
     $null = Test-FilesFtpEndpoint -Uri $started.Uri -Username $credentials.Username -Password $credentials.Password
+    $wlan = Invoke-DeviceCommand -Serial $Serial -Arguments @('ip', '-f', 'inet', 'addr', 'show', 'wlan0')
+    if ($wlan.Text -match 'inet\s+(\d+\.\d+\.\d+\.\d+)' -and $started.Uri.Host -ne $Matches[1]) {
+        throw "Server reported $($started.Uri.Host), not the Wi-Fi address $($Matches[1])."
+    }
+    Write-Host "Server address $($started.Uri.AbsoluteUri)"
     $rejected = $false
     try { $null = Get-RawFtpListing -Uri $started.Uri -Username $credentials.Username -Password 'incorrect-password' } catch { $rejected = $true }
     if (-not $rejected) { throw 'Wrong FTP password was accepted.' }

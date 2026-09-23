@@ -1,12 +1,25 @@
 . (Join-Path $script:toolsRoot 'shared\Ftp.ps1')
 
 $ftpPage = Register-Page -Key 'ftp' -Title 'FTP' -Glyph 'E8B7' -Section 'Workspace' -Xaml 'Ftp.xaml' `
-    -OnShow { Update-FtpPage } -OnDeviceChanged { Update-FtpPage } -Refresh { Update-FtpPage }
+    -OnShow { Update-FtpAddress; Update-FtpPage } -OnDeviceChanged { Update-FtpAddress; Update-FtpPage } `
+    -Refresh { Update-FtpAddress; Update-FtpPage }
 
 $script:ftpSerial = $null
 $script:ftpUri = $null
 $script:ftpUsername = $null
 $script:ftpPassword = $null
+
+# Before the server runs, the address box shows where it will be: the phone's Wi-Fi IP and the port.
+function Update-FtpAddress {
+    if ($script:ftpUri) { return }
+    $device = Get-SelectedDevice
+    $serial = if ($device -and $device.State -eq 'device') { $device.Serial }
+    $address = $null
+    try { $address = Get-AndroidDcFtpPreviewAddress -Serial $serial -Port $ui.FtpPort.Text } catch {}
+    $ui.FtpAddress.Text = if ($address) { $address }
+        elseif ($serial) { 'The phone has no Wi-Fi address. Connect it to the same network as this PC.' }
+        else { 'Select a phone to see its address.' }
+}
 
 function Update-FtpPage {
     $running = $null -ne $script:ftpUri
@@ -50,7 +63,7 @@ function Invoke-NovaFtpAction {
                 $script:ftpUri = $null
                 $script:ftpUsername = $null
                 $script:ftpPassword = $null
-                $ui.FtpAddress.Text = 'Start the server to get its address.'
+                Update-FtpAddress
             }
             'Test' {
                 $ui.FtpStatus.Text = Test-FilesFtpEndpoint -Uri $script:ftpUri -Username $script:ftpUsername -Password $script:ftpPassword
@@ -68,9 +81,14 @@ function Invoke-NovaFtpAction {
     finally { Update-FtpPage }
 }
 
-$generated = New-AndroidDcFtpCredentials
-$ui.FtpUsername.Text = $generated.Username
-$ui.FtpPassword.Text = $generated.Password
+$defaults = Get-AndroidDcFtpDefaultCredentials
+$ui.FtpUsername.Text = $defaults.Username
+$ui.FtpPassword.Text = $defaults.Password
+$ui.FtpPort.Add_TextChanged({
+    if (-not $script:ftpUri -and $ui.FtpAddress.Text -match '^ftp://([^:/]+):\d*/$') {
+        $ui.FtpAddress.Text = "ftp://$($Matches[1]):$($ui.FtpPort.Text.Trim())/"
+    }
+})
 $ui.FtpGenerate.Add_Click({
     $generated = New-AndroidDcFtpCredentials
     $ui.FtpUsername.Text = $generated.Username
