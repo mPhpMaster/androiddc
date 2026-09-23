@@ -37,6 +37,7 @@ unique already), and prefix any new helper with your page name (`Files-...` is w
 | `Mirroring` | Workspace | Advanced > Mirroring and More scrcpy options | `Get-HidArguments`, `Get-ExtraScrcpyArguments`, `Get-StartAppValue`, `Update-StartAppChoices`, `Get-ScrcpyArguments`, `Get-MoreScrcpyArguments`, `Start-Scrcpy`, `Close-Scrcpy`, `Show-ScrcpyDisplays`, `Update-VideoCodecList` (the video half of `Update-EncoderList`) |
 | `Apps` | Workspace | Apps | `Get-AppLabels`, `Update-AppList`, `Get-SelectedPackages`, `Get-LauncherActivity`, `Start-App`, `Stop-App`, `Show-AppInfo`, `Uninstall-App`, `Get-AppListCsv`, `Export-AppList`, `Install-Apk` |
 | `Files` | Workspace | Files | every file function (`Join-DevicePath` ... `Open-FileOnPhone`) |
+| `Ftp` | Workspace | FTP tab | `Restore-FtpPage`, `Update-FtpHeader`, `Update-FtpAddress`, `Update-FtpPage`, `Invoke-NovaFtpAction`; server operations are shared in `..\shared\Ftp.ps1` |
 | `Media` | Workspace | Cam / Mic | camera and audio functions, `Get-DeviceCapabilityList`, `Update-AudioEncoderChoices`, `Update-CameraSizeList`, the audio half of `Update-EncoderList` |
 | `Messages` | Personal | SMS | `Update-SmsList`, `Send-Sms`, `Find-SendButton`, `Remove-Sms`, `Edit-Sms`, `Export-Sms`, `Split-ContentRows`, `Get-RowValue` |
 | `Contacts` | Personal | Contacts | `Update-ContactList`, `Add-Contact`, `Edit-Contact`, `Remove-Contact`, `Start-PhoneCall`, `Stop-PhoneCall`, `Export-Contacts` |

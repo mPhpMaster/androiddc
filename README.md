@@ -13,8 +13,9 @@ One window on Windows that drives every Android device plugged into it, over pla
 Mirroring, internet sharing in both directions, files, apps, messages, radios and users —
 without leaving the keyboard.
 
-No agent is installed on the phone. Everything goes through the standard Android Debug
-Bridge, so the phone only ever does what USB debugging already allows.
+Most features use the standard Android Debug Bridge without a phone app. Starting FTP is
+the exception: it installs a small AndroidDC notification app on the selected phone so
+sharing can be stopped from that phone.
 
 ## Two windows, one tool
 
@@ -47,6 +48,7 @@ list the rules you have set.
 | **Contacts / SMS** | Read, add, edit, delete, call, send |
 | **Cam / Mic** | Front and rear camera as a video source with zoom, and the phone microphone or output streamed or recorded on the PC, with the codec, encoder and bit rate read from the phone |
 | **Files** | Browse, search, sort, rename, upload, download, move, compress, extract, preview pictures and text without saving them, free space of the current volume |
+| **FTP** | Share the selected phone's internal storage over the local network with an editable random login; open it in Windows Explorer, stop it from the phone's notification, or uninstall the phone component |
 | **Running** | Live process list with memory and state, stop anything |
 | **Wi-Fi / Bluetooth / NFC** | Radios on and off, scan, join or forget a network, paired devices |
 | **Backup** | A copy of the phone on this PC as one `.zip` - files, the apps' APK files, contacts, messages, the call log, settings - with a list of the backups you have, a look inside any of them, and putting one back |
@@ -70,6 +72,11 @@ device list. Every list also carries its own actions on the right mouse button.
 
 If a tool turns out to be missing at startup, AndroidDC offers to fetch it for you and waits
 until the download is finished before opening.
+
+FTP has one extra build requirement in a source checkout: its generated phone server and
+notification app are not committed. The first FTP start needs a JDK and Android SDK with
+platform 35 and build tools installed, unless those generated files are included in your
+copy. See [Phone FTP](docs/user-guide.md#phone-ftp-and-filesystem-access).
 
 ```powershell
 # everything

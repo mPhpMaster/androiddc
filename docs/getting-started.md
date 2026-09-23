@@ -39,6 +39,10 @@ and a fresh copy is one command away. See [Command line](command-line.md) for ev
 If you skip this step, AndroidDC notices at startup, asks once per missing package whether it
 should download it, waits for the download to finish and then opens.
 
+For **FTP** in a source checkout, install a JDK and Android SDK platform 35 with build tools
+before the first FTP start. The generated phone server and notification APK are not in the
+repository. This does not affect the other pages; see [Phone FTP](user-guide.md#phone-ftp-and-filesystem-access).
+
 ## 3. Start it
 
 There are two windows over the same tool; start whichever you prefer:
@@ -99,6 +103,7 @@ else behaves the same.
 |---|---|
 | Your settings | `%APPDATA%\AndroidDC\settings.json` (classic) and `nova-settings.json` (Nova) |
 | Automation rules, for both windows | `%APPDATA%\AndroidDC\automation.json` |
+| FTP login for reconnection | An encrypted file per phone under `%LOCALAPPDATA%\AndroidDC\Ftp`; readable by the same Windows account |
 | Backups of a phone | The folder you pick each time, one `.zip` file per backup |
 | The folder your backups are listed from, for both windows | `%APPDATA%\AndroidDC\backups.json` - one path, no copies |
 | Start with Windows, only when you turn it on | the value `AndroidDC` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` |

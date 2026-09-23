@@ -2,9 +2,10 @@
 
 [← back to the README](../README.md)
 
-AndroidDC installs no agent and grants itself nothing. Every action is an ordinary `adb`
-command, the same ones you could type yourself. This page lists them so you can audit the tool
-instead of trusting it.
+AndroidDC normally uses ordinary `adb` commands and grants itself nothing. **Start server**
+on the FTP page is the exception: it installs a small AndroidDC notification app on the selected
+phone so you can stop sharing from that phone. Connecting a phone alone does not install it.
+This page lists what the tool runs so you can audit it.
 
 Nothing here happens on its own: each command runs because you pressed the button next to it,
 or because you set an automation rule for that phone (see below). The only things that repeat
@@ -92,6 +93,17 @@ Windows nor the phone reinterprets.
 | Preview | `adb exec-out cat <path>` into memory, nothing written to disk |
 | Open on the phone | `adb shell am start -a android.intent.action.VIEW -d file://…` |
 | Make the gallery notice a change | `adb shell content call --uri content://media --method scan_file` |
+
+## Phone FTP
+
+| Action | What runs or changes |
+|---|---|
+| Preview and recover a running server | Read the phone's Wi-Fi address, check for AndroidDC's `app_process` server, and read its FTP log under `/data/local/tmp` |
+| Start server | Build the Java DEX and companion APK if absent, `adb install -r` the companion on the selected phone, grant its notification permission, push the DEX and temporary login to `/data/local/tmp`, then launch the server with `app_process` |
+| Share files | The server exposes `/sdcard` through authenticated FTP and creates `/sdcard/AndroidDC-FTP/connection-test.txt` |
+| Stop from the phone | The notification's **Stop FTP** action sends a local stop request to the server; sharing ends but the companion remains installed |
+| Stop from the PC | Kill AndroidDC's server process and stop the companion's foreground service |
+| Uninstall FTP phone app | Stop the server, `adb uninstall` the companion, and clear AndroidDC's temporary FTP files; uploaded user files remain |
 
 ## Phone, contacts, messages
 
@@ -195,6 +207,7 @@ The rules you set are listed in the log at startup and in the menu of the icon b
 |---|---|---|
 | Settings | `%APPDATA%\AndroidDC\settings.json`, and `nova-settings.json` for Nova | Kept on purpose |
 | Automation rules | `%APPDATA%\AndroidDC\automation.json`, written when you change a rule | Kept on purpose; delete the file to drop every rule |
+| FTP login for reconnection | An encrypted file per phone under `%LOCALAPPDATA%\AndroidDC\Ftp` | Removed by **Stop server** or **Uninstall FTP phone app** on this PC; stopping from the phone leaves the encrypted copy until a later PC action |
 | Start with Windows | the value `AndroidDC` under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, only when you turn it on | When you turn it off; nothing else under that key is touched |
 | scrcpy and app output | `%TEMP%\androiddc-<pid>.*` | When the program closes |
 | Media previews | `%TEMP%\androiddc-<pid>.preview.*` | When the program closes |

@@ -4,6 +4,12 @@
 
 ## 1.4.0
 
+### Phone FTP controls
+
+* FTP has its own page in Classic and Nova. New sessions receive a random editable login and port, and can be opened in Windows File Explorer.
+* Closing AndroidDC leaves the phone server running. Reopening detects it, restores the login on the same Windows account, and Nova shows a header indicator while it runs.
+* The selected phone gets a small AndroidDC FTP notification app only when FTP starts. Its **Stop FTP** action ends sharing; **Uninstall FTP phone app** in AndroidDC removes the app and temporary FTP files without deleting uploaded user files.
+
 ### A backup is one file, and you can see what is in it
 
 * **A backup is a `.zip` now**, not a folder: one file named after the phone and the time, to
