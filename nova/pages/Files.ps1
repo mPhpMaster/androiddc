@@ -45,15 +45,18 @@ function Update-FileList {
     # instead of the link entry itself
     $listPath = if ($Path.EndsWith('/')) { $Path } else { "$Path/" }
     $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('ls', '-la', (Quote-DeviceArgument $listPath))
-    if ($result.Text -match 'Permission denied') {
+    if ($result.Text -match 'Permission denied' -and $result.Text -notmatch '(?m)^[dlbcps-][rwxsStT-]{9}\s+') {
         Write-Log "Permission denied: $Path (adb shell cannot read it)" $colorBad
         return
     }
-    if ($result.Text -match 'No such file') {
+    if ($result.Text -match 'No such file' -and $result.Text -notmatch '(?m)^[dlbcps-][rwxsStT-]{9}\s+') {
         Write-Log "No such path: $Path" $colorBad
         return
     }
 
+    if ($result.Text -match 'Permission denied') {
+        Write-Log "Some entries in $Path are protected by Android; showing readable entries." $colorWarn
+    }
     # remember where we came from, unless this is a refresh or a history jump
     if (-not $script:fileNavigating -and $script:filePath -and $script:filePath -ne $Path) {
         $null = $script:fileBack.Add($script:filePath)
@@ -1184,8 +1187,8 @@ function Update-FilesForDevice {
 # ----------------------------------------------------------------- events ----
 
 $ui.FilesQuick.Items.Clear()
-foreach ($entry in @('go to...', '/sdcard', '/sdcard/Download', '/sdcard/DCIM/Camera', '/sdcard/Pictures', '/sdcard/Movies',
-        '/sdcard/Music', '/sdcard/Documents', '/sdcard/Android/media', '/storage', '/data/local/tmp', '/system')) {
+foreach ($entry in @('go to...', '/', '/sdcard', '/sdcard/Download', '/sdcard/DCIM/Camera', '/sdcard/Pictures', '/sdcard/Movies',
+        '/sdcard/Music', '/sdcard/Documents', '/sdcard/Android/media', '/storage', '/sdcard/Android/data', '/data', '/data/local/tmp', '/system')) {
     $null = $ui.FilesQuick.Items.Add($entry)
 }
 $ui.FilesQuick.SelectedIndex = 0

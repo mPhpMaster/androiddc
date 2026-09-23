@@ -50,6 +50,8 @@ $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
 . (Join-Path $scriptRoot 'shared\Automation.ps1')
 . (Join-Path $scriptRoot 'shared\Tray.ps1')
 . (Join-Path $scriptRoot 'shared\Backup.ps1')
+. (Join-Path $scriptRoot 'shared\Ftp.ps1')
+. (Join-Path $scriptRoot 'shared\FtpClassicPage.ps1')
 
 $script:adbPath = $null
 $script:gnirehtetPath = $null
@@ -566,6 +568,13 @@ $tabFiles = New-Object System.Windows.Forms.TabPage
 $tabFiles.Text = 'Files'
 $tabFiles.BackColor = [System.Drawing.SystemColors]::Control
 $tabs.TabPages.Add($tabFiles)
+
+$tabFtp = New-Object System.Windows.Forms.TabPage
+$tabFtp.Text = 'FTP'
+$tabFtp.BackColor = [System.Drawing.SystemColors]::Control
+$tabFtp.AutoScroll = $true
+$tabs.TabPages.Add($tabFtp)
+Initialize-ClassicFtpPage -Tab $tabFtp
 
 $tabRunning = New-Object System.Windows.Forms.TabPage
 $tabRunning.Text = 'Running'
@@ -2699,9 +2708,9 @@ $cmbFileQuick = New-Object System.Windows.Forms.ComboBox
 $cmbFileQuick.DropDownStyle = 'DropDownList'
 $cmbFileQuick.Location = New-Object System.Drawing.Point(566, 11)
 $cmbFileQuick.Size = New-Object System.Drawing.Size(150, 24)
-$null = $cmbFileQuick.Items.AddRange(@('go to...', '/sdcard', '/sdcard/Download', '/sdcard/DCIM/Camera',
+$null = $cmbFileQuick.Items.AddRange(@('go to...', '/', '/sdcard', '/sdcard/Download', '/sdcard/DCIM/Camera',
     '/sdcard/Pictures', '/sdcard/Movies', '/sdcard/Music', '/sdcard/Documents', '/sdcard/Android/media',
-    '/storage', '/data/local/tmp', '/system'))
+    '/storage', '/sdcard/Android/data', '/data', '/data/local/tmp', '/system'))
 $cmbFileQuick.SelectedIndex = 0
 $tabFiles.Controls.Add($cmbFileQuick)
 
@@ -7219,15 +7228,18 @@ function Update-FileList {
     # instead of the link entry itself
     $listPath = if ($Path.EndsWith('/')) { $Path } else { "$Path/" }
     $result = Invoke-DeviceShell -Serial $serial -CommandArguments @('ls', '-la', (Quote-DeviceArgument $listPath))
-    if ($result.Text -match 'Permission denied') {
+    if ($result.Text -match 'Permission denied' -and $result.Text -notmatch '(?m)^[dlbcps-][rwxsStT-]{9}\s+') {
         Write-Log "Permission denied: $Path (adb shell cannot read it)" $colorBad
         return
     }
-    if ($result.Text -match 'No such file') {
+    if ($result.Text -match 'No such file' -and $result.Text -notmatch '(?m)^[dlbcps-][rwxsStT-]{9}\s+') {
         Write-Log "No such path: $Path" $colorBad
         return
     }
 
+    if ($result.Text -match 'Permission denied') {
+        Write-Log "Some entries in $Path are protected by Android; showing readable entries." $colorWarn
+    }
     # remember where we came from, unless this is a refresh or a history jump
     if (-not $script:fileNavigating -and $script:filePath -and $script:filePath -ne $Path) {
         $null = $script:fileBack.Add($script:filePath)

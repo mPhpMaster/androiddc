@@ -72,6 +72,10 @@ jobs:
         shell: pwsh
         run: .\.github\audit-wiring.ps1
 
+      - name: File navigation and FTP regression checks
+        shell: pwsh
+        run: .\.github\test-files-navigation.ps1
+
       - name: Both launchers must point at a file that exists
         shell: pwsh
         run: |

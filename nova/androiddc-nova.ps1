@@ -86,7 +86,7 @@ Initialize-Ui
 
 # The pages, in the order the side navigation lists them within each section.
 # A page that is not written yet is simply not there.
-foreach ($pageName in @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Media',
+foreach ($pageName in @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Ftp', 'Media',
         'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation', 'Backup')) {
     # "-Pages a,b" through -File arrives as one string
     $onlyPages = @($PageNames | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
