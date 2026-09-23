@@ -54,9 +54,17 @@ try {
     if ([Convert]::ToBase64String($content) -ne [Convert]::ToBase64String($downloaded)) { throw 'Downloaded content differs from uploaded content.' }
     Write-Host 'FTP authentication, listing, upload and download passed.'
     if ($Explorer) {
+        $before = Invoke-DeviceCommand -Serial $Serial -Arguments @('cat', '/data/local/tmp/androiddc-rawftp.log')
+        $loginCount = @([regex]::Matches($before.Text, 'SESSION AUTHENTICATED')).Count
         Open-AndroidDcFtpInExplorer -Uri $started.Uri -Username $credentials.Username -Password $credentials.Password
-        Write-Host 'Explorer launched for visual verification.'
-        Start-Sleep -Seconds 45
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        do {
+            Start-Sleep -Milliseconds 500
+            $after = Invoke-DeviceCommand -Serial $Serial -Arguments @('cat', '/data/local/tmp/androiddc-rawftp.log')
+            $newCount = @([regex]::Matches($after.Text, 'SESSION AUTHENTICATED')).Count
+        } until ($newCount -gt ($loginCount + 1) -or $watch.Elapsed.TotalSeconds -gt 12)
+        if ($newCount -le ($loginCount + 1)) { throw 'Explorer did not authenticate with the FTP server.' }
+        Write-Host 'Explorer authenticated with the FTP server.'
     }
 } finally {
     $null = Invoke-DeviceShellText -Serial $Serial -Command "rm -f /sdcard/AndroidDC-FTP/$marker"

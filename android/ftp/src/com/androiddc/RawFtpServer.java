@@ -71,7 +71,11 @@ public final class RawFtpServer {
                     if (command.equals("PASS")) {
                         authenticated = validUser && credentials.matchesPassword(arg);
                         validUser = false;
-                        if (authenticated) { failures = 0; reply(out, 230, "Logged in"); }
+                        if (authenticated) {
+                            failures = 0;
+                            reply(out, 230, "Logged in");
+                            System.out.println("SESSION AUTHENTICATED");
+                        }
                         else {
                             reply(out, 530, "Invalid username or password");
                             if (++failures >= 5) return;
