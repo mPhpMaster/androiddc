@@ -575,6 +575,7 @@ $tabFtp.BackColor = [System.Drawing.SystemColors]::Control
 $tabFtp.AutoScroll = $true
 $tabs.TabPages.Add($tabFtp)
 Initialize-ClassicFtpPage -Tab $tabFtp
+$tabs.Add_SelectedIndexChanged({ if ($tabs.SelectedTab -eq $tabFtp) { Restore-ClassicFtpPage; Update-ClassicFtpAddress } })
 
 $tabRunning = New-Object System.Windows.Forms.TabPage
 $tabRunning.Text = 'Running'
@@ -13345,7 +13346,15 @@ if (Test-Path -LiteralPath $localApk -PathType Leaf) {
 Restore-Settings
 Initialize-Automation -ProjectRoot $scriptRoot -CountPresent ([bool]$Minimized)
 Initialize-Tray -Title 'AndroidDC' -ProjectRoot $scriptRoot -GetHandle { $form.Handle } -OnExit { $form.Close() } `
-    -OnOpenRules { $tabs.SelectedTab = $tabAdvanced; $tabsAdvanced.SelectedTab = $tabAutomation }
+    -OnOpenRules { $tabs.SelectedTab = $tabAdvanced; $tabsAdvanced.SelectedTab = $tabAutomation } `
+    -GetFtpState {
+        $serial = Get-SelectedSerial
+        if (-not $serial) { return 'No phone' }
+        if (Get-AndroidDcRawFtpStatus -Serial $serial) { return 'Running' }
+        return 'Off'
+    } `
+    -OnOpenFtp { $tabs.SelectedTab = $tabFtp; Restore-ClassicFtpPage } `
+    -OnToggleFtp { Invoke-ClassicFtpTrayToggle }
 Initialize-Backup -Progress { param($Text, $Done, $Total) Set-BackupProgressUi -Text $Text -Done $Done -Total $Total }
 
 try {

@@ -1,12 +1,84 @@
 . (Join-Path $script:toolsRoot 'shared\Ftp.ps1')
 
 $ftpPage = Register-Page -Key 'ftp' -Title 'FTP' -Glyph 'E8B7' -Section 'Workspace' -Xaml 'Ftp.xaml' `
-    -OnShow { Update-FtpPage } -OnDeviceChanged { Update-FtpPage } -Refresh { Update-FtpPage }
+    -OnShow { Restore-FtpPage; Update-FtpAddress; Update-FtpPage } -OnDeviceChanged { Restore-FtpPage; Update-FtpAddress; Update-FtpPage } `
+    -Refresh { Restore-FtpPage; Update-FtpAddress; Update-FtpPage }
 
 $script:ftpSerial = $null
 $script:ftpUri = $null
 $script:ftpUsername = $null
 $script:ftpPassword = $null
+$script:ftpLastPoll = $null
+
+function Set-FtpHeaderState {
+    param([bool]$HasDevice, [bool]$Running)
+    if (-not $HasDevice) { $ui.PillFtp.Visibility = 'Collapsed'; return }
+    if ($Running) {
+        Set-StatusPill $ui.PillFtp $ui.PillFtpText 'FTP running' 'ok'
+        $ui.PillFtpGlyph.Foreground = Get-Resource 'Success'
+    } else {
+        Set-StatusPill $ui.PillFtp $ui.PillFtpText 'FTP off' 'plain'
+        $ui.PillFtpGlyph.Foreground = Get-Resource 'MutedText'
+    }
+}
+
+function Update-FtpHeader {
+    $device = Get-SelectedDevice
+    $running = $false
+    $hasDevice = $device -and $device.State -eq 'device'
+    if ($hasDevice) {
+        try { $running = $null -ne (Get-AndroidDcRawFtpStatus -Serial $device.Serial) } catch {}
+    }
+    Set-FtpHeaderState -HasDevice $hasDevice -Running $running
+}
+
+function Restore-FtpPage {
+    $device = Get-SelectedDevice
+    $serial = if ($device -and $device.State -eq 'device') { $device.Serial } else { $null }
+    $status = if ($serial) { try { Get-AndroidDcRawFtpStatus -Serial $serial } catch { $null } }
+    if (-not $status) {
+        $script:ftpSerial = $null; $script:ftpUri = $null
+        $script:ftpUsername = $null; $script:ftpPassword = $null
+        if ($serial) { $ui.FtpStatus.Text = 'Server is stopped.' }
+    } elseif ($script:ftpSerial -ne $serial -or -not $script:ftpUri) {
+        $saved = Get-AndroidDcFtpSavedLogin -Serial $serial
+        $script:ftpSerial = $serial; $script:ftpUri = $status.Uri
+        $script:ftpUsername = if ($saved) { $saved.Username } else { $null }
+        $script:ftpPassword = if ($saved) { $saved.Password } else { $null }
+        $ui.FtpAddress.Text = $status.Uri.AbsoluteUri
+        $ui.FtpPort.Text = [string]$status.Uri.Port
+        if ($saved) { $ui.FtpUsername.Text = $saved.Username; $ui.FtpPassword.Text = $saved.Password }
+        $ui.FtpStatus.Text = if ($saved) { 'FTP server is already running on this phone.' }
+            else { 'FTP is running. The login is unavailable on this PC; you can stop it or remove the companion.' }
+    }
+    Set-FtpHeaderState -HasDevice ([bool]$serial) -Running ($null -ne $status)
+}
+
+function Invoke-FtpHeaderToggle {
+    $device = Get-SelectedDevice
+    if (-not $device -or $device.State -ne 'device') { return }
+    Show-Page -Page 'ftp'
+    Restore-FtpPage
+    Update-FtpPage
+    $action = if ($script:ftpUri) { 'Stop' } else { 'Start' }
+    $message = if ($action -eq 'Stop') { 'Stop the FTP server on this phone?' }
+        else { 'Start the FTP server on this phone with the login shown on the FTP page?' }
+    $answer = [System.Windows.MessageBox]::Show($script:window, $message, 'AndroidDC FTP',
+        [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+    if ($answer -eq [System.Windows.MessageBoxResult]::Yes) { Invoke-NovaFtpAction -Action $action }
+}
+
+# Before the server runs, the address box shows where it will be: the phone's Wi-Fi IP and the port.
+function Update-FtpAddress {
+    if ($script:ftpUri) { return }
+    $device = Get-SelectedDevice
+    $serial = if ($device -and $device.State -eq 'device') { $device.Serial }
+    $address = $null
+    try { $address = Get-AndroidDcFtpPreviewAddress -Serial $serial -Port $ui.FtpPort.Text } catch {}
+    $ui.FtpAddress.Text = if ($address) { $address }
+        elseif ($serial) { 'The phone has no Wi-Fi address. Connect it to the same network as this PC.' }
+        else { 'Select a phone to see its address.' }
+}
 
 function Update-FtpPage {
     $running = $null -ne $script:ftpUri
@@ -16,13 +88,14 @@ function Update-FtpPage {
     $ui.FtpGenerate.IsEnabled = -not $running
     $ui.FtpStart.IsEnabled = -not $running
     $ui.FtpStop.IsEnabled = $running
-    $ui.FtpExplorer.IsEnabled = $running
-    $ui.FtpTest.IsEnabled = $running
+    $ui.FtpExplorer.IsEnabled = $running -and $null -ne $script:ftpUsername
+    $ui.FtpTest.IsEnabled = $running -and $null -ne $script:ftpUsername
     $ui.FtpCopy.IsEnabled = $running
+    $ui.FtpRemoveCompanion.IsEnabled = $null -ne (Get-SelectedDevice)
 }
 
 function Invoke-NovaFtpAction {
-    param([ValidateSet('Start','Stop','Test','Explorer','Copy')][string]$Action)
+    param([ValidateSet('Start','Stop','Test','Explorer','Copy','Remove')][string]$Action)
     $ui.FtpStatus.Text = 'Working...'
     $ui.FtpStart.IsEnabled = $false
     $ui.FtpStop.IsEnabled = $false
@@ -50,7 +123,7 @@ function Invoke-NovaFtpAction {
                 $script:ftpUri = $null
                 $script:ftpUsername = $null
                 $script:ftpPassword = $null
-                $ui.FtpAddress.Text = 'Start the server to get its address.'
+                Update-FtpAddress
             }
             'Test' {
                 $ui.FtpStatus.Text = Test-FilesFtpEndpoint -Uri $script:ftpUri -Username $script:ftpUsername -Password $script:ftpPassword
@@ -63,14 +136,27 @@ function Invoke-NovaFtpAction {
                 [Windows.Clipboard]::SetText($script:ftpUri.AbsoluteUri)
                 $ui.FtpStatus.Text = 'Address copied.'
             }
+            'Remove' {
+                $serial = Get-TargetSerial
+                if (-not $serial) { throw 'Select a phone first.' }
+                $ui.FtpStatus.Text = Remove-AndroidDcFtpCompanion -Serial $serial
+                $script:ftpSerial = $null; $script:ftpUri = $null
+                $script:ftpUsername = $null; $script:ftpPassword = $null
+                Update-FtpAddress
+            }
         }
     } catch { $ui.FtpStatus.Text = $_.Exception.Message }
-    finally { Update-FtpPage }
+    finally { Update-FtpPage; Update-FtpHeader }
 }
 
-$generated = New-AndroidDcFtpCredentials
-$ui.FtpUsername.Text = $generated.Username
-$ui.FtpPassword.Text = $generated.Password
+$defaults = Get-AndroidDcFtpDefaultCredentials
+$ui.FtpUsername.Text = $defaults.Username
+$ui.FtpPassword.Text = $defaults.Password
+$ui.FtpPort.Add_TextChanged({
+    if (-not $script:ftpUri -and $ui.FtpAddress.Text -match '^ftp://([^:/]+):\d*/$') {
+        $ui.FtpAddress.Text = "ftp://$($Matches[1]):$($ui.FtpPort.Text.Trim())/"
+    }
+})
 $ui.FtpGenerate.Add_Click({
     $generated = New-AndroidDcFtpCredentials
     $ui.FtpUsername.Text = $generated.Username
@@ -81,4 +167,7 @@ $ui.FtpStop.Add_Click({ Invoke-NovaFtpAction -Action Stop })
 $ui.FtpTest.Add_Click({ Invoke-NovaFtpAction -Action Test })
 $ui.FtpExplorer.Add_Click({ Invoke-NovaFtpAction -Action Explorer })
 $ui.FtpCopy.Add_Click({ Invoke-NovaFtpAction -Action Copy })
+$ui.FtpRemoveCompanion.Add_Click({ Invoke-NovaFtpAction -Action Remove })
+$ui.PillFtp.Add_MouseLeftButtonUp({ Show-Page -Page 'ftp' })
+$ui.PillFtp.Add_MouseRightButtonUp({ Invoke-FtpHeaderToggle })
 Update-FtpPage

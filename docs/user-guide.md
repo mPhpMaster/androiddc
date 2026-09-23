@@ -525,13 +525,15 @@ stalling to keep up.
 
 # Phone FTP and filesystem access
 
-Open the separate **FTP** page in Classic or Nova. AndroidDC generates a random
-username and password automatically; you can edit both, regenerate them, and
-change the port before choosing **Start server**. The default port is 2121.
-AndroidDC builds its small Java server, copies its DEX file to `/data/local/tmp`,
-and runs it with Android's built-in `app_process`. It installs no APK and needs
-no FTP application. The server exposes `/sdcard` and creates a verification
-file at `AndroidDC-FTP/connection-test.txt`.
+Open the separate **FTP** page in Classic or Nova. The default username is `pc`
+and the default password is `123`; you can edit either one, choose **Generate new login** for a new
+pair, and change the port before choosing **Start server**. The default port is
+2121. As soon as a phone is selected, the address box previews its Wi-Fi FTP
+address, updated as you type a new port. The first start on a phone installs a
+small AndroidDC FTP notification app **on that phone only**. AndroidDC also copies
+its Java server to the phone and runs it with `app_process`. Merely connecting a
+phone never installs the app. The server shares `/sdcard` and creates the test
+file `AndroidDC-FTP/connection-test.txt`.
 
 **Test connection** logs in and requests a passive directory listing.
 **Open in Explorer** checks the login and opens the FTP address with the generated
@@ -539,7 +541,26 @@ or edited credentials in Windows File Explorer. **Copy address** copies the plai
 address. The server requires the displayed username and password. FTP traffic,
 including the credentials and file contents, is not encrypted: use a trusted
 local network. Phone and PC must be mutually reachable. Closing AndroidDC
-does not stop the phone server; choose **Stop server** when finished.
+does not stop the phone server. When you reopen AndroidDC, it detects a server
+still running on the selected phone. Nova shows **FTP running** or **FTP off**
+in the header: click that indicator to open the FTP page, or right-click it
+to confirm starting or stopping the server.
+The AndroidDC icon beside the Windows clock has an **FTP** menu showing the
+selected phone's status. From there you can open the FTP page or confirm
+starting or stopping the server.
+The login is restored on the same Windows account. On another PC, AndroidDC can
+detect and stop the server but cannot recover its password.
+
+Choose **Stop server** in AndroidDC, or expand the AndroidDC FTP notification on
+the phone and tap **Stop FTP**. Either action stops sharing; the phone app remains
+installed for the next use. **Uninstall FTP phone app** first stops sharing, then
+removes that app and AndroidDC's temporary FTP files. It does not delete your
+own files uploaded to the phone. If the phone refuses installation, enable its
+USB installation option in Developer options and approve the phone's prompt.
+
+In a source checkout, the generated server and notification APK are not committed.
+The first start needs a JDK and Android SDK platform 35/build tools on the PC,
+unless those generated files were packaged with the copy you received.
 
 The Files page starts at `/sdcard`, which is shared internal storage, not
 necessarily a removable SD card. The quick-path list also includes `/` (the

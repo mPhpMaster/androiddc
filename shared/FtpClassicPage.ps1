@@ -48,6 +48,7 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Generate = New-ClassicFtpButton $settings 'Generate new login' 14 109 155
     $script:classicFtp.Start = New-ClassicFtpButton $settings 'Start server' 182 109 112
     $script:classicFtp.Stop = New-ClassicFtpButton $settings 'Stop server' 307 109 112
+    $script:classicFtp.Remove = New-ClassicFtpButton $settings 'Uninstall FTP phone app' 432 109 200
 
     $access = New-Object Windows.Forms.GroupBox
     $access.Text = 'Phone address'
@@ -56,7 +57,7 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Address = New-Object Windows.Forms.TextBox
     $script:classicFtp.Address.SetBounds(14, 27, 620, 26)
     $script:classicFtp.Address.ReadOnly = $true
-    $script:classicFtp.Address.Text = 'Start the server to get its address.'
+    $script:classicFtp.Address.Text = 'Select a phone to see its address.'
     $access.Controls.Add($script:classicFtp.Address)
     $script:classicFtp.Explorer = New-ClassicFtpButton $access 'Open in Explorer' 14 67 130
     $script:classicFtp.Test = New-ClassicFtpButton $access 'Test connection' 157 67 122
@@ -65,10 +66,16 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Status.AutoEllipsis = $true
 
     $null = New-ClassicFtpLabel $Tab 'FTP is unencrypted. Use a trusted network and stop the server when finished.' 18 320 640
-    $generated = New-AndroidDcFtpCredentials
-    $script:classicFtp.Username.Text = $generated.Username
-    $script:classicFtp.Password.Text = $generated.Password
+    $defaults = Get-AndroidDcFtpDefaultCredentials
+    $script:classicFtp.Username.Text = $defaults.Username
+    $script:classicFtp.Password.Text = $defaults.Password
 
+    $script:classicFtp.Port.Add_TextChanged({
+        $ui = $script:classicFtp
+        if (-not $ui.Uri -and $ui.Address.Text -match '^ftp://([^:/]+):\d*/$') {
+            $ui.Address.Text = "ftp://$($Matches[1]):$($ui.Port.Text.Trim())/"
+        }
+    })
     $script:classicFtp.Generate.Add_Click({
         $generated = New-AndroidDcFtpCredentials
         $script:classicFtp.Username.Text = $generated.Username
@@ -79,17 +86,66 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Test.Add_Click({ Invoke-ClassicFtpAction -Action Test })
     $script:classicFtp.Explorer.Add_Click({ Invoke-ClassicFtpAction -Action Explorer })
     $script:classicFtp.Copy.Add_Click({ Invoke-ClassicFtpAction -Action Copy })
+    $script:classicFtp.Remove.Add_Click({ Invoke-ClassicFtpAction -Action Remove })
     Update-ClassicFtpPage
+}
+
+# Before the server runs, the address box shows where it will be: the phone's Wi-Fi IP and the port.
+function Update-ClassicFtpAddress {
+    $ui = $script:classicFtp
+    if ($ui.Uri) { return }
+    $serial = @(Get-SelectedSerials)[0]
+    $address = $null
+    try { $address = Get-AndroidDcFtpPreviewAddress -Serial $serial -Port $ui.Port.Text } catch {}
+    $ui.Address.Text = if ($address) { $address }
+        elseif ($serial) { 'The phone has no Wi-Fi address. Connect it to the same network as this PC.' }
+        else { 'Select a phone to see its address.' }
+}
+
+function Restore-ClassicFtpPage {
+    $ui = $script:classicFtp
+    $serial = @(Get-SelectedSerials)[0]
+    $status = if ($serial) { try { Get-AndroidDcRawFtpStatus -Serial $serial } catch { $null } }
+    if (-not $status) {
+        $ui.Serial = $null; $ui.Uri = $null
+        $ui.ActiveUsername = $null; $ui.ActivePassword = $null
+        if ($serial) { $ui.Status.Text = 'Server is stopped.' }
+    } elseif ($ui.Serial -ne $serial -or -not $ui.Uri) {
+        $saved = Get-AndroidDcFtpSavedLogin -Serial $serial
+        $ui.Serial = $serial; $ui.Uri = $status.Uri
+        $ui.ActiveUsername = if ($saved) { $saved.Username } else { $null }
+        $ui.ActivePassword = if ($saved) { $saved.Password } else { $null }
+        $ui.Address.Text = $status.Uri.AbsoluteUri
+        $ui.Port.Text = [string]$status.Uri.Port
+        if ($saved) { $ui.Username.Text = $saved.Username; $ui.Password.Text = $saved.Password }
+        $ui.Status.Text = if ($saved) { 'FTP server is already running on this phone.' }
+            else { 'FTP is running. The login is unavailable on this PC; stop it or remove the companion.' }
+    }
+    Update-ClassicFtpPage
+}
+
+function Invoke-ClassicFtpTrayToggle {
+    $tabs.SelectedTab = $tabFtp
+    Restore-ClassicFtpPage
+    $action = if ($script:classicFtp.Uri) { 'Stop' } else { 'Start' }
+    $message = if ($action -eq 'Stop') { 'Stop the FTP server on this phone?' }
+        else { 'Start the FTP server on this phone with the login shown on the FTP tab?' }
+    $answer = [Windows.Forms.MessageBox]::Show($form, $message, 'AndroidDC FTP',
+        [Windows.Forms.MessageBoxButtons]::YesNo, [Windows.Forms.MessageBoxIcon]::Question)
+    if ($answer -eq [Windows.Forms.DialogResult]::Yes) { Invoke-ClassicFtpAction -Action $action }
 }
 
 function Update-ClassicFtpPage {
     $running = $null -ne $script:classicFtp.Uri
     foreach ($key in @('Username','Password','Port','Generate','Start')) { $script:classicFtp[$key].Enabled = -not $running }
-    foreach ($key in @('Stop','Test','Explorer','Copy')) { $script:classicFtp[$key].Enabled = $running }
+    foreach ($key in @('Stop','Copy')) { $script:classicFtp[$key].Enabled = $running }
+    foreach ($key in @('Test','Explorer')) { $script:classicFtp[$key].Enabled = $running -and $null -ne $script:classicFtp.ActiveUsername }
+    $script:classicFtp.Remove.Enabled = (Get-Command Get-SelectedSerials -ErrorAction SilentlyContinue) -and
+        ($null -ne @(Get-SelectedSerials)[0])
 }
 
 function Invoke-ClassicFtpAction {
-    param([ValidateSet('Start','Stop','Test','Explorer','Copy')][string]$Action)
+    param([ValidateSet('Start','Stop','Test','Explorer','Copy','Remove')][string]$Action)
     $ui = $script:classicFtp
     $ui.Status.Text = 'Working...'
     $ui.Start.Enabled = $false
@@ -118,7 +174,7 @@ function Invoke-ClassicFtpAction {
                 $ui.Uri = $null
                 $ui.ActiveUsername = $null
                 $ui.ActivePassword = $null
-                $ui.Address.Text = 'Start the server to get its address.'
+                Update-ClassicFtpAddress
             }
             'Test' { $ui.Status.Text = Test-FilesFtpEndpoint -Uri $ui.Uri -Username $ui.ActiveUsername -Password $ui.ActivePassword }
             'Explorer' {
@@ -128,6 +184,14 @@ function Invoke-ClassicFtpAction {
             'Copy' {
                 [Windows.Forms.Clipboard]::SetText($ui.Uri.AbsoluteUri)
                 $ui.Status.Text = 'Address copied.'
+            }
+            'Remove' {
+                $serial = Get-TargetSerial
+                if (-not $serial) { throw 'Select a phone first.' }
+                $ui.Status.Text = Remove-AndroidDcFtpCompanion -Serial $serial
+                $ui.Serial = $null; $ui.Uri = $null
+                $ui.ActiveUsername = $null; $ui.ActivePassword = $null
+                Update-ClassicFtpAddress
             }
         }
     } catch { $ui.Status.Text = $_.Exception.Message }

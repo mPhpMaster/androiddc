@@ -14,11 +14,13 @@ public final class RawFtpServer {
     private final int port;
     private final FtpCredentials credentials;
     private final ExecutorService clients = Executors.newCachedThreadPool();
+    private final String stopToken;
 
-    private RawFtpServer(File root, int port, FtpCredentials credentials) throws IOException {
+    private RawFtpServer(File root, int port, FtpCredentials credentials, String stopToken) throws IOException {
         this.root = root.getCanonicalFile();
         this.port = port;
         this.credentials = credentials;
+        this.stopToken = stopToken;
         if (!this.root.isDirectory()) throw new IOException("FTP root is not a directory: " + root);
     }
 
@@ -26,19 +28,38 @@ public final class RawFtpServer {
         File root = new File(args.length > 0 ? args[0] : "/sdcard");
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 2121;
         if (args.length < 3) throw new IOException("Credentials file is required");
-        new RawFtpServer(root, port, FtpCredentials.load(new File(args[2]))).run();
+        if (args.length < 4 || args[3].length() < 32) throw new IOException("Stop token is required");
+        new RawFtpServer(root, port, FtpCredentials.load(new File(args[2])), args[3]).run();
     }
 
     private void run() throws IOException {
-        try (ServerSocket server = new ServerSocket()) {
+        try (ServerSocket server = new ServerSocket(); ServerSocket stop = new ServerSocket()) {
             server.setReuseAddress(true);
             server.bind(new InetSocketAddress("0.0.0.0", port));
-            System.out.println("READY ftp://" + lanAddress() + ":" + port + "/ root=" + root);
+            stop.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0));
+            Thread stopThread = new Thread(() -> waitForStop(stop), "androiddc-ftp-stop");
+            stopThread.setDaemon(true);
+            stopThread.start();
+            System.out.println("READY ftp://" + lanAddress() + ":" + port + "/ control=" + stop.getLocalPort() + " root=" + root);
             System.out.flush();
             while (true) {
                 Socket socket = server.accept();
                 clients.execute(() -> handle(socket));
             }
+        }
+    }
+
+    private void waitForStop(ServerSocket listener) {
+        while (true) {
+            try (Socket client = listener.accept()) {
+                client.setSoTimeout(3000);
+                BufferedReader input = new BufferedReader(new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
+                if (stopToken.equals(input.readLine())) {
+                    client.getOutputStream().write("STOPPED\n".getBytes(StandardCharsets.UTF_8));
+                    client.getOutputStream().flush();
+                    System.exit(0);
+                }
+            } catch (IOException ignored) { }
         }
     }
 
@@ -188,7 +209,9 @@ public final class RawFtpServer {
     private static void copy(InputStream in, OutputStream out) throws IOException { byte[] buf = new byte[65536]; int n; while ((n = in.read(buf)) >= 0) out.write(buf, 0, n); out.flush(); }
     private static void close(Closeable c) { if (c != null) try { c.close(); } catch (IOException ignored) {} }
 
+    // Wi-Fi first: the PC reaches the phone over the LAN, not over mobile data (rmnet).
     private static String lanAddress() throws SocketException {
+        String fallback = null;
         Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
         while (interfaces.hasMoreElements()) {
             NetworkInterface net = interfaces.nextElement();
@@ -196,9 +219,11 @@ public final class RawFtpServer {
             Enumeration<InetAddress> addresses = net.getInetAddresses();
             while (addresses.hasMoreElements()) {
                 InetAddress address = addresses.nextElement();
-                if (address instanceof Inet4Address && !address.isLoopbackAddress()) return address.getHostAddress();
+                if (!(address instanceof Inet4Address) || address.isLoopbackAddress()) continue;
+                if (net.getName().startsWith("wlan")) return address.getHostAddress();
+                if (fallback == null) fallback = address.getHostAddress();
             }
         }
-        return "127.0.0.1";
+        return fallback != null ? fallback : "127.0.0.1";
     }
 }

@@ -88,7 +88,7 @@ Say ("  no dialog is open, so the device watch runs   {0}" -f (Mark (-not (Test-
 Say ''
 Say '== the icon by the clock =='
 $handle = (New-Object System.Windows.Interop.WindowInteropHelper($script:window)).Handle
-Say ("  there, with Automation, Show, Hide and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 6)))
+Say ("  there, with Automation, FTP, Show, Hide and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $null -ne $script:trayFtpItem -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 7)))
 
 Say ''
 Say '== the rules set before, seen without opening their page =='

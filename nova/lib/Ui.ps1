@@ -383,7 +383,7 @@ function Update-DeviceHeader {
     if ($null -eq $first) {
         $ui.DeviceTitle.Text = if ($script:deviceRows.Count -eq 0) { 'No device' } else { 'Pick a device' }
         $ui.DeviceSubtitle.Text = if ($script:deviceRows.Count -eq 0) { 'Plug a phone in with USB debugging on' } else { "$($script:deviceRows.Count) attached" }
-        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen')) { $ui[$pill].Visibility = 'Collapsed' }
+        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen', 'PillFtp')) { $ui[$pill].Visibility = 'Collapsed' }
         return
     }
     $ui.DeviceTitle.Text = $first.Model
@@ -403,7 +403,7 @@ function Update-DeviceStatus {
     Update-DeviceHeader
     $first = (Get-SelectedDevice)
     if ($null -eq $first -or $first.State -ne 'device') {
-        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen')) { $ui[$pill].Visibility = 'Collapsed' }
+        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen', 'PillFtp')) { $ui[$pill].Visibility = 'Collapsed' }
         $script:statusSerial = $null
         return
     }
@@ -434,6 +434,7 @@ function Update-DeviceStatus {
     # a phone that is locked or dark explains half the things that then fail
     $screenTone = if ($screen.Locked -or ($null -ne $screen.ScreenOn -and -not $screen.ScreenOn)) { 'warn' } else { 'ok' }
     Set-StatusPill $ui.PillScreen $ui.PillScreenText ($screenWords -join ', ') $screenTone
+    if (Get-Command Update-FtpHeader -ErrorAction SilentlyContinue) { Update-FtpHeader }
 }
 
 # --------------------------------------------------------------- dialogs ----
@@ -903,6 +904,14 @@ function Initialize-ShellEvents {
             if (Get-Command Invoke-AutomationQueue -ErrorAction SilentlyContinue) {
                 Invoke-AutomationQueue -Enter { param($Serial) Enter-AutomationDevice -Serial $Serial } `
                     -Leave { param($State) Exit-AutomationDevice -State $State }
+            }
+            $ftpDue = -not $script:ftpLastPoll -or
+                ([DateTime]::UtcNow - $script:ftpLastPoll).TotalSeconds -ge 10
+            if ((Get-Command Restore-FtpPage -ErrorAction SilentlyContinue) -and
+                ($script:ftpUri -or ($ui.PillFtp.Visibility -eq 'Visible' -and $ftpDue))) {
+                Restore-FtpPage
+                Update-FtpPage
+                $script:ftpLastPoll = [DateTime]::UtcNow
             }
         } finally {
             $script:deviceWatchTimer.Start()

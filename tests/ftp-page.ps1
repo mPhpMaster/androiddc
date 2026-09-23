@@ -2,8 +2,23 @@ $tabs.SelectedTab = $tabFtp
 $form.Size = $form.MinimumSize
 Wait-Pumped -Milliseconds 300
 Say ("FTP tab selected   {0}" -f (Mark ($tabs.SelectedTab -eq $tabFtp)))
-Say ("Random login filled   {0}" -f (Mark ($script:classicFtp.Username.Text -and $script:classicFtp.Password.Text.Length -ge 8)))
-Say ("Stop disabled before starting   {0}" -f (Mark (-not $script:classicFtp.Stop.Enabled)))
+Say ("Remove control available   {0}" -f (Mark ($null -ne $script:classicFtp.Remove)))
+if ($script:classicFtp.Uri -and $script:classicFtp.ActiveUsername) {
+    Say ("Running login restored   {0}" -f (Mark ($script:classicFtp.Username.Text -eq $script:classicFtp.ActiveUsername)))
+} elseif (-not $script:classicFtp.Uri) {
+    Say ("Default login filled   {0}" -f (Mark ($script:classicFtp.Username.Text -eq 'pc' -and $script:classicFtp.Password.Text -eq '123')))
+}
+Say ("Stop follows recovered server state   {0}" -f (Mark ($script:classicFtp.Stop.Enabled -eq ($null -ne $script:classicFtp.Uri))))
+if (@(Get-SelectedSerials).Count) {
+    $address = $script:classicFtp.Address.Text
+    $hasAddress = $address -match '^ftp://\d+\.\d+\.\d+\.\d+:\d+/$'
+    Say ("Address or network guidance shown ($address)   {0}" -f (Mark ($hasAddress -or $address -like 'The phone has no Wi-Fi address*')))
+    if (-not $script:classicFtp.Uri -and $hasAddress) {
+        $script:classicFtp.Port.Text = '2200'
+        Say ("Address follows the port   {0}" -f (Mark ($script:classicFtp.Address.Text -match ':2200/$')))
+        $script:classicFtp.Port.Text = '2121'
+    }
+}
 $shot = Join-Path $TestOutput 'ftp-classic-min.png'
 $bitmap = New-Object Drawing.Bitmap($form.Width, $form.Height)
 try {

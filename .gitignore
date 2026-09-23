@@ -39,6 +39,7 @@ gnirehtet-run.cmd
 
 # --- local only --------------------------------------------------------------
 backups/
+android/ftp/companion/out/
 *.log
 1.png
 *.png.tmp

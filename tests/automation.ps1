@@ -143,7 +143,7 @@ Wait-Pumped -Milliseconds 300
 Say ''
 Say '== the icon by the clock =='
 $handle = $form.Handle
-Say ("  there, with Automation, Show, Hide and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 6)))
+Say ("  there, with Automation, FTP, Show, Hide and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $null -ne $script:trayFtpItem -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 7)))
 
 Say ''
 Say '== the rules set before, seen without opening their tab =='

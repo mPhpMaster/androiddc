@@ -3,21 +3,26 @@
 [← back to the README](../README.md)
 
 For anyone changing the code. The classic window is a single PowerShell script with a WinForms
-user interface — no build step, no modules, no dependencies beyond what Windows already has.
+user interface — no build step for the main window, no modules, no dependencies beyond what
+Windows already has. FTP is an exception: its phone server and notification app are built
+from Java source when their generated files are absent.
 The Nova window is WPF in PowerShell, one file per page; its own rules are in
 [`nova/CONTRACT.md`](../nova/CONTRACT.md).
 
 ## What the two windows share
 
-`shared\` holds what both windows dot-source, so it is written once:
+`shared\` holds operations both windows dot-source, plus the Classic FTP tab helper:
 
 | File | What it does |
 |---|---|
 | `Automation.ps1` | Starting with Windows (one `AndroidDC` value under the user's Run key), the actions a rule can hold, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone that was just plugged in from one that was already there, and a named mutex so only one window runs the rules |
 | `Tray.ps1` | The icon by the clock: hiding and showing the window, its menu, and the list of rules in that menu |
 | `Backup.ps1` | A backup of the phone on this PC — pulling `/sdcard` folder by folder, the APK of each installed app, contacts, messages and the call log, a settings snapshot — packed into one `.zip` and read back out of it: what is inside (from the zip index, nothing unpacked), which files the phone already has (one `find` per folder, not one per file), installing an app with its splits, adding the contacts it lacks, and the list of backups this PC has taken. `adb backup` is not used; Android 12 and newer return almost nothing for it |
+| `Ftp.ps1` | Starts and detects the phone FTP server, installs or removes its notification app, and keeps the login encrypted on this Windows account so either window can reconnect |
+| `FtpClassicPage.ps1` | The Classic FTP tab's controls and event handlers |
 
-Nothing in `shared\` touches a control. An action calls the window's own function by name —
+The shared operation files do not touch controls; `FtpClassicPage.ps1` is the Classic tab's
+presentation helper and is the exception. An action calls the window's own function by name —
 both windows use the same names, `Set-UsbTethering`, `Start-Scrcpy` and the rest — and each
 window passes a script block that selects the rule's phone first. The files are written at
 once, not when a window closes, because the other window reads them. Tests point

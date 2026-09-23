@@ -4,7 +4,7 @@
               VerticalScrollBarVisibility="Auto">
   <StackPanel MaxWidth="760" HorizontalAlignment="Left">
     <TextBlock Text="Phone FTP" Style="{StaticResource H1}" Margin="0,0,0,4"/>
-    <TextBlock Text="Share phone storage with this PC. AndroidDC creates login details for you; you can change them before starting."
+    <TextBlock Text="Share phone storage with this PC. The default login is ready; you can change it before starting."
                Style="{StaticResource MutedLine}" Margin="0,0,0,16"/>
 
     <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
@@ -21,13 +21,14 @@
           <Button x:Name="FtpStart" Content="Start server" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
           <Button x:Name="FtpStop" Content="Stop server"/>
         </StackPanel>
+        <Button x:Name="FtpRemoveCompanion" Content="Uninstall FTP phone app" Style="{StaticResource Ghost}" HorizontalAlignment="Left" Margin="0,12,0,0"/>
       </StackPanel>
     </Border>
 
     <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
       <StackPanel>
         <TextBlock Text="PHONE ADDRESS" Style="{StaticResource Caps}"/>
-        <TextBox x:Name="FtpAddress" IsReadOnly="True" Text="Start the server to get its address." Margin="0,0,0,12"/>
+        <TextBox x:Name="FtpAddress" IsReadOnly="True" Text="Select a phone to see its address." Margin="0,0,0,12"/>
         <StackPanel Orientation="Horizontal">
           <Button x:Name="FtpExplorer" Content="Open in Explorer" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
           <Button x:Name="FtpTest" Content="Test connection" Margin="0,0,8,0"/>

@@ -49,8 +49,10 @@ $first = New-AndroidDcFtpCredentials
 $second = New-AndroidDcFtpCredentials
 if ($first.Username -eq $second.Username -or $first.Password -eq $second.Password) { throw 'FTP credentials were reused.' }
 Assert-AndroidDcFtpSettings -Username $first.Username -Password $first.Password -Port 2121
+$defaults = Get-AndroidDcFtpDefaultCredentials
+Assert-AndroidDcFtpSettings -Username $defaults.Username -Password $defaults.Password -Port 2121
 foreach ($settings in @(
-    @{ Username='anonymous'; Password='short'; Port=2121 },
+    @{ Username='anonymous'; Password=''; Port=2121 },
     @{ Username='invalid user'; Password=$first.Password; Port=2121 },
     @{ Username=$first.Username; Password=$first.Password; Port=21 }
 )) {

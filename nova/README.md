@@ -5,7 +5,8 @@ AndroidDC in the friendly-interface design, as a Windows desktop application. Th
 camera and microphone, files, running processes, radios, users and the shell - behind a side
 navigation, a device card and an activity log instead of fourteen tabs.
 
-It is a WPF application hosted in Windows PowerShell 5.1: nothing to install, nothing to build.
+It is a WPF application hosted in Windows PowerShell 5.1. The window needs no build step;
+FTP builds its phone server and notification app when generated files are absent.
 
 [< back to the project README](../README.md)
 
@@ -23,13 +24,15 @@ does the reverse. If a tool is missing, the program offers to fetch it with the 
 ## The window
 
 * **Side navigation** - the pages, grouped: *Workspace* (Overview, Screen, Mirroring, Apps,
-  Files, Camera & mic), *Personal* (Messages, Contacts), *Connect* (Tethering, Radios) and
+  Files, FTP, Camera & mic), *Personal* (Messages, Contacts), *Connect* (Tethering, Radios) and
   *System* (Tools, Running, Users, Shell, Automation). `Ctrl`+`1`...`9` open the first nine.
 * **Automation** - start with Windows, minimized, and what a given phone does each time it is
   plugged in. The rules and the start-up entry are the classic window's too
   (`..\shared\Automation.ps1`, `%APPDATA%\AndroidDC\automation.json`); see the user guide's
   *Advanced > Automation*.
-* **Device card** - the phone the pages act on, its battery, signal and screen. Click the name
+* **Device card** - the phone the pages act on, its battery, signal, screen and an FTP
+  indicator. Click the indicator to open the FTP page; right-click it to confirm starting
+  or stopping the server. Click the name
   to pick another, or several with `Ctrl`/`Shift`; a double-click picks one and closes the
   list, on whatever page is open. The list follows the cable by itself.
 * The window opens on the page you used last, which is remembered as soon as you open it.
