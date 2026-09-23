@@ -4,7 +4,7 @@
               VerticalScrollBarVisibility="Auto">
   <StackPanel MaxWidth="760" HorizontalAlignment="Left">
     <TextBlock Text="Phone FTP" Style="{StaticResource H1}" Margin="0,0,0,4"/>
-    <TextBlock Text="Share phone storage with this PC. A random login is ready; you can change it before starting."
+    <TextBlock Text="Share phone storage with this PC. The default login is ready; you can change it before starting."
                Style="{StaticResource MutedLine}" Margin="0,0,0,16"/>
 
     <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">

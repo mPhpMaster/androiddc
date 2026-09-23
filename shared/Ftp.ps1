@@ -152,7 +152,7 @@ function New-AndroidDcFtpCredentials {
 }
 
 function Get-AndroidDcFtpDefaultCredentials {
-    return New-AndroidDcFtpCredentials
+    return [PSCustomObject]@{ Username = 'pc'; Password = '123' }
 }
 
 # The address the server will have, shown before it starts. $null when the phone has no Wi-Fi address.

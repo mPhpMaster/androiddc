@@ -6,7 +6,7 @@ Say ("Remove control available   {0}" -f (Mark ($null -ne $script:classicFtp.Rem
 if ($script:classicFtp.Uri -and $script:classicFtp.ActiveUsername) {
     Say ("Running login restored   {0}" -f (Mark ($script:classicFtp.Username.Text -eq $script:classicFtp.ActiveUsername)))
 } elseif (-not $script:classicFtp.Uri) {
-    Say ("Random login filled   {0}" -f (Mark ($script:classicFtp.Username.Text -match '^androiddc_[A-Za-z0-9_-]{8}$' -and $script:classicFtp.Password.Text.Length -ge 16)))
+    Say ("Default login filled   {0}" -f (Mark ($script:classicFtp.Username.Text -eq 'pc' -and $script:classicFtp.Password.Text -eq '123')))
 }
 Say ("Stop follows recovered server state   {0}" -f (Mark ($script:classicFtp.Stop.Enabled -eq ($null -ne $script:classicFtp.Uri))))
 if (@(Get-SelectedSerials).Count) {

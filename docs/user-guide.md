@@ -525,8 +525,8 @@ stalling to keep up.
 
 # Phone FTP and filesystem access
 
-Open the separate **FTP** page in Classic or Nova. It fills in a random username
-and password; you can edit either one, choose **Generate new login** for a new
+Open the separate **FTP** page in Classic or Nova. The default username is `pc`
+and the default password is `123`; you can edit either one, choose **Generate new login** for a new
 pair, and change the port before choosing **Start server**. The default port is
 2121. As soon as a phone is selected, the address box previews its Wi-Fi FTP
 address, updated as you type a new port. The first start on a phone installs a

@@ -6,7 +6,7 @@
 
 ### Phone FTP controls
 
-* FTP has its own page in Classic and Nova. New sessions receive a random editable login and port, and can be opened in Windows File Explorer.
+* FTP has its own page in Classic and Nova. The default login is `pc` / `123`; it and the port are editable, and new random credentials can be generated. FTP can be opened in Windows File Explorer.
 * Closing AndroidDC leaves the phone server running. Reopening detects it, restores the login on the same Windows account, and Nova shows a header indicator while it runs.
 * Nova's FTP header indicator shows running or off; click it to open FTP, or right-click and confirm starting or stopping the server.
 * The existing AndroidDC icon beside the Windows clock now has an FTP menu showing the selected phone's status and actions to open the page or confirm starting or stopping the server.

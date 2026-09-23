@@ -7,7 +7,7 @@ Say ("  controls available   {0}" -f (Mark ($missing.Count -eq 0)))
 if ($script:ftpUri -and $script:ftpUsername) {
     Say ("  running login restored   {0}" -f (Mark ($ui.FtpUsername.Text -eq $script:ftpUsername -and $ui.FtpPassword.Text -eq $script:ftpPassword)))
 } elseif (-not $script:ftpUri) {
-    Say ("  random login filled   {0}" -f (Mark ($ui.FtpUsername.Text -match '^androiddc_[A-Za-z0-9_-]{8}$' -and $ui.FtpPassword.Text.Length -ge 16)))
+    Say ("  default login filled   {0}" -f (Mark ($ui.FtpUsername.Text -eq 'pc' -and $ui.FtpPassword.Text -eq '123')))
 }
 Say ("  stop follows recovered server state   {0}" -f (Mark ($ui.FtpStop.IsEnabled -eq ($null -ne $script:ftpUri))))
 if (Get-SelectedDevice) {
