@@ -1299,7 +1299,9 @@ function Format-ToolsCard {
     if ($cards.Count -eq 0) { Clear-ToolsStorage -Serial $serial; return }
 
     $card = $cards[0]
-    $words = "Format the memory card in $serial?`n`n" + (Get-DeviceCardWords -Card $card) + "`n`n" +
+    # $($serial)?, not $serial?: a question mark is a letter in a PowerShell
+    # name, so "$serial?" is a variable nobody ever assigned
+    $words = "Format the memory card in $($serial)?`n`n" + (Get-DeviceCardWords -Card $card) + "`n`n" +
         'Every file on the card goes, and a new empty filesystem is written by the phone itself. ' +
         "The phone and its apps are not touched.`n`n" +
         'A backup only holds the card when "Memory card" was ticked when it was taken.'

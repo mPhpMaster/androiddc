@@ -5876,7 +5876,9 @@ function Format-CardNow {
 
     $card = $cards[0]
     $answer = [System.Windows.Forms.MessageBox]::Show(
-        "Format the memory card in $serial?" + "`r`n`r`n" +
+        # $($serial)?, not $serial?: a question mark is a letter in a
+        # PowerShell name, so "$serial?" is a variable nobody ever assigned
+        "Format the memory card in $($serial)?" + "`r`n`r`n" +
         (Get-DeviceCardWords -Card $card) + "`r`n`r`n" +
         'Every file on the card goes, and a new empty filesystem is written by the phone itself. ' +
         'The phone and its apps are not touched.' + "`r`n`r`n" +
