@@ -25,6 +25,11 @@ $tabs.SelectedTab = $tabTethering; $tabsTethering.SelectedTab = $tabShare; Save-
 $tabs.SelectedTab = $tabAdvanced; $tabsAdvanced.SelectedTab = $tabScrcpy;  Save-Shot 'min-mirroring'
 $tabsAdvanced.SelectedTab = $tabMore;                                      Save-Shot 'min-more'
 $tabsAdvanced.SelectedTab = $tabTools;                                     Save-Shot 'min-tools'
+# the formatting box is the last one on a page that scrolls, so the picture
+# above stops short of it; this one is taken with that page scrolled to its end
+$tabTools.AutoScrollPosition = New-Object System.Drawing.Point(0, $tabTools.DisplayRectangle.Height)
+Save-Shot 'min-tools-erase'
+$tabTools.AutoScrollPosition = New-Object System.Drawing.Point(0, 0)
 $tabsAdvanced.SelectedTab = $tabRoot;                                      Save-Shot 'min-root'
 $tabs.SelectedTab = $tabCamera;                                            Save-Shot 'min-cam-mic'
 $tabs.SelectedTab = $tabShellHost; $tabsShell.SelectedTab = $tabLogcat;    Save-Shot 'min-logcat'

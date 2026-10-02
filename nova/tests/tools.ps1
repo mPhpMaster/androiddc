@@ -153,6 +153,82 @@ if ($ready) {
 }
 
 Say ''
+Say '== factory reset and formatting =='
+# shared\Erase.ps1 through the page: the phone is made up, and neither button
+# is pressed - the question each one asks is a dialog, and a test cannot answer
+# one. What is checked is what the page would send and what it says it found.
+Say ("  shared\Erase.ps1 found in the project folder   {0}" -f (Mark (Test-EraseShared)))
+Say ("  both buttons are on the device tools page, with hover text   {0}" -f (Mark (
+    $ui.ToolsFactoryReset.Content -eq 'Factory reset ...' -and
+    $ui.ToolsFormatCard.Content -eq 'Format the memory ...' -and
+    "$($ui.ToolsFactoryReset.ToolTip)" -and "$($ui.ToolsFormatCard.ToolTip)")))
+
+$script:asked = New-Object System.Collections.Generic.List[string]
+$script:answers = @{}
+$fakeShell = {
+    param($Serial, $CommandArguments)
+    $command = (@($CommandArguments) -join ' ')
+    $null = $script:asked.Add($command)
+    $text = ''
+    foreach ($key in @($script:answers.Keys | Sort-Object -Property Length -Descending)) {
+        if ($command -like $key) { $text = $script:answers[$key]; break }
+    }
+    return [PSCustomObject]@{ Lines = @("$text" -split "`n"); Text = $text; ExitCode = 0 }
+}
+
+$script:answers = @{
+    'sm list-volumes all' = "public:179,1 mounted AAAA-BBBB`nemulated;0 mounted null"
+    'df -k*'              = "Filesystem 1K-blocks Used Available Use% Mounted on`n/dev/fuse 61440 20480 40960 34% /storage/AAAA-BBBB"
+}
+& { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    function Get-SelectedSerial { 'ABC123' }
+    Update-ToolsErase -Force }
+Say ("  it says what this phone has: '{0}'   {1}" -f $ui.ToolsEraseWhat.Text, (Mark (
+    $ui.ToolsEraseWhat.Text -match 'Memory card: /storage/AAAA-BBBB')))
+$script:answers = @{ 'sm list-volumes all' = ''; 'ls -1 /storage' = "emulated`nself" }
+& { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    function Get-SelectedSerial { 'ABC123' }
+    Update-ToolsErase -Force }
+Say ("  a phone with no card: '{0}'   {1}" -f $ui.ToolsEraseWhat.Text, (Mark (
+    $ui.ToolsEraseWhat.Text -eq 'No memory card in this phone.')))
+& { function Get-SelectedSerial { $null }
+    Update-ToolsErase -Force }
+Say ("  no phone picked: '{0}'   {1}" -f $ui.ToolsEraseWhat.Text, (Mark (
+    $ui.ToolsEraseWhat.Text -eq 'No phone picked.')))
+
+$script:asked.Clear()
+$script:answers = @{ 'am broadcast*' = 'Broadcast completed: result=0' }
+$wiping = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Reset-DeviceToNew -Serial 'ABC123' }
+Say ("  a phone that takes the reset is erasing itself   {0}" -f (Mark (
+    $wiping.Wiping -and -not $wiping.Opened -and
+    @($script:asked | Where-Object { $_ -like '*android.intent.action.FACTORY_RESET*' }).Count -eq 1)))
+$script:answers = @{
+    'sm format public:179,1'     = ''
+    'sm list-volumes all'        = "public:179,1 mounted CCCC-DDDD`nemulated;0 mounted null"
+    "find '/storage/CCCC-DDDD'*" = '0'
+    'df -k*'                     = ''
+}
+$formatted = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Format-DeviceCard -Serial 'ABC123' -Volume 'public:179,1' }
+Say ("  a card formatted comes back at {0}, empty   {1}" -f $formatted.Path, (Mark (
+    $formatted.Ok -and $formatted.Path -eq '/storage/CCCC-DDDD' -and $formatted.Left -eq 0)))
+Say ("  a backup running stops either of them   {0}" -f (Mark (& {
+    Start-BackupRun
+    $allowed = Test-ToolsEraseAllowed
+    Complete-BackupRun
+    -not $allowed })))
+
+Set-ToolsEraseBusy -Running $true
+Say ("  while an erase runs, Cancel is the only one that works   {0}" -f (Mark (
+    $ui.ToolsEraseCancel.IsEnabled -and -not $ui.ToolsFactoryReset.IsEnabled -and
+    -not $ui.ToolsFormatCard.IsEnabled)))
+Set-ToolsEraseBusy -Running $false
+Say ("  afterwards they are back   {0}" -f (Mark (
+    $ui.ToolsFactoryReset.IsEnabled -and $ui.ToolsFormatCard.IsEnabled -and
+    -not $ui.ToolsEraseCancel.IsEnabled)))
+
+Say ''
 Say '== the pictures =='
 foreach ($size in @('default', 'min')) {
     Set-WindowSize $size

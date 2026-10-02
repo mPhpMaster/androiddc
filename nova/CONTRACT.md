@@ -43,7 +43,7 @@ unique already), and prefix any new helper with your page name (`Files-...` is w
 | `Contacts` | Personal | Contacts | `Update-ContactList`, `Add-Contact`, `Edit-Contact`, `Remove-Contact`, `Start-PhoneCall`, `Stop-PhoneCall`, `Export-Contacts` |
 | `Tethering` | Connect | Tethering (both directions) | gnirehtet and proxy functions, `Invoke-Gnirehtet`, `Get-PortOwner`, `Start-Sharing`, `Stop-Sharing`, `Restart-Sharing`, `Test-Connectivity`, `Repair-Tunnel`, `Show-ReverseTunnels`, `Stop-StrayRelays`, the relay output timer |
 | `Radios` | Connect | Wi-Fi, Bluetooth, NFC | `Get-RadioFeature`, `Get-WifiConnection`, `Get-BluetoothConnections`, `Get-SignalStrength`, Wi-Fi / Bluetooth / NFC functions |
-| `Tools` | System | Advanced > Device tools and Root / recovery | wireless pairing, mDNS, reconnect, bug report, tcpip, connect / disconnect, restart server, `Get-DeviceIp`, screenshot to file, screen on/off, reboot, battery, private DNS, IME, hotspot, `Get-UiDump`, `Test-DeviceLocked`, root / recovery functions |
+| `Tools` | System | Advanced > Device tools and Root / recovery | wireless pairing, mDNS, reconnect, bug report, tcpip, connect / disconnect, restart server, `Get-DeviceIp`, screenshot to file, screen on/off, reboot, battery, private DNS, IME, hotspot, `Get-UiDump`, `Test-DeviceLocked`, root / recovery functions, and the page's own `*-ToolsErase*` / `Reset-ToolsPhone` / `Format-ToolsCard` - the formatting itself is `..\shared\Erase.ps1`, shared with the classic window |
 | `Running` | System | Running | the running-process functions |
 | `Users` | System | Users | the user functions, `Open-DeviceSettingsScreen` |
 | `Shell` | System | Shell > Shell and Logcat | `LineReader` / `LiveShell` (Add-Type), the shell and logcat functions |

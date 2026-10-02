@@ -50,6 +50,7 @@ $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
 . (Join-Path $scriptRoot 'shared\Automation.ps1')
 . (Join-Path $scriptRoot 'shared\Tray.ps1')
 . (Join-Path $scriptRoot 'shared\Backup.ps1')
+. (Join-Path $scriptRoot 'shared\Erase.ps1')
 . (Join-Path $scriptRoot 'shared\Ftp.ps1')
 . (Join-Path $scriptRoot 'shared\FtpClassicPage.ps1')
 
@@ -141,6 +142,10 @@ $script:workRunspace = $null
 $script:busy = 0
 # what the busy strip under the pages names, and since when something runs
 $script:busyWhat = ''
+# the phone the erase hint was read for, and what it said; reading it costs two
+# adb calls, so it is not read again for the same phone
+$script:eraseFor = ''
+$script:eraseCards = @()
 $script:busySince = $null
 # the serials and states adb reported last, so a plugged or pulled phone is noticed
 $script:deviceSignature = ''
@@ -1955,8 +1960,44 @@ $btnHotspotInfo.Size = New-Object System.Drawing.Size(160, 26)
 $tabTools.Controls.Add($btnHotspotInfo)
 $toolTip.SetToolTip($btnHotspotInfo, 'Read the hotspot name, security and password from the phone settings page')
 
+# Formatting: any Android phone back to new, and the memory card in it. The
+# most destructive thing in the window, so it is the last box on the page, and
+# both buttons ask twice. shared\Erase.ps1 does the work.
+$btnFormatPhone = New-Object System.Windows.Forms.Button
+$btnFormatPhone.Text = 'Factory reset ...'
+$btnFormatPhone.Location = New-Object System.Drawing.Point(12, 470)
+$btnFormatPhone.Size = New-Object System.Drawing.Size(130, 28)
+$tabTools.Controls.Add($btnFormatPhone)
+$toolTip.SetToolTip($btnFormatPhone, 'This phone back to how it left the factory: apps, accounts, messages, photos, settings. It asks, then has you type the word; Android keeps the last tap on the phone itself')
+
+$btnFormatCard = New-Object System.Windows.Forms.Button
+$btnFormatCard.Text = 'Format the memory ...'
+$btnFormatCard.Location = New-Object System.Drawing.Point(150, 470)
+$btnFormatCard.Size = New-Object System.Drawing.Size(150, 28)
+$tabTools.Controls.Add($btnFormatCard)
+$toolTip.SetToolTip($btnFormatCard, 'The memory card in this phone, formatted by the phone itself - every file on it goes, and nothing else is touched. With no card in the phone it offers to empty the phone''s own storage instead')
+
+$btnEraseCancel = New-Object System.Windows.Forms.Button
+$btnEraseCancel.Text = 'Cancel'
+$btnEraseCancel.Location = New-Object System.Drawing.Point(308, 470)
+$btnEraseCancel.Size = New-Object System.Drawing.Size(80, 28)
+$btnEraseCancel.Enabled = $false
+$tabTools.Controls.Add($btnEraseCancel)
+$toolTip.SetToolTip($btnEraseCancel, 'Stops an erase where it is; what has already gone does not come back')
+
+$lblErase = New-Object System.Windows.Forms.Label
+$lblErase.Text = 'What this phone has is read when the page is opened.'
+$lblErase.ForeColor = [System.Drawing.Color]::DimGray
+$lblErase.AutoEllipsis = $true
+$lblErase.Location = New-Object System.Drawing.Point(396, 475)
+$lblErase.Size = New-Object System.Drawing.Size(300, 20)
+$tabTools.Controls.Add($lblErase)
+$toolTip.SetToolTip($lblErase, 'The memory card this phone has, and how full it is')
+
 $lblToolsHint = New-Object System.Windows.Forms.Label
-$lblToolsHint.Text = 'Every action here runs on all selected devices.'
+# true of everything on the page but the last box: erasing one phone by
+# mistake is bad enough without erasing three
+$lblToolsHint.Text = 'Every action here runs on all selected devices - except erasing, which runs on the one picked.'
 $lblToolsHint.ForeColor = [System.Drawing.Color]::DimGray
 $lblToolsHint.Location = New-Object System.Drawing.Point(12, 434)
 $lblToolsHint.Size = New-Object System.Drawing.Size(480, 20)
@@ -1991,6 +2032,10 @@ $grpHotspotBox = New-Object System.Windows.Forms.GroupBox
 $grpHotspotBox.Text = 'Hotspot and tethering'
 $tabTools.Controls.Add($grpHotspotBox)
 
+$grpEraseBox = New-Object System.Windows.Forms.GroupBox
+$grpEraseBox.Text = 'Factory reset and formatting'
+$tabTools.Controls.Add($grpEraseBox)
+
 foreach ($entry in @(
         @($grpConnect, @($btnPair, $btnMdns, $btnReconnect, $btnBugReport, $btnTcpip, $txtConnect,
             $btnConnect, $btnDisconnect, $btnRestartServer)),
@@ -2000,7 +2045,8 @@ foreach ($entry in @(
         @($grpImeBox, @($lblIme, $cmbIme, $btnImeList, $btnImeDisable, $btnImeEnable, $btnImeDefault,
             $btnImeReset, $lblImeHint)),
         @($grpHotspotBox, @($lblHotspot, $btnHotspotOn, $btnHotspotOff, $btnHotspotState, $btnHotspotSettings,
-            $btnHotspotInfo, $btnUsbTetherOn, $btnUsbTetherOff)))) {
+            $btnHotspotInfo, $btnUsbTetherOn, $btnUsbTetherOff)),
+        @($grpEraseBox, @($btnFormatPhone, $btnFormatCard, $btnEraseCancel, $lblErase)))) {
     foreach ($control in $entry[1]) {
         $tabTools.Controls.Remove($control)
         $entry[0].Controls.Add($control)
@@ -5706,6 +5752,183 @@ function Show-OneDeviceInfo {
 
     $ip = Get-DeviceIp -Serial $serial
     Write-Log ("Wi-Fi IP: " + $(if ($ip) { $ip } else { 'none' })) $colorInfo
+}
+
+# ---------------------------------------------------------------- erasing ----
+# Two buttons that destroy things, so each one asks twice: a question saying
+# what goes and what backup of it this PC has, and then the word, typed out.
+# Neither runs while a backup or a restore is running. shared\Erase.ps1 says
+# what Android allows: a card it will format on request, a phone it will not.
+
+function Update-EraseHint {
+    # what this phone has to erase. It costs two adb calls, so it is read when
+    # the page is opened or another phone is picked, not on a timer.
+    param([switch]$Force)
+
+    if (-not (Get-Command Get-DeviceCards -ErrorAction SilentlyContinue)) {
+        $lblErase.Text = 'shared\Erase.ps1 is not in the project folder.'
+        return
+    }
+    $serial = Get-SelectedSerial
+    if (-not $serial) {
+        $script:eraseFor = ''
+        $script:eraseCards = @()
+        $lblErase.Text = 'No phone picked in the list.'
+        return
+    }
+    if (-not $Force -and $script:eraseFor -eq $serial) { return }
+    $script:eraseFor = $serial
+    $cards = @(Get-DeviceCards -Serial $serial)
+    $script:eraseCards = $cards
+    if ($cards.Count -eq 0) {
+        $lblErase.Text = 'No memory card in this phone.'
+    } else {
+        $lblErase.Text = 'Memory card: ' + (Get-DeviceCardWords -Card $cards[0])
+    }
+}
+
+function Update-EraseIfShown {
+    # parenthesised: in command syntax the rest would arrive as arguments to
+    # Test-PageShown, not as a condition
+    if ((Test-PageShown -Page $tabTools) -and $script:busy -eq 0) { Update-EraseHint }
+}
+
+function Set-EraseBusyUi {
+    # an erase gets its own Cancel: emptying a card is the one thing here that
+    # takes long enough to want stopping, and the backup page's Cancel is not
+    # on this page
+    param([bool]$Running)
+
+    $btnEraseCancel.Enabled = $Running
+    $btnFormatPhone.Enabled = -not $Running
+    $btnFormatCard.Enabled = -not $Running
+}
+
+function Test-EraseWord {
+    # the second question: the word typed out, so that no run of clicks can
+    # erase anything by itself
+    param([string]$Title, [string]$Word = 'FORMAT')
+
+    $typed = [Microsoft.VisualBasic.Interaction]::InputBox(
+        "Type $Word to go ahead." + "`r`n`r`n" + 'Anything else leaves everything where it is.', $Title, '')
+    if ("$typed".Trim() -ceq $Word) { return $true }
+    Write-Log 'Nothing was erased.' $colorInfo
+    return $false
+}
+
+function Test-EraseAllowed {
+    # not while something else is using the phone
+    if (Test-BackupRunning) { Write-Log 'Wait for the backup to finish first.' $colorWarn; return $false }
+    if ($script:busy -gt 0) { Write-Log 'Wait for what is running to finish first.' $colorWarn; return $false }
+    if (-not (Get-Command Format-DeviceCard -ErrorAction SilentlyContinue)) {
+        Write-Log 'shared\Erase.ps1 is not in the project folder: nothing can be formatted from here.' $colorWarn
+        return $false
+    }
+    return $true
+}
+
+function Format-PhoneNow {
+    # the whole phone back to new
+    if (-not (Test-EraseAllowed)) { return }
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    # named exactly, from the same row Get-TargetSerial took the serial from:
+    # the rest of this page runs on everything selected, and this one must not
+    # leave any doubt about which phone it is
+    $model = 'this phone'
+    if ($lstDevices.SelectedItems.Count -gt 0) { $model = $lstDevices.SelectedItems[0].SubItems[2].Text }
+
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "Erase $model ($serial) and put it back to how it left the factory?" + "`r`n`r`n" +
+        'Apps, accounts, messages, photos, settings - all of it, on the phone itself. ' +
+        'A memory card is not part of this; it has its own button.' + "`r`n`r`n" +
+        (Get-DeviceBackupNote -Serial $serial) + "`r`n`r`n" +
+        'Android keeps the last step on the phone: this asks the phone to erase itself and, ' +
+        'where the phone refuses, opens its own reset screen for you.',
+        'Format the phone', 'YesNo', 'Warning')
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+    if (-not (Test-EraseWord -Title 'Format the phone')) { return }
+
+    Set-EraseBusyUi -Running $true
+    Start-BackupRun
+    try {
+        $result = Reset-DeviceToNew -Serial $serial
+    } finally {
+        Complete-BackupRun
+        Set-EraseBusyUi -Running $false
+    }
+    if ($result.Wiping) {
+        Send-BackupNotice -Title 'AndroidDC' -Text 'The phone is erasing itself and will restart as new.'
+    }
+}
+
+function Format-CardNow {
+    # the memory card, or - with no card in the phone - what is on the phone
+    if (-not (Test-EraseAllowed)) { return }
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $lblErase.Text = 'Reading what this phone has ...'
+    [System.Windows.Forms.Application]::DoEvents()
+    Update-EraseHint -Force
+    $cards = @($script:eraseCards)
+    if ($cards.Count -eq 0) { Clear-PhoneStorageNow -Serial $serial; return }
+
+    $card = $cards[0]
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "Format the memory card in $serial?" + "`r`n`r`n" +
+        (Get-DeviceCardWords -Card $card) + "`r`n`r`n" +
+        'Every file on the card goes, and a new empty filesystem is written by the phone itself. ' +
+        'The phone and its apps are not touched.' + "`r`n`r`n" +
+        'A backup only holds the card when "Memory card" was ticked when it was taken.',
+        'Format the memory card', 'YesNo', 'Warning')
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+    if (-not (Test-EraseWord -Title 'Format the memory card')) { return }
+
+    Set-EraseBusyUi -Running $true
+    Start-BackupRun
+    try {
+        $result = Format-DeviceCard -Serial $serial -Volume $card.Id
+        if (-not $result.Ok -and -not (Test-BackupStopped) -and $card.Path) {
+            # Android would not format it. Deleting every file on it needs no
+            # permission beyond the one adb already has on a card, so it is
+            # offered - it leaves the same card with nothing on it.
+            $second = [System.Windows.Forms.MessageBox]::Show(
+                'The phone would not format the card.' + "`r`n`r`n" +
+                'Delete every file and folder on it instead? The card keeps the filesystem it has.',
+                'Format the memory card', 'YesNo', 'Warning')
+            if ($second -eq [System.Windows.Forms.DialogResult]::Yes) {
+                $null = Clear-DeviceFiles -Serial $serial -Path $card.Path -Caption 'Erasing the card:'
+            }
+        }
+    } finally {
+        Complete-BackupRun
+        Set-EraseBusyUi -Running $false
+    }
+    Update-EraseHint -Force
+}
+
+function Clear-PhoneStorageNow {
+    # no card in the phone: what adb can still erase is the phone's own files
+    param([string]$Serial)
+
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "There is no memory card in $Serial." + "`r`n`r`n" +
+        "Empty the phone's own storage instead? Photos, videos, downloads, documents - " +
+        'everything under /sdcard that Android lets adb reach. Apps, accounts and settings stay ' +
+        'where they are; "Format the phone" is what clears those.',
+        'Format the memory card', 'YesNo', 'Warning')
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+    if (-not (Test-EraseWord -Title "Empty the phone's storage")) { return }
+
+    Set-EraseBusyUi -Running $true
+    Start-BackupRun
+    try {
+        $null = Clear-DeviceFiles -Serial $Serial -Path '/sdcard' -Caption 'Erasing:'
+    } finally {
+        Complete-BackupRun
+        Set-EraseBusyUi -Running $false
+    }
 }
 
 function Show-BatteryAndNetwork {
@@ -9630,7 +9853,12 @@ function Update-ToolsLayout {
         $btnHotspotSettings, $btnHotspotInfo)
     $null = Set-ButtonRowLeft -Left 76 -Top 58 -Buttons @($btnUsbTetherOn, $btnUsbTetherOff)
 
-    $lblToolsHint.SetBounds(12, (536 + $grow), [Math]::Max(80, $inner), 20)
+    $grpEraseBox.SetBounds(12, (536 + $grow), $inner, 62)
+    $null = Set-ButtonRowLeft -Left 12 -Top 24 -Buttons @($btnFormatPhone, $btnFormatCard, $btnEraseCancel)
+    $lblErase.SetBounds(($btnEraseCancel.Bounds.Right + 12), 29,
+        [Math]::Max(80, $inner - $btnEraseCancel.Bounds.Right - 24), 20)
+
+    $lblToolsHint.SetBounds(12, (604 + $grow), [Math]::Max(80, $inner), 20)
 }
 
 function Update-ScreenLayout {
@@ -11726,6 +11954,7 @@ $lstDevices.Add_SelectedIndexChanged({
     # another phone means other answers to "is this app on it": the apps in an
     # opened backup are read against the phone now picked
     Update-BackupAppsIfShown
+    Update-EraseIfShown
 })
 
 $btnInstallClient.Add_Click({
@@ -12034,6 +12263,8 @@ $tabsAdvanced.Add_SelectedIndexChanged({
     if ($tabsAdvanced.SelectedTab -eq $tabRoot -and $script:busy -eq 0 -and (Get-SelectedSerial)) {
         Update-RootAvailability
     }
+    # the same for the tools page: what there is to erase, read on arrival
+    Update-EraseIfShown
 })
 
 
@@ -12193,6 +12424,12 @@ $btnInstallApk.Add_Click({ Install-Apk })
 $btnScreenshot.Add_Click({ Get-DeviceScreenshot })
 $btnScreenToggle.Add_Click({ Switch-Screen })
 $btnReboot.Add_Click({ Restart-Device })
+$btnFormatPhone.Add_Click({ Format-PhoneNow })
+$btnFormatCard.Add_Click({ Format-CardNow })
+$btnEraseCancel.Add_Click({
+    Write-Log 'Stopping ...' $colorWarn
+    Stop-BackupRun -Reason 'you cancelled it'
+})
 $btnBattery.Add_Click({ Show-BatteryAndNetwork })
 $btnReverseList.Add_Click({ Show-ReverseTunnels })
 $btnKillRelays.Add_Click({ Stop-StrayRelays })

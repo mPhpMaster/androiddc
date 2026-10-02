@@ -71,7 +71,8 @@
                 <Button x:Name="ToolsReboot" Content="Reboot device" Style="{StaticResource DangerButton}" Margin="0,0,8,8"
                         ToolTip="Restarts every selected device, after asking"/>
               </WrapPanel>
-              <TextBlock Style="{StaticResource MutedLine}" Text="Every action here runs on all selected devices."/>
+              <TextBlock Style="{StaticResource MutedLine}" TextWrapping="Wrap"
+                         Text="Every action here runs on all selected devices - except erasing, which runs on the one picked."/>
             </StackPanel>
           </Border>
 
@@ -163,6 +164,26 @@
               </WrapPanel>
               <TextBlock Style="{StaticResource MutedLine}"
                          Text="The switches are pressed on the phone's settings page and confirmed from dumpsys tethering, so the phone must be unlocked; a second space cannot change them."/>
+            </StackPanel>
+          </Border>
+
+          <!-- The most destructive thing in the window, so it is the last card
+               on the page and both buttons ask twice. ..\..\shared\Erase.ps1
+               does the work, and says what Android allows: a card it will
+               format on request, a phone it will not. -->
+          <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="FACTORY RESET AND FORMATTING" Style="{StaticResource Caps}"/>
+              <WrapPanel>
+                <Button x:Name="ToolsFactoryReset" Style="{StaticResource DangerButton}" Content="Factory reset ..." Margin="0,0,8,8"
+                        ToolTip="This phone back to how it left the factory: apps, accounts, messages, photos, settings. It asks, then has you type the word; Android keeps the last tap on the phone itself"/>
+                <Button x:Name="ToolsFormatCard" Style="{StaticResource DangerButton}" Content="Format the memory ..." Margin="0,0,8,8"
+                        ToolTip="The memory card in this phone, formatted by the phone itself - every file on it goes, and nothing else is touched. With no card in the phone it offers to empty the phone's own storage instead"/>
+                <Button x:Name="ToolsEraseCancel" Content="Cancel" IsEnabled="False" Margin="0,0,8,8"
+                        ToolTip="Stops an erase where it is; what has already gone does not come back"/>
+              </WrapPanel>
+              <TextBlock x:Name="ToolsEraseWhat" Style="{StaticResource MutedLine}" TextWrapping="Wrap"
+                         Text="What this phone has is read when the page is opened."/>
             </StackPanel>
           </Border>
         </StackPanel>

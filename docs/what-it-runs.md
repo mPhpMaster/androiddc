@@ -184,6 +184,21 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 `adb backup` is **not** used: Android 12 and newer return almost nothing for it. What is inside
 an app cannot be read without root, by this or any other tool.
 
+## Factory reset and formatting
+
+| Purpose | Command |
+|---|---|
+| What storage this phone has | `adb shell sm list-volumes all`, and `adb shell df -k '<path>'` for how big and how full each one is |
+| Formatting a memory card | `adb shell sm format <volume>`, then `adb shell sm mount <volume>` if it did not come back by itself. Checked by reading `sm list-volumes` again and counting with `find '<path>' -type f \| wc -l` |
+| Emptying a card or `/sdcard` | `adb shell ls -A1 '<path>'`, then one `adb shell rm -rf '<path>/<name>'` per name at the top level, and the same `find \| wc -l` afterwards |
+| Asking the phone to factory reset itself | `adb shell am broadcast -a android.intent.action.FACTORY_RESET -p android --receiver-foreground --es android.intent.extra.REASON AndroidDC`. Refused on most phones: the receiver wants `MASTER_CLEAR`, which adb's shell does not hold |
+| Opening the phone's own reset screen | `adb shell cmd package resolve-activity --brief -a <action>` to find one that exists, then `adb shell am start -a <action>`. Tried in order: `com.android.settings.action.FACTORY_RESET`, `android.settings.BACKUP_AND_RESET_SETTINGS`, `android.settings.PRIVACY_SETTINGS`, `android.settings.SETTINGS` |
+
+What adb's shell is allowed to do here was read from the phone, not assumed:
+`adb shell dumpsys package com.android.shell` lists `MOUNT_FORMAT_FILESYSTEMS: granted=true`
+and no `MASTER_CLEAR` at all. That is why a card can be formatted from this PC and a phone
+cannot be wiped from it.
+
 ## Automation rules
 
 A rule runs nothing of its own: each action is the same function its button calls, so it runs

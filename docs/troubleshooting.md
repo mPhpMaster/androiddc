@@ -124,6 +124,26 @@ Drag it out next to the clock to keep it in sight.
 
 ## A backup or a restore did not do what I expected
 
+**Factory reset only opened a screen on the phone.** That is the normal answer. The reset
+broadcast needs `MASTER_CLEAR`, which Android does not give adb's shell, so the phone refuses
+it and AndroidDC opens the phone's own reset screen instead. Tap *Erase all data* there and
+enter the screen lock. The log says which of the two happened.
+
+**Formatting the memory card was refused.** `sm format` needs
+`MOUNT_FORMAT_FILESYSTEMS`, which adb's shell holds on the phones this was measured on. Where
+a ROM takes it away, AndroidDC offers to delete every file and folder on the card instead -
+that needs nothing special - or you can format it on the phone: *Settings > Storage >* the card
+*> Format*.
+
+**The card was formatted but has disappeared from the file list.** A new filesystem has a new
+serial, so the card is at a new path - `/storage/1A2B-3C4D` becomes something else. The line on
+the tools page says where it is now; press *Refresh* in Files, or reopen the page.
+
+**Some files would not go when I emptied a card or the phone's storage.** They are counted and
+named in the log rather than passed over. `Android/data` and `Android/obb` have been closed to
+adb since Android 11, and a file an app is holding open can also refuse. What is left is
+reported as a number, not hidden.
+
 **The backup takes a long time.** Most of it is the cable: a phone on USB 2.0 hands files over
 at roughly 15-25 MB/s, so 30 GB is around half an hour however it is fetched. Two things do
 help: untick *Pack into one .zip*, which saves a second pass over everything (about 40% of the

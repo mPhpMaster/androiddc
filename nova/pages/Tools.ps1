@@ -9,6 +9,8 @@ $toolsPage = Register-Page -Key 'tools' -Title 'Tools' -Glyph 'E90F' -Section 'S
 $script:rootCheckedSerial = $null   # the phone the Root page's marks were read from
 $script:toolsDnsSerial = $null      # the phone the DNS line was read from
 $script:toolsImeSerial = $null      # the phone the keyboard list was read from
+$script:eraseFor = ''               # the phone the erase line was read from
+$script:eraseCards = @()            # and the cards it found in it
 $script:rootButtons = New-Object System.Collections.ArrayList
 
 # ------------------------------------------------------------ inner pages ----
@@ -29,7 +31,7 @@ function Update-ToolsShown {
         return
     }
     if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability }
-    else { $null = Show-DnsState -Quiet }
+    else { $null = Show-DnsState -Quiet; Update-ToolsErase }
 }
 
 function Update-ToolsForDevice {
@@ -48,6 +50,7 @@ function Update-ToolsForDevice {
     if ($selected -ne $script:rootCheckedSerial) {
         if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability } else { Reset-RootAvailability }
     }
+    if ($selected -ne $script:eraseFor -and (Test-ToolsTabShown -Tab 'device')) { Update-ToolsErase }
     if ($script:toolsImeSerial -and $selected -ne $script:toolsImeSerial) {
         # another phone's keyboards are not this phone's
         $ui.ToolsIme.Items.Clear()
@@ -1184,6 +1187,167 @@ $btnRootKeygen = New-RootAction -Name 'ToolsRootKeygen' -Parent $ui.ToolsRootOth
 $btnRootDevPath = New-RootAction -Name 'ToolsRootDevPath' -Parent $ui.ToolsRootOtherRows -Caption 'get-devpath' -Command 'adb get-devpath' `
     -Why 'Prints the USB device path.' -Needs 'nothing'
 
+# ------------------------------------------------------------------ erasing ---
+# Two buttons that destroy things, so each one asks twice: a question saying
+# what goes and what backup of it this PC has, and then the word, typed out.
+# Neither runs while a backup or a restore is running.
+
+function Test-EraseShared {
+    # shared\Erase.ps1 was found and loaded
+    return [bool](Get-Command Format-DeviceCard -ErrorAction SilentlyContinue)
+}
+
+function Set-ToolsEraseBusy {
+    # an erase gets its own Cancel: emptying a card is the one thing on this
+    # page that takes long enough to want stopping
+    param([bool]$Running)
+
+    $ui.ToolsEraseCancel.IsEnabled = $Running
+    $ui.ToolsFactoryReset.IsEnabled = -not $Running
+    $ui.ToolsFormatCard.IsEnabled = -not $Running
+}
+
+function Update-ToolsErase {
+    # what this phone has to erase. It costs two adb calls, so it is read when
+    # the page is opened or the phone changes, not on a timer.
+    param([switch]$Force)
+
+    if (-not (Test-EraseShared)) {
+        $ui.ToolsEraseWhat.Text = 'shared\Erase.ps1 is not in the project folder.'
+        return
+    }
+    $serial = Get-SelectedSerial
+    if (-not $serial) {
+        $script:eraseFor = ''
+        $script:eraseCards = @()
+        $ui.ToolsEraseWhat.Text = 'No phone picked.'
+        return
+    }
+    if (-not $Force -and $script:eraseFor -eq $serial) { return }
+    $script:eraseFor = $serial
+    $cards = @(Get-DeviceCards -Serial $serial)
+    $script:eraseCards = $cards
+    if ($cards.Count -eq 0) {
+        $ui.ToolsEraseWhat.Text = 'No memory card in this phone.'
+    } else {
+        $ui.ToolsEraseWhat.Text = 'Memory card: ' + (Get-DeviceCardWords -Card $cards[0])
+    }
+}
+
+function Test-ToolsEraseWord {
+    # the second question: the word typed out, so that no run of clicks can
+    # erase anything by itself
+    param([string]$Title, [string]$Word = 'FORMAT')
+
+    $typed = Show-InputDialog -Title $Title -Fields @("Type $Word") -OkText 'Go ahead' `
+        -Hint "Anything but $Word leaves everything where it is."
+    if ($null -ne $typed -and "$($typed[0])".Trim() -ceq $Word) { return $true }
+    Write-Log 'Nothing was erased.' $colorInfo
+    return $false
+}
+
+function Test-ToolsEraseAllowed {
+    if (-not (Test-EraseShared)) {
+        Write-Log 'shared\Erase.ps1 is not in the project folder: nothing can be formatted from here.' $colorWarn
+        return $false
+    }
+    if (Test-BackupRunning) { Write-Log 'Wait for the backup to finish first.' $colorWarn; return $false }
+    return $true
+}
+
+function Reset-ToolsPhone {
+    if (-not (Test-ToolsEraseAllowed)) { return }
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    # the serial, not "this phone": the rest of this page runs on everything
+    # selected, and this one must leave no doubt about which phone it is
+    $words = "Erase $serial and put it back to how it left the factory?`n`n" +
+        'Apps, accounts, messages, photos, settings - all of it, on the phone itself. ' +
+        "A memory card is not part of this; it has its own button.`n`n" +
+        (Get-DeviceBackupNote -Serial $serial) + "`n`n" +
+        'Android keeps the last step on the phone: this asks the phone to erase itself and, ' +
+        'where the phone refuses, opens its own reset screen for you.'
+    if (-not (Show-Confirm -Title 'Format the phone' -Text $words -Yes 'Erase it ...' -Danger)) { return }
+    if (-not (Test-ToolsEraseWord -Title 'Format the phone')) { return }
+
+    Set-ToolsEraseBusy -Running $true
+    Start-BackupRun
+    try {
+        $result = Reset-DeviceToNew -Serial $serial
+    } finally {
+        Complete-BackupRun
+        Set-ToolsEraseBusy -Running $false
+    }
+    if ($result.Wiping) {
+        Show-Toast -Text 'The phone is erasing itself' -Color 'warn'
+        Send-BackupNotice -Title 'AndroidDC' -Text 'The phone is erasing itself and will restart as new.'
+    } elseif ($result.Opened) {
+        Show-Toast -Text 'The reset screen is open on the phone' -Color 'warn'
+    }
+}
+
+function Format-ToolsCard {
+    if (-not (Test-ToolsEraseAllowed)) { return }
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $ui.ToolsEraseWhat.Text = 'Reading what this phone has ...'
+    Invoke-Pump
+    Update-ToolsErase -Force
+    $cards = @($script:eraseCards)
+    if ($cards.Count -eq 0) { Clear-ToolsStorage -Serial $serial; return }
+
+    $card = $cards[0]
+    $words = "Format the memory card in $serial?`n`n" + (Get-DeviceCardWords -Card $card) + "`n`n" +
+        'Every file on the card goes, and a new empty filesystem is written by the phone itself. ' +
+        "The phone and its apps are not touched.`n`n" +
+        'A backup only holds the card when "Memory card" was ticked when it was taken.'
+    if (-not (Show-Confirm -Title 'Format the memory card' -Text $words -Yes 'Format it ...' -Danger)) { return }
+    if (-not (Test-ToolsEraseWord -Title 'Format the memory card')) { return }
+
+    Set-ToolsEraseBusy -Running $true
+    Start-BackupRun
+    try {
+        $result = Format-DeviceCard -Serial $serial -Volume $card.Id
+        if (-not $result.Ok -and -not (Test-BackupStopped) -and $card.Path) {
+            # Android would not format it. Deleting every file on it needs no
+            # permission beyond the one adb already has on a card, so it is
+            # offered - it leaves the same card with nothing on it.
+            if (Show-Confirm -Title 'Format the memory card' -Danger -Yes 'Delete them ...' `
+                -Text ("The phone would not format the card.`n`n" +
+                    'Delete every file and folder on it instead? The card keeps the filesystem it has.')) {
+                $null = Clear-DeviceFiles -Serial $serial -Path $card.Path -Caption 'Erasing the card:'
+            }
+        }
+    } finally {
+        Complete-BackupRun
+        Set-ToolsEraseBusy -Running $false
+    }
+    Update-ToolsErase -Force
+}
+
+function Clear-ToolsStorage {
+    # no card in the phone: what adb can still erase is the phone's own files
+    param([string]$Serial)
+
+    $words = "There is no memory card in $Serial.`n`n" +
+        "Empty the phone's own storage instead? Photos, videos, downloads, documents - " +
+        'everything under /sdcard that Android lets adb reach. Apps, accounts and settings stay ' +
+        'where they are; "Format the phone" is what clears those.'
+    if (-not (Show-Confirm -Title 'Format the memory card' -Text $words -Yes 'Empty it ...' -Danger)) { return }
+    if (-not (Test-ToolsEraseWord -Title "Empty the phone's storage")) { return }
+
+    Set-ToolsEraseBusy -Running $true
+    Start-BackupRun
+    try {
+        $null = Clear-DeviceFiles -Serial $Serial -Path '/sdcard' -Caption 'Erasing:'
+    } finally {
+        Complete-BackupRun
+        Set-ToolsEraseBusy -Running $false
+    }
+}
+
 # ------------------------------------------------------------------ events ----
 
 foreach ($choice in @('automatic (opportunistic)', 'off', 'custom hostname')) { $null = $ui.ToolsDnsMode.Items.Add($choice) }
@@ -1257,5 +1421,17 @@ $btnRootEmu.Button.Add_Click({ Start-ToolsEmuCommand })
 $btnRootJdwp.Button.Add_Click({ Show-JdwpProcesses })
 $btnRootKeygen.Button.Add_Click({ Save-AdbKeygen })
 $btnRootDevPath.Button.Add_Click({ Invoke-RootAction -Arguments @('get-devpath') })
+$ui.ToolsFactoryReset.Add_Click({ Reset-ToolsPhone })
+$ui.ToolsFormatCard.Add_Click({ Format-ToolsCard })
+$ui.ToolsEraseCancel.Add_Click({
+    Write-Log 'Stopping ...' $colorWarn
+    Stop-BackupRun -Reason 'you cancelled it'
+})
+
+if (-not (Test-EraseShared)) {
+    $ui.ToolsEraseWhat.Text = 'shared\Erase.ps1 is not in the project folder: nothing can be formatted from here.'
+    $ui.ToolsFactoryReset.IsEnabled = $false
+    $ui.ToolsFormatCard.IsEnabled = $false
+}
 
 Register-Setting -Name 'Tools.Connect' -Get { $ui.ToolsConnect.Text } -Set { param($v) $ui.ToolsConnect.Text = "$v" }

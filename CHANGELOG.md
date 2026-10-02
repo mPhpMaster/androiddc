@@ -4,6 +4,31 @@
 
 ## Unreleased
 
+### A factory reset, and a memory card formatted
+
+Two buttons at the bottom of *Advanced > Device tools*, for any Android phone. Both ask twice -
+a question saying what will go, then the word `FORMAT` typed out - and neither runs while a
+backup or a restore is running.
+
+* **Factory reset** puts the phone back to how it left the factory. The question also says what
+  backup of *that* phone this PC has and how old it is. Then: the phone is asked to erase itself
+  with the `FACTORY_RESET` broadcast and, where Android refuses it - adb's shell does not hold
+  `MASTER_CLEAR`, which is how it should be - the phone's own reset screen is opened and the
+  last tap happens on the phone. The log says which of the two it was.
+* **Format the memory** hands the card to Android's own storage manager (`sm format`), which
+  unmounts it, writes a new empty filesystem and mounts it again. This one adb really is
+  allowed to do: `dumpsys package com.android.shell` says `MOUNT_FORMAT_FILESYSTEMS:
+  granted=true`. The card comes back under a new serial, and the page says where it is now.
+* Where a ROM refuses even that, it offers to **delete every file on the card** instead, which
+  needs no permission adb does not already have. With **no card in the phone**, it offers to
+  empty the phone's own storage - everything under `/sdcard` - leaving apps and settings alone.
+* Emptying goes name by name from the top level, so the log says what went, **Cancel** is
+  answered between names, and what the phone would not let go is counted and named rather than
+  passed over.
+* Nothing is claimed unread: a format is checked by reading the volume back and counting the
+  files on it, an erase by counting what is left. A card is also found on a ROM without `sm`,
+  including the sixteen-hex-digit name an exFAT card gets - measured on one.
+
 ### A backup can be named, deleted, brought up to date - and takes less time
 
 * **Call it what you like**: a name box beside the parts. It goes into the file's name and into

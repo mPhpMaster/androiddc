@@ -160,13 +160,61 @@ awake, no audio, view only, power off on close, no screensaver, keyboard/mouse/g
 | Private DNS | mode (automatic / off / custom hostname), hostname box, **Read DNS**, **AD** (fills in AdGuard), **Apply**, and a line showing the resolvers actually in use |
 | Keyboard (IME) | list, enable, disable, set default, reset |
 | Hotspot | Wi-Fi hotspot on/off, read its state, open the settings screen, USB tether on/off |
+| Factory reset and formatting | **Factory reset**, **Format the memory**, and a Cancel of their own |
 
-The DNS line refreshes by itself when you open the tab or pick another device.
+The DNS line, and the line saying what there is to erase, refresh by themselves when you open
+the tab or pick another device.
 
 **Pair over Wi-Fi** is the cable-free route on Android 11 and newer. On the phone open
 *Developer options → Wireless debugging → Pair device with pairing code*, type the address and
 the six digits it shows, and AndroidDC pairs and then offers to connect. The pairing port and
 the debugging port are different numbers on that same screen; it asks for both.
+
+#### Factory reset and formatting
+
+Two buttons, for any Android phone, at the bottom of the page. Both ask twice - a question
+saying what will go, and then the word `FORMAT` typed out - and neither runs while a backup or
+a restore is running.
+
+Unlike everything else on this page, these two act on **one phone**: the one picked in the
+device list, named by model and serial in the question, never on everything selected.
+
+**Factory reset** puts the phone back to how it left the factory: apps, accounts, messages,
+photos, settings. The question also says what backup of *this* phone this PC has and how old it
+is, which is the one thing a program on this side of the cable can still help with.
+
+What happens then depends on the phone, and the log says which it was:
+
+* it asks the phone to erase itself (`android.intent.action.FACTORY_RESET`). A phone that takes
+  it erases itself at once and restarts as new;
+* most phones refuse, because adb's shell does not hold `MASTER_CLEAR`. The phone's own reset
+  screen is then opened for you, and the last tap - plus the screen lock - happens on the
+  phone. That is Android's rule, not a shortcoming here: a PC that could wipe a phone over a
+  cable without anybody touching the phone would be a hole.
+
+A memory card is not part of a factory reset. It has its own button.
+
+**Format the memory** formats the memory card in the phone, by handing the job to Android's own
+storage manager (`sm format`), which unmounts the card, writes a new empty filesystem and mounts
+it again. This one adb *is* allowed to do: its shell holds `MOUNT_FORMAT_FILESYSTEMS`. The new
+filesystem has a new serial, so the card appears at a new path afterwards, and the line on the
+page says where.
+
+* Where Android refuses even that, it offers to delete every file and folder on the card
+  instead, which needs no permission beyond what adb already has. The card keeps the filesystem
+  it has and ends up empty either way.
+* With **no card in the phone**, it offers to empty the phone's own storage instead - photos,
+  videos, downloads, documents, everything under `/sdcard` that Android lets adb reach. Apps,
+  accounts and settings stay; *Factory reset* is what clears those.
+* Emptying is done name by name from the top level, so the log says what went, and **Cancel**
+  is answered between names. What has already gone does not come back.
+
+Nothing is ever claimed without being checked: a format is verified by reading the volume back
+and counting the files on it, and an erase by counting what is left. A refusal is reported as a
+refusal.
+
+> Take a backup first. There is no undoing either of these, and the backup page is the other
+> half of this one: back up, erase, restore.
 
 ### Root / recovery
 

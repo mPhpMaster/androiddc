@@ -43,7 +43,7 @@ list the rules you have set.
 |---|---|
 | **Device** | Details of the selected phone, live screenshot with click-to-tap, quick toggles (Wi-Fi, Bluetooth, location, rotation, torch, battery saver, haptics, show taps, stay awake, developer options), call / SMS / USSD, and one-click mirroring |
 | **Tethering** | PC → phone with [gnirehtet](https://github.com/Genymobile/gnirehtet) (reverse tethering), and phone → PC over USB or a proxy |
-| **Advanced** | Five pages: every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, input modes), more of them (recording format and time limit, orientation, window placement, shortcut keys), the adb tools (wireless pairing, mDNS discovery, bug report, private DNS, IME, hotspot), a Root / recovery page that shows what your device cannot do and says why, and Automation (start with Windows, and what each phone does when it is plugged in) |
+| **Advanced** | Five pages: every [scrcpy](https://github.com/Genymobile/scrcpy) option (codec, bit rate, fps, virtual display, OTG, input modes), more of them (recording format and time limit, orientation, window placement, shortcut keys), the adb tools (wireless pairing, mDNS discovery, bug report, private DNS, IME, hotspot, factory reset and formatting), a Root / recovery page that shows what your device cannot do and says why, and Automation (start with Windows, and what each phone does when it is plugged in) |
 | **Apps** | What is installed, by name as well as package, launch, force stop, uninstall, open in its own scrcpy window, and install `.apk` or a split `.xapk` / `.apks` / `.apkm` |
 | **Contacts / SMS** | Read, add, edit, delete, call, send |
 | **Cam / Mic** | Front and rear camera as a video source with zoom, and the phone microphone or output streamed or recorded on the PC, with the codec, encoder and bit rate read from the phone |
@@ -52,6 +52,7 @@ list the rules you have set.
 | **Running** | Live process list with memory and state, stop anything |
 | **Wi-Fi / Bluetooth / NFC** | Radios on and off, scan, join or forget a network, paired devices |
 | **Backup** | A copy of the phone on this PC as one `.zip` - files, the apps' APK files, contacts, messages, the call log, settings - with a list of the backups you have, a look inside any of them, and putting one back |
+| **Factory reset** | Any phone back to new, and the memory card in it formatted by the phone itself - each behind two questions and the word typed out, in *Advanced > Device tools* |
 | **Users** | Multi-user: list, switch, add, remove, turn the user switcher on or off |
 | **Shell** | A live adb shell, and a logcat viewer with a level, a filter and save |
 

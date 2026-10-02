@@ -78,6 +78,9 @@ if (Test-Path -LiteralPath $trayScript -PathType Leaf) { . $trayScript }
 # backing the phone up to this PC, and putting a backup back
 $backupScript = Join-Path $script:toolsRoot 'shared\Backup.ps1'
 if (Test-Path -LiteralPath $backupScript -PathType Leaf) { . $backupScript }
+# formatting a memory card, and asking the phone to reset itself
+$eraseScript = Join-Path $script:toolsRoot 'shared\Erase.ps1'
+if (Test-Path -LiteralPath $eraseScript -PathType Leaf) { . $eraseScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen
