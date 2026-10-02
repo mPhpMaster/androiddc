@@ -15,8 +15,13 @@ Say '== loaded =='
 Say ("  shared\Backup.ps1 found in the project folder   {0}" -f (Mark (Test-BackupShared)))
 $parts = @(Get-BackupParts)
 Say ("  {0} parts: {1}   {2}" -f $parts.Count, ((@($parts | ForEach-Object { $_.Id })) -join ', '),
-    (Mark ((@($parts | ForEach-Object { $_.Id }) -join ',') -eq 'files,apps,personal,settings')))
-Say ("  the page ticks all four by default   {0}" -f (Mark (((Get-BackupPageParts) -join ',') -eq 'files,apps,personal,settings')))
+    (Mark ((@($parts | ForEach-Object { $_.Id }) -join ',') -eq 'files,card,apps,personal,settings')))
+Say ("  the page ticks four of them, the card left off   {0}" -f (Mark (
+    ((Get-BackupPageParts) -join ',') -eq 'files,apps,personal,settings' -and -not $ui.BackupCard.IsChecked)))
+$ui.BackupCard.IsChecked = $true
+Say ("  ticking the card puts it in: {0}   {1}" -f ((Get-BackupPageParts) -join ','),
+    (Mark (((Get-BackupPageParts) -join ',') -eq 'files,card,apps,personal,settings')))
+$ui.BackupCard.IsChecked = $false
 
 Say ''
 Say '== a backup folder, packed into one .zip =='

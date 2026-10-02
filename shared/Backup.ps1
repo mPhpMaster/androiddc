@@ -386,6 +386,8 @@ function Get-BackupParts {
     return @(
         [PSCustomObject]@{ Id = 'files'; Label = 'Phone files (internal storage)'
             Note = 'Photos, videos, downloads, documents - everything under /sdcard that Android lets adb read' }
+        [PSCustomObject]@{ Id = 'card'; Label = 'Memory card (external storage)'
+            Note = 'What is on the card in the phone, if there is one. It is left out unless you ask for it: a card can be bigger than the phone' }
         [PSCustomObject]@{ Id = 'apps'; Label = 'Apps (their APK files)'
             Note = 'The apps you installed, so they can be installed again. What is inside an app stays on the phone: Android does not let adb read it without root' }
         [PSCustomObject]@{ Id = 'personal'; Label = 'Contacts, messages and call log'
@@ -452,6 +454,31 @@ function Get-BackupStorageEntries {
         $entries += $name
     }
     return $entries
+}
+
+function Get-BackupCardPaths {
+    <#
+        The memory cards mounted in this phone, as the paths their files are
+        at: /storage/1A2B-3C4D. Internal storage is /storage/emulated/0 and is
+        not one of them; a card that is in the phone but not mounted has
+        nothing to read and is left out.
+    #>
+    param([string]$Serial)
+
+    $paths = New-Object System.Collections.Generic.List[string]
+    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('sm', 'list-volumes', 'public')).Lines) {
+        # "public:179,65 mounted 1A2B-3C4D"
+        if ("$line" -match '^\s*public:\S+\s+mounted\s+(\S+)\s*$') { $null = $paths.Add('/storage/' + $Matches[1]) }
+    }
+    if ($paths.Count -eq 0) {
+        # sm is not on every ROM; the card is still where Android puts it, under
+        # a name of the form 1A2B-3C4D
+        foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-1', '/storage')).Lines) {
+            $name = "$line".Trim()
+            if ($name -match '^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$') { $null = $paths.Add('/storage/' + $name) }
+        }
+    }
+    return $paths.ToArray()
 }
 
 function Get-BackupRemoteSize {
@@ -521,12 +548,72 @@ function Backup-PhoneFiles {
     return [PSCustomObject]@{ Files = $count; Bytes = $bytes; Folders = @($entries); Refused = @($refused) }
 }
 
+function Backup-PhoneCard {
+    # the memory card onto this PC, one top folder at a time like /sdcard. The
+    # card's own name is kept as the folder it goes into, so two cards - or a
+    # card and the phone - never land on top of each other.
+    param([string]$Serial, [string]$Folder)
+
+    $target = Join-Path $Folder 'card'
+    $null = New-Item -ItemType Directory -Path $target -Force
+    $cards = @(Get-BackupCardPaths -Serial $Serial)
+    if ($cards.Count -eq 0) {
+        Write-Log 'Backup: no memory card is mounted in this phone, so that part is empty.' $colorWarn
+        return [PSCustomObject]@{ Cards = @(); Files = 0; Bytes = [long]0; Refused = @() }
+    }
+
+    $refused = @()
+    foreach ($card in $cards) {
+        if (Test-BackupStopped) { break }
+        $name = Split-Path -Leaf $card
+        $cardFolder = Join-Path $target $name
+        $null = New-Item -ItemType Directory -Path $cardFolder -Force
+
+        $entries = @()
+        foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-1', $card)).Lines) {
+            $entry = "$line".Trim()
+            if (-not $entry -or $entry -match 'Permission denied|No such file|Not a directory|I/O error') { continue }
+            $entries += $entry
+        }
+        Write-Log "Backup: the card $name, $($entries.Count) folder(s) ..." $colorStep
+
+        $index = 0
+        foreach ($entry in $entries) {
+            if (Test-BackupStopped) { break }
+            $index++
+            Write-BackupProgress -Text "Card: $entry" -Done $index -Total $entries.Count
+            Write-Log "  pulling $card/$entry ..." $colorInfo
+
+            $local = Join-Path $cardFolder ($entry -replace '/', [string][char]92)
+            $parent = Split-Path -Parent $local
+            if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
+
+            $expected = Get-BackupRemoteSize -Serial $Serial -Path "$card/$entry"
+            $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', "$card/$entry", $local) `
+                -Caption "Card: $entry" -Expected $expected -OnPoll { Get-BackupFolderSize -Path $local }.GetNewClosure()
+            if ($result.Stopped) { break }
+            if ($result.ExitCode -ne 0) {
+                $refused += $entry
+                Write-Log ('  ' + $result.Text) $colorWarn
+            }
+        }
+    }
+
+    $count = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
+    $bytes = Get-BackupFolderSize -Path $target
+    if ($refused.Count -gt 0) { Write-Log ('  the card refused: ' + ($refused -join ', ')) $colorWarn }
+    Write-Log ("  $count file(s), " + (Format-FileSize -Bytes $bytes)) $colorGood
+    return [PSCustomObject]@{ Cards = @($cards); Files = $count; Bytes = $bytes; Refused = @($refused) }
+}
+
 function Backup-PhoneApps {
     # the APK of every app the user installed, splits included, and what each
     # one is called and which version it is - asked while the phone still has
     # them, so a backup read a year later says WhatsApp, not com.whatsapp, even
-    # for an app this phone no longer has
-    param([string]$Serial, [string]$Folder)
+    # for an app this phone no longer has.
+    # SkipDone is for carrying a stopped backup on: an app whose APKs are
+    # already here, with the sizes the phone says they have, is left alone.
+    param([string]$Serial, [string]$Folder, [switch]$SkipDone)
 
     $target = Join-Path $Folder 'apps'
     $null = New-Item -ItemType Directory -Path $target -Force
@@ -562,6 +649,17 @@ function Backup-PhoneApps {
         if ($paths.Count -eq 0) { Write-Log "  $package : no readable APK" $colorWarn; continue }
 
         $appFolder = Join-Path $target $package
+        if ($SkipDone -and (Test-BackupAppHere -Serial $Serial -Folder $appFolder -RemotePaths $paths)) {
+            $apps += [PSCustomObject]@{
+                Package = $package
+                Name    = $(if ($labels.ContainsKey($package)) { "$($labels[$package])" } else { '' })
+                Version = $(if ($versions.ContainsKey($package)) { "$($versions[$package])" } else { '' })
+                Files   = @(@(Get-ChildItem -LiteralPath $appFolder -Filter *.apk -File -ErrorAction SilentlyContinue) |
+                    ForEach-Object { $_.Name })
+                Bytes   = (Get-BackupFolderSize -Path $appFolder)
+            }
+            continue
+        }
         $null = New-Item -ItemType Directory -Path $appFolder -Force
         $saved = @()
         foreach ($path in $paths) {
@@ -717,6 +815,7 @@ function Invoke-PhoneBackup {
         Created  = $started.ToString('s')
         Parts    = @($wanted)
         Files    = $null
+        Card     = $null
         Apps     = @()
         Personal = $null
         Settings = @()
@@ -727,59 +826,347 @@ function Invoke-PhoneBackup {
     }
 
     # the packing is inside the run, so Cancel still works while it packs
-    $path = $folder
-    $kind = 'folder'
-    $packed = $null
     try {
         try {
             if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Backup-PhoneFiles -Serial $Serial -Folder $folder }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'card') { $manifest.Card = Backup-PhoneCard -Serial $Serial -Folder $folder }
             if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder) }
             if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
             if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
         } finally {
-            $manifest.Bytes = Get-BackupFolderSize -Path $folder
-            $manifest.Finished = ([datetime]::Now).ToString('s')
-            $manifest.Complete = -not (Test-BackupStopped)
-            $manifest.Stopped = Get-BackupStopReason
-            Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -InputObject $manifest -Depth 6)
+            Save-BackupManifest -Manifest $manifest -Folder $folder
         }
-
-        if ($manifest.Complete) {
-            $packed = Compress-BackupFolder -Folder $folder -ZipPath $zipPath
-            if ($packed.Ok) {
-                $path = $zipPath
-                $kind = 'zip'
-                Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
-            } elseif ($packed.Stopped) {
-                Write-Log "  Packing was stopped ($($packed.Stopped)); the files are kept in the folder." $colorWarn
-            } else {
-                Write-Log "  It could not be packed ($($packed.Error)); the files are kept in the folder." $colorWarn
-            }
-        }
+        $result = Complete-PhoneBackup -Serial $Serial -Folder $folder -ZipPath $zipPath -Manifest $manifest -Started $started
     } finally {
         Complete-BackupRun
     }
 
-    $minutes = ([datetime]::Now - $started).TotalMinutes
-    $size = Format-FileSize -Bytes $manifest.Bytes
-    $where = [System.IO.Path]::GetFileName($path)
-    if ($manifest.Complete) {
-        $packedSize = if ($packed -and $packed.Ok) { ', ' + (Format-FileSize -Bytes $packed.Bytes) + ' packed' } else { '' }
-        Write-Log ("Backup done: $size$packedSize" + (' in {0:N1} minute(s).' -f $minutes)) $colorGood
-        Send-BackupNotice -Title 'Backup done' -Text "$size from $Serial is in $where."
-    } else {
-        Write-Log ("Backup stopped ($($manifest.Stopped)) after $size" + (' and {0:N1} minute(s).' -f $minutes)) $colorWarn
-        Write-Log '  What was already pulled is kept, and the manifest says this backup is not complete.' $colorInfo
-        Send-BackupNotice -Title 'Backup stopped' -Text "$($manifest.Stopped). $size was kept in $where."
-    }
-    Write-BackupProgress -Text $(if ($manifest.Complete) { 'Backup done' } else { "Backup stopped: $($manifest.Stopped)" }) -Done 1 -Total 1
-
-    $result = [PSCustomObject]$manifest
-    Add-Member -InputObject $result -NotePropertyName 'Path' -NotePropertyValue $path -Force
-    Add-Member -InputObject $result -NotePropertyName 'Kind' -NotePropertyValue $kind -Force
     # the backups list looks where the last backup was put
     $null = Set-BackupFolderPath -Folder $Destination
     return $result
+}
+
+function Save-BackupManifest {
+    # the manifest as things stand: how big it is, when this run ended, and
+    # whether everything that was asked for was taken
+    param($Manifest, [string]$Folder)
+
+    $Manifest.Bytes = Get-BackupFolderSize -Path $Folder
+    $Manifest.Finished = ([datetime]::Now).ToString('s')
+    $Manifest.Complete = -not (Test-BackupStopped)
+    $Manifest.Stopped = Get-BackupStopReason
+    Save-BackupText -Path (Join-Path $Folder 'manifest.json') -Text (ConvertTo-Json -InputObject $Manifest -Depth 6)
+}
+
+function Complete-PhoneBackup {
+    <#
+        How a backup ends, whether it ran straight through or was carried on:
+        the pulled folder is packed into the .zip beside it when nothing
+        stopped, the log and a notification say how it went, and the caller
+        gets the manifest with the path it ended up at.
+    #>
+    param([string]$Serial, [string]$Folder, [string]$ZipPath, $Manifest, [datetime]$Started, [string]$Verb = 'Backup')
+
+    $path = $Folder
+    $kind = 'folder'
+    $packed = $null
+    if ($Manifest.Complete) {
+        $packed = Compress-BackupFolder -Folder $Folder -ZipPath $ZipPath
+        if ($packed.Ok) {
+            $path = $ZipPath
+            $kind = 'zip'
+            Remove-Item -LiteralPath $Folder -Recurse -Force -ErrorAction SilentlyContinue
+        } elseif ($packed.Stopped) {
+            Write-Log "  Packing was stopped ($($packed.Stopped)); the files are kept in the folder." $colorWarn
+        } else {
+            Write-Log "  It could not be packed ($($packed.Error)); the files are kept in the folder." $colorWarn
+        }
+    }
+
+    $minutes = ([datetime]::Now - $Started).TotalMinutes
+    $size = Format-FileSize -Bytes $Manifest.Bytes
+    $where = [System.IO.Path]::GetFileName($path)
+    if ($Manifest.Complete) {
+        $packedSize = if ($packed -and $packed.Ok) { ', ' + (Format-FileSize -Bytes $packed.Bytes) + ' packed' } else { '' }
+        Write-Log ("$Verb done: $size$packedSize" + (' in {0:N1} minute(s).' -f $minutes)) $colorGood
+        Send-BackupNotice -Title 'Backup done' -Text "$size from $Serial is in $where."
+    } else {
+        Write-Log ("$Verb stopped ($($Manifest.Stopped)) after $size" + (' and {0:N1} minute(s).' -f $minutes)) $colorWarn
+        Write-Log ('  What was already pulled is kept. Press "Continue this one" in My backups to carry it on, ' +
+            'even after closing the program.') $colorInfo
+        Send-BackupNotice -Title 'Backup stopped' -Text "$($Manifest.Stopped). $size was kept in $where."
+    }
+    Write-BackupProgress -Text $(if ($Manifest.Complete) { "$Verb done" } else { "$Verb stopped: $($Manifest.Stopped)" }) -Done 1 -Total 1
+
+    $result = [PSCustomObject]$Manifest
+    Add-Member -InputObject $result -NotePropertyName 'Path' -NotePropertyValue $path -Force
+    Add-Member -InputObject $result -NotePropertyName 'Kind' -NotePropertyValue $kind -Force
+    return $result
+}
+
+# ------------------------------------------- carrying a stopped backup on ----
+# A backup that stopped leaves its folder behind, with a manifest saying it is
+# not complete. Carrying it on needs nothing that was remembered at the time:
+# the phone is asked what it has, the folder is read for what came over, and
+# only the difference is fetched. So a backup stopped yesterday, by a cable
+# pulled out or by the program being closed, carries on today.
+
+function Get-BackupRemoteFiles {
+    # every file under a folder on the phone, with its size, in one call:
+    # "1130149 /sdcard/DCIM/Camera/VID.mp4"
+    param([string]$Serial, [string]$Remote)
+
+    $map = @{}
+    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+        "find '$Remote' -type f -exec stat -c '%s %n' {} + 2>/dev/null")).Text
+    foreach ($line in ("$text" -split "`r?`n")) {
+        if ("$line" -match '^\s*(\d+)\s+(/.+?)\s*$') { $map[$Matches[2]] = [long]$Matches[1] }
+    }
+    return $map
+}
+
+function Get-BackupRemoteSizes {
+    # the sizes of named files on the phone, in one call
+    param([string]$Serial, [string[]]$Paths)
+
+    $map = @{}
+    $list = @(@($Paths) | Where-Object { $_ })
+    if ($list.Count -eq 0) { return $map }
+    $quoted = (@($list | ForEach-Object { "'" + $_ + "'" }) -join ' ')
+    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @("stat -c '%s %n' $quoted 2>/dev/null")).Text
+    foreach ($line in ("$text" -split "`r?`n")) {
+        if ("$line" -match '^\s*(\d+)\s+(/.+?)\s*$') { $map[$Matches[2]] = [long]$Matches[1] }
+    }
+    return $map
+}
+
+function Test-BackupAppHere {
+    # an app already fetched whole: the same APK files, each the size the phone
+    # says it is. A half-pulled APK is shorter, and is fetched again.
+    param([string]$Serial, [string]$Folder, [string[]]$RemotePaths)
+
+    $paths = @(@($RemotePaths) | Where-Object { $_ })
+    if ($paths.Count -eq 0 -or -not (Test-Path -LiteralPath $Folder)) { return $false }
+    $here = @(Get-ChildItem -LiteralPath $Folder -Filter *.apk -File -ErrorAction SilentlyContinue)
+    if ($here.Count -ne $paths.Count) { return $false }
+
+    $sizes = Get-BackupRemoteSizes -Serial $Serial -Paths $paths
+    foreach ($path in $paths) {
+        if (-not $sizes.ContainsKey($path)) { return $false }
+        $name = [System.IO.Path]::GetFileName($path)
+        $file = @($here | Where-Object { $_.Name -eq $name })
+        if ($file.Count -ne 1 -or $file[0].Length -ne $sizes[$path]) { return $false }
+    }
+    return $true
+}
+
+function Get-BackupLocalFiles {
+    # what is already in a folder on this PC, named the way the phone names
+    # them, so the two lists can be compared without thinking about slashes
+    param([string]$Local, [string]$Remote)
+
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $Local)) { return $map }
+    if (Test-Path -LiteralPath $Local -PathType Leaf) {
+        $map["$Remote"] = [long](Get-Item -LiteralPath $Local).Length
+        return $map
+    }
+    # one spelling for the walk and the cut - see Get-BackupFilePlan
+    $rootPath = (Get-Item -LiteralPath $Local).FullName.TrimEnd([char]92)
+    $rootLength = $rootPath.Length + 1
+    foreach ($file in (Get-ChildItem -LiteralPath $rootPath -Recurse -File -ErrorAction SilentlyContinue)) {
+        $relative = $file.FullName.Substring($rootLength).Replace([char]92, [char]47)
+        $map["$Remote/$relative"] = [long]$file.Length
+    }
+    return $map
+}
+
+function Resume-BackupTree {
+    <#
+        One folder on the phone against the folder on this PC that was being
+        filled from it. What is missing, and what came over short, is fetched
+        one file at a time - so a backup stopped after 40 GB does not start
+        those 40 GB again.
+    #>
+    param([string]$Serial, [string]$Remote, [string]$Local, [string]$Caption)
+
+    $result = [PSCustomObject]@{ Pulled = 0; Kept = 0; Failed = 0 }
+    $onPhone = Get-BackupRemoteFiles -Serial $Serial -Remote $Remote
+    if ($onPhone.Count -eq 0) { return $result }
+    $here = Get-BackupLocalFiles -Local $Local -Remote $Remote
+
+    $todo = New-Object System.Collections.Generic.List[string]
+    foreach ($path in $onPhone.Keys) {
+        if ($here.ContainsKey($path) -and $here[$path] -eq $onPhone[$path]) { $result.Kept++; continue }
+        $null = $todo.Add($path)
+    }
+    if ($todo.Count -eq 0) {
+        Write-Log "  $Caption : all $($result.Kept) file(s) were here already." $colorGood
+        return $result
+    }
+    Write-Log "  $Caption : $($result.Kept) here already, $($todo.Count) to fetch ..." $colorStep
+
+    $index = 0
+    foreach ($path in $todo) {
+        if (Test-BackupStopped) { break }
+        $index++
+        Write-BackupProgress -Text ("$Caption : " + [System.IO.Path]::GetFileName($path)) -Done $index -Total $todo.Count
+        $relative = $path.Substring($Remote.Length).TrimStart([char]47)
+        if (-not $relative) { $relative = [System.IO.Path]::GetFileName($path) }
+        $target = Join-Path $Local ($relative.Replace([char]47, [char]92))
+        $parent = Split-Path -Parent $target
+        if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
+
+        $pull = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', $path, $target) -Caption $Caption
+        if ($pull.Stopped) { break }
+        if ($pull.ExitCode -eq 0) {
+            $result.Pulled++
+        } else {
+            $result.Failed++
+            if ($result.Failed -le 5) { Write-Log ('  ' + $pull.Text) $colorWarn }
+        }
+    }
+    return $result
+}
+
+function Resume-BackupFiles {
+    # internal storage, carried on: the same folders a backup takes, compared
+    # one at a time
+    param([string]$Serial, [string]$Folder)
+
+    $target = Join-Path $Folder 'files'
+    $null = New-Item -ItemType Directory -Path $target -Force
+    $entries = @(Get-BackupStorageEntries -Serial $Serial)
+    Write-Log "Carrying on: $($entries.Count) folder(s) of internal storage ..." $colorStep
+
+    $pulled = 0
+    $kept = 0
+    $index = 0
+    foreach ($entry in $entries) {
+        if (Test-BackupStopped) { break }
+        $index++
+        Write-BackupProgress -Text "Files: $entry" -Done $index -Total $entries.Count
+        $local = Join-Path $target ($entry -replace '/', [string][char]92)
+        $one = Resume-BackupTree -Serial $Serial -Remote "/sdcard/$entry" -Local $local -Caption "Files: $entry"
+        $pulled += $one.Pulled
+        $kept += $one.Kept
+    }
+
+    $count = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
+    $bytes = Get-BackupFolderSize -Path $target
+    Write-Log ("  $count file(s), " + (Format-FileSize -Bytes $bytes) + " - $pulled fetched now, $kept were here already") $colorGood
+    return [PSCustomObject]@{ Files = $count; Bytes = $bytes; Folders = @($entries); Refused = @(); Fetched = $pulled; Kept = $kept }
+}
+
+function Resume-BackupCard {
+    # the memory card, carried on the same way
+    param([string]$Serial, [string]$Folder)
+
+    $target = Join-Path $Folder 'card'
+    $null = New-Item -ItemType Directory -Path $target -Force
+    $cards = @(Get-BackupCardPaths -Serial $Serial)
+    if ($cards.Count -eq 0) {
+        Write-Log 'Carrying on: no memory card is mounted in this phone, so that part stays as it is.' $colorWarn
+        return [PSCustomObject]@{ Cards = @(); Files = 0; Bytes = (Get-BackupFolderSize -Path $target); Refused = @() }
+    }
+
+    $pulled = 0
+    $kept = 0
+    foreach ($card in $cards) {
+        if (Test-BackupStopped) { break }
+        $name = Split-Path -Leaf $card
+        $one = Resume-BackupTree -Serial $Serial -Remote $card -Local (Join-Path $target $name) -Caption "Card: $name"
+        $pulled += $one.Pulled
+        $kept += $one.Kept
+    }
+
+    $count = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
+    $bytes = Get-BackupFolderSize -Path $target
+    Write-Log ("  $count file(s), " + (Format-FileSize -Bytes $bytes) + " - $pulled fetched now, $kept were here already") $colorGood
+    return [PSCustomObject]@{ Cards = @($cards); Files = $count; Bytes = $bytes; Refused = @(); Fetched = $pulled; Kept = $kept }
+}
+
+function Test-BackupResumable {
+    # whether there is anything to carry on in this backup: a folder, left by a
+    # run that did not finish
+    param($Source)
+
+    if ($null -eq $Source -or $Source.Kind -ne 'folder' -or $null -eq $Source.Manifest) { return $false }
+    if ($null -eq $Source.Manifest.PSObject.Properties['Complete']) { return $false }
+    return (-not $Source.Manifest.Complete)
+}
+
+function Resume-PhoneBackup {
+    <#
+        Carries a stopped backup on, into the folder it left behind. Only what
+        is missing is fetched, and when everything is there it is packed into
+        the .zip beside it exactly as a backup that was never interrupted.
+
+        Nothing from the run that stopped is needed - no notes, no half state -
+        so this works after the program has been closed and opened again.
+    #>
+    param([string]$Serial, [string]$Folder, [string]$Model = '')
+
+    $source = Open-BackupSource -Path $Folder
+    if ($null -eq $source) { Write-Log "That is not a backup: $Folder" $colorBad; return $null }
+    if ($source.Kind -ne 'folder') {
+        Write-Log 'That backup is one packed file, so it finished: there is nothing to carry on.' $colorWarn
+        return $null
+    }
+    if (-not (Test-BackupResumable -Source $source)) {
+        Write-Log 'That backup is complete: there is nothing to carry on.' $colorWarn
+        return $null
+    }
+    $read = $source.Manifest
+    if ("$($read.Serial)" -and "$($read.Serial)" -ne "$Serial") {
+        Write-Log "That backup came off $($read.Serial), and the phone picked now is $Serial." $colorBad
+        Write-Log '  Plug that phone in and pick it, so two phones are not mixed in one backup.' $colorInfo
+        return $null
+    }
+
+    $folder = $source.Path
+    $zipPath = $folder + '.zip'
+    $wanted = @(@($read.Parts) | Where-Object { $_ })
+    $started = [datetime]::Now
+    Write-Log ("Carrying on the backup stopped on " + ("$($read.Finished)" -replace 'T', ' ') +
+        " ($($read.Stopped))") $colorStep
+    Start-BackupRun
+
+    $manifest = [ordered]@{
+        Format   = $script:backupFormat
+        Serial   = "$($read.Serial)"
+        Model    = $(if ("$($read.Model)") { "$($read.Model)" } else { $Model })
+        Android  = "$($read.Android)"
+        Created  = "$($read.Created)"
+        Parts    = @($wanted)
+        Files    = $null
+        Card     = $null
+        Apps     = @()
+        Personal = $null
+        Settings = @()
+        Bytes    = [long]0
+        Complete = $true
+        Stopped  = ''
+        Finished = ''
+    }
+
+    try {
+        try {
+            if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Resume-BackupFiles -Serial $Serial -Folder $folder }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'card') { $manifest.Card = Resume-BackupCard -Serial $Serial -Folder $folder }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder -SkipDone) }
+            # these two are a few seconds each, and are taken again rather than
+            # guessed at: they are a picture of the phone as it is now
+            if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
+        } finally {
+            Save-BackupManifest -Manifest $manifest -Folder $folder
+        }
+        return (Complete-PhoneBackup -Serial $Serial -Folder $folder -ZipPath $zipPath -Manifest $manifest `
+            -Started $started -Verb 'Carried on')
+    } finally {
+        Complete-BackupRun
+    }
 }
 
 # ---------------------------------------------------------- opening one ----
@@ -1018,6 +1405,7 @@ function Get-BackupEntryWhat {
     param([string]$Entry)
 
     if ("$Entry" -like 'files/*') { return 'Files' }
+    if ("$Entry" -like 'card/*') { return 'Card' }
     if ("$Entry" -like 'apps/*') { return 'Apps' }
     if ("$Entry" -like 'personal/*') { return 'Personal' }
     if ("$Entry" -like 'settings/*') { return 'Settings' }
@@ -1029,6 +1417,8 @@ function Get-BackupEntryWhere {
     param([string]$Entry)
 
     if ("$Entry" -like 'files/*') { return '/sdcard/' + "$Entry".Substring(6) }
+    # card/1A2B-3C4D/DCIM/a.jpg was /storage/1A2B-3C4D/DCIM/a.jpg
+    if ("$Entry" -like 'card/*') { return '/storage/' + "$Entry".Substring(5) }
     return "$Entry"
 }
 
@@ -1125,6 +1515,9 @@ function Get-BackupSummaryLines {
     }
     if ($Manifest.PSObject.Properties['Files'] -and $Manifest.Files) {
         $lines += "Files: $($Manifest.Files.Files) file(s), " + (Format-FileSize -Bytes ([long]$Manifest.Files.Bytes))
+    }
+    if ($Manifest.PSObject.Properties['Card'] -and $Manifest.Card) {
+        $lines += "Memory card: $($Manifest.Card.Files) file(s), " + (Format-FileSize -Bytes ([long]$Manifest.Card.Bytes))
     }
     if ($Manifest.PSObject.Properties['Apps']) { $lines += "Apps: $(@($Manifest.Apps).Count)" }
     if ($Manifest.PSObject.Properties['Personal'] -and $Manifest.Personal) {
@@ -1269,25 +1662,43 @@ function Get-BackupFilePlan {
         it goes on the phone. Nothing is asked of the phone here, so this can
         be read on its own; Set-BackupFilePlanState marks what is already there.
     #>
-    param([Alias('Folder')]$Source)
+    param([Alias('Folder')]$Source, [string]$CardRoot = '')
 
     $source = ConvertTo-BackupSource -Source $Source
-    $plan = [PSCustomObject]@{ Total = 0; Existing = 0; Items = @(); Tops = @(); Source = $source }
+    $plan = [PSCustomObject]@{ Total = 0; Existing = 0; Items = @(); Tops = @(); CardSkipped = 0; Source = $source }
     if ($null -eq $source) { return $plan }
     $entries = Get-BackupSourceEntries -Source $source
 
     $items = New-Object System.Collections.Generic.List[object]
     $tops = @{}
     foreach ($entry in $entries) {
-        if ($entry.Path -notlike 'files/*') { continue }
-        $relative = $entry.Path.Substring(6)
-        if (-not $relative) { continue }
-        $tops[($relative -split '/')[0]] = $true
+        $remote = ''
+        if ($entry.Path -like 'files/*') {
+            $relative = $entry.Path.Substring(6)
+            if (-not $relative) { continue }
+            $remote = '/sdcard/' + $relative
+            $tops['/sdcard/' + ($relative -split '/')[0]] = $true
+        } elseif ($entry.Path -like 'card/*') {
+            # card/<the card it came off>/<path on it>: it goes to the card in
+            # the phone now, whatever that one is called. With no card in the
+            # phone there is nowhere to put it, and it is counted and left.
+            $rest = $entry.Path.Substring(5)
+            $slash = $rest.IndexOf('/')
+            if ($slash -lt 1) { continue }
+            $relative = $rest.Substring($slash + 1)
+            if (-not $relative) { continue }
+            if (-not $CardRoot) { $plan.CardSkipped++; continue }
+            $remote = "$CardRoot/" + $relative
+            $tops["$CardRoot/" + ($relative -split '/')[0]] = $true
+        } else {
+            continue
+        }
+
         $null = $items.Add([PSCustomObject]@{
             Entry  = $entry.Path
             # a folder backup pushes the file where it lies; a zip unpacks it first
             Local  = (Get-BackupEntryPath -Source $source -Entry $entry.Path)
-            Remote = '/sdcard/' + $relative
+            Remote = $remote
             Bytes  = $entry.Bytes
             Exists = $false
         })
@@ -1308,7 +1719,9 @@ function Set-BackupFilePlanKnown {
     $onPhone = @{}
     foreach ($path in @($RemotePaths)) {
         $text = "$path".Trim()
-        if ($text -like '/sdcard/*') { $onPhone[$text] = $true }
+        # any path the phone named back: /sdcard/... for internal storage,
+        # /storage/1A2B-3C4D/... for what is on a card
+        if ($text -like '/*') { $onPhone[$text] = $true }
     }
     foreach ($item in @($Plan.Items)) { $item.Exists = $onPhone.ContainsKey($item.Remote) }
     $Plan.Existing = @(@($Plan.Items) | Where-Object { $_.Exists }).Count
@@ -1322,7 +1735,9 @@ function Set-BackupFilePlanState {
     if (@($Plan.Items).Count -eq 0) { return $Plan }
     $paths = @()
     foreach ($top in @($Plan.Tops)) {
-        $paths += (Invoke-DeviceShell -Serial $Serial -CommandArguments @("find '/sdcard/$top' -type f 2>/dev/null")).Lines
+        # Tops are whole paths now, because a backup can hold a card's files as
+        # well, and those do not live under /sdcard
+        $paths += (Invoke-DeviceShell -Serial $Serial -CommandArguments @("find '$top' -type f 2>/dev/null")).Lines
     }
     return (Set-BackupFilePlanKnown -Plan $Plan -RemotePaths $paths)
 }
@@ -1622,7 +2037,7 @@ function Get-BackupPartWords {
     # what a backup holds, in a few words for a list column
     param($Parts)
 
-    $short = @{ files = 'files'; apps = 'apps'; personal = 'contacts'; settings = 'settings' }
+    $short = @{ files = 'files'; card = 'card'; apps = 'apps'; personal = 'contacts'; settings = 'settings' }
     $words = @()
     foreach ($part in @($Parts)) {
         $id = "$part"

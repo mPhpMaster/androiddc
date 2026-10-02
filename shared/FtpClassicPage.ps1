@@ -10,11 +10,16 @@ function New-ClassicFtpLabel {
 }
 
 function New-ClassicFtpButton {
-    param([Windows.Forms.Control]$Parent, [string]$Text, [int]$X, [int]$Y, [int]$Width)
+    # Hint goes to the window's own tooltip, like every other button in the
+    # classic window: a test fails when one ships without hover text
+    param([Windows.Forms.Control]$Parent, [string]$Text, [int]$X, [int]$Y, [int]$Width, [string]$Hint = '')
     $button = New-Object Windows.Forms.Button
     $button.Text = $Text
     $button.SetBounds($X, $Y, $Width, 30)
     $Parent.Controls.Add($button)
+    if ($Hint -and (Test-Path 'variable:script:toolTip') -and $script:toolTip) {
+        $script:toolTip.SetToolTip($button, $Hint)
+    }
     return $button
 }
 
@@ -45,10 +50,14 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Port.Text = '2121'
     $settings.Controls.Add($script:classicFtp.Port)
 
-    $script:classicFtp.Generate = New-ClassicFtpButton $settings 'Generate new login' 14 109 155
-    $script:classicFtp.Start = New-ClassicFtpButton $settings 'Start server' 182 109 112
-    $script:classicFtp.Stop = New-ClassicFtpButton $settings 'Stop server' 307 109 112
-    $script:classicFtp.Remove = New-ClassicFtpButton $settings 'Uninstall FTP phone app' 432 109 200
+    $script:classicFtp.Generate = New-ClassicFtpButton $settings 'Generate new login' 14 109 155 `
+        'Makes up a new username and password; start the server again for them to count'
+    $script:classicFtp.Start = New-ClassicFtpButton $settings 'Start server' 182 109 112 `
+        'Starts the FTP server on the phone, so this PC can reach its files over the network'
+    $script:classicFtp.Stop = New-ClassicFtpButton $settings 'Stop server' 307 109 112 `
+        'Stops the server on the phone; nothing on the phone is reachable afterwards'
+    $script:classicFtp.Remove = New-ClassicFtpButton $settings 'Uninstall FTP phone app' 432 109 200 `
+        'Removes the small AndroidDC app from the phone - the one that shows the notification with a Stop button'
 
     $access = New-Object Windows.Forms.GroupBox
     $access.Text = 'Phone address'
@@ -59,9 +68,12 @@ function Initialize-ClassicFtpPage {
     $script:classicFtp.Address.ReadOnly = $true
     $script:classicFtp.Address.Text = 'Select a phone to see its address.'
     $access.Controls.Add($script:classicFtp.Address)
-    $script:classicFtp.Explorer = New-ClassicFtpButton $access 'Open in Explorer' 14 67 130
-    $script:classicFtp.Test = New-ClassicFtpButton $access 'Test connection' 157 67 122
-    $script:classicFtp.Copy = New-ClassicFtpButton $access 'Copy address' 292 67 112
+    $script:classicFtp.Explorer = New-ClassicFtpButton $access 'Open in Explorer' 14 67 130 `
+        'Opens the address above in Explorer, with the username and password filled in'
+    $script:classicFtp.Test = New-ClassicFtpButton $access 'Test connection' 157 67 122 `
+        'Signs in to the server and lists one folder, to see that it answers from this PC'
+    $script:classicFtp.Copy = New-ClassicFtpButton $access 'Copy address' 292 67 112 `
+        'Copies the ftp:// address to the clipboard, to paste into another program'
     $script:classicFtp.Status = New-ClassicFtpLabel $access 'Select a phone, then start the server.' 14 112 620
     $script:classicFtp.Status.AutoEllipsis = $true
 

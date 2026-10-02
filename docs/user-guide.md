@@ -206,6 +206,7 @@ A copy of the phone on this PC, and putting one back. Nova has the same page, un
 | Part | What it holds |
 |---|---|
 | Phone files | Everything under `/sdcard` that Android lets adb read: photos, videos, downloads, documents, and `Android/media`, where messaging apps keep pictures |
+| Memory card | What is on the card in the phone, if there is one. **Off unless you tick it**: a card can hold more than the phone does. Each card goes into a folder of its own name, so two cards never mix |
 | Apps | The APK of every app you installed, splits included |
 | Contacts, messages, call log | As the phone has them now |
 | Settings and the app list | `settings list`, `getprop`, the installed packages and a device report, as text |
@@ -221,6 +222,16 @@ it holds - one file to copy, to move, or to put on another drive. The files are 
 folder of that same name first, because that is what adb writes; the folder is packed and then
 removed. Photos, video and APKs go in as they are rather than being squeezed again, which is
 why the packed size is close to the size on the phone.
+
+**If it stops part way.** A backup that is cancelled, or whose phone is unplugged, keeps
+everything it already pulled as a folder, and *My backups* marks it **stopped part way**. Pick
+that line and press **Continue this one**: the phone is asked what it holds, the folder is read
+for what came over, and only the difference is fetched - a file that was cut off halfway is
+fetched again, one that arrived whole is left alone. Then it is packed like any other backup.
+
+It needs nothing that was remembered at the time, so it works after closing and reopening the
+program, or days later; it only asks that the same phone is the one plugged in, so two phones
+never end up in one backup.
 
 **While it runs.** The bar beside the button fills as each folder is pulled and again as the
 backup is packed, and the line above it names what is being copied and how much of it is done.

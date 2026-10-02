@@ -124,6 +124,16 @@ Drag it out next to the clock to keep it in sight.
 
 ## A backup or a restore did not do what I expected
 
+**The backup stopped and I want to carry it on.** Open *Advanced > Backup > My backups*, find
+the line that says **stopped part way**, and press **Continue this one**. Only what is missing
+is fetched - what came over already is not fetched again - and at the end it is packed into the
+`.zip` as usual. Close the program in between if you like: nothing is kept in its memory, only
+in the folder.
+
+**Nothing came off the memory card.** It is not taken unless the *Memory card* box is ticked,
+because a card can hold more than the phone itself. With it ticked and no card in the phone,
+the log says so and that part stays empty.
+
 **Where is my backup?** It is one `.zip` file in the folder you picked, named after the phone
 and the time. *Advanced > Backup > My backups* lists what is in that folder; *Show in Explorer*
 opens it with the file picked out.

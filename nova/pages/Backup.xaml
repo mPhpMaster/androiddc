@@ -27,6 +27,9 @@
                   ToolTip="Contacts can be put back; messages and the call log are saved to read, because adb cannot write them"/>
         <CheckBox x:Name="BackupSettings" Content="Settings and app list" IsChecked="True" Margin="0,4,18,4"
                   ToolTip="settings list, getprop, the installed packages and a device report, as text"/>
+        <!-- off unless it is asked for: a card can hold more than the phone does -->
+        <CheckBox x:Name="BackupCard" Content="Memory card" IsChecked="False" Margin="0,4,18,4"
+                  ToolTip="What is on the card in the phone, if there is one. Off by default: a card can be bigger than the phone itself"/>
       </WrapPanel>
       <Grid>
         <Grid.ColumnDefinitions>
@@ -116,6 +119,8 @@
                       ToolTip="Opens the selected backup, so what is inside it can be read and put back"/>
               <Button x:Name="BackupListShow" Content="Show in Explorer" Margin="0,4,8,0"
                       ToolTip="Opens Explorer with the backup file picked out"/>
+              <Button x:Name="BackupListResume" Content="Continue this one" Margin="0,4,8,0"
+                      ToolTip="Carries a backup that stopped part way on from where it got to - only what is missing is fetched. It works after the program has been closed and opened again"/>
             </WrapPanel>
           </Grid>
         </TabItem>

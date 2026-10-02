@@ -3798,7 +3798,8 @@ $tabBackup.Controls.Add($grpBackupRestore)
 $grpBackupMake = New-Object System.Windows.Forms.GroupBox
 $grpBackupMake.Text = 'Back this phone up'
 $grpBackupMake.Dock = 'Top'
-$grpBackupMake.Height = 104
+# 130, not 104: the memory card is a row of its own under the four ticks
+$grpBackupMake.Height = 130
 $tabBackup.Controls.Add($grpBackupMake)
 
 $chkBackupFiles = New-Object System.Windows.Forms.CheckBox
@@ -3829,29 +3830,46 @@ $chkBackupSettings.Location = New-Object System.Drawing.Point(530, 22)
 $chkBackupSettings.Size = New-Object System.Drawing.Size(170, 22)
 $grpBackupMake.Controls.Add($chkBackupSettings)
 
+# off unless it is asked for: a card can hold more than the phone does, and
+# most backups are not meant to carry it
+$chkBackupCard = New-Object System.Windows.Forms.CheckBox
+$chkBackupCard.Text = 'Memory card (external storage)'
+$chkBackupCard.Checked = $false
+$chkBackupCard.Location = New-Object System.Drawing.Point(12, 48)
+$chkBackupCard.Size = New-Object System.Drawing.Size(240, 22)
+$grpBackupMake.Controls.Add($chkBackupCard)
+$toolTip.SetToolTip($chkBackupCard, 'What is on the card in the phone, if there is one. Off by default: a card can be bigger than the phone itself')
+
+$lblBackupCard = New-Object System.Windows.Forms.Label
+$lblBackupCard.Text = 'Read when the backup starts; with no card in the phone this part stays empty.'
+$lblBackupCard.Location = New-Object System.Drawing.Point(258, 51)
+$lblBackupCard.Size = New-Object System.Drawing.Size(442, 20)
+$lblBackupCard.AutoEllipsis = $true
+$grpBackupMake.Controls.Add($lblBackupCard)
+
 $btnBackupRun = New-Object System.Windows.Forms.Button
 $btnBackupRun.Text = 'Back up now ...'
-$btnBackupRun.Location = New-Object System.Drawing.Point(12, 48)
+$btnBackupRun.Location = New-Object System.Drawing.Point(12, 74)
 $btnBackupRun.Size = New-Object System.Drawing.Size(140, 28)
 $grpBackupMake.Controls.Add($btnBackupRun)
 $toolTip.SetToolTip($btnBackupRun, 'Asks where to keep it, then writes a folder named after this phone and the time')
 
 $btnBackupCancel = New-Object System.Windows.Forms.Button
 $btnBackupCancel.Text = 'Cancel'
-$btnBackupCancel.Location = New-Object System.Drawing.Point(158, 48)
+$btnBackupCancel.Location = New-Object System.Drawing.Point(158, 74)
 $btnBackupCancel.Size = New-Object System.Drawing.Size(90, 28)
 $btnBackupCancel.Enabled = $false
 $grpBackupMake.Controls.Add($btnBackupCancel)
 $toolTip.SetToolTip($btnBackupCancel, 'Stops the backup or the restore where it is; what was already done stays')
 
 $prgBackup = New-Object System.Windows.Forms.ProgressBar
-$prgBackup.Location = New-Object System.Drawing.Point(256, 52)
+$prgBackup.Location = New-Object System.Drawing.Point(256, 78)
 $prgBackup.Size = New-Object System.Drawing.Size(150, 20)
 $grpBackupMake.Controls.Add($prgBackup)
 
 $lblBackupProgress = New-Object System.Windows.Forms.Label
 $lblBackupProgress.Text = 'What an app keeps inside itself cannot be read without root - see the guide.'
-$lblBackupProgress.Location = New-Object System.Drawing.Point(414, 54)
+$lblBackupProgress.Location = New-Object System.Drawing.Point(414, 80)
 $lblBackupProgress.Size = New-Object System.Drawing.Size(286, 20)
 $lblBackupProgress.AutoEllipsis = $true
 $grpBackupMake.Controls.Add($lblBackupProgress)
@@ -3941,6 +3959,15 @@ $btnBackupListShow.Location = New-Object System.Drawing.Point(212, 2)
 $btnBackupListShow.Size = New-Object System.Drawing.Size(126, 26)
 $pnlBackupListButtons.Controls.Add($btnBackupListShow)
 $toolTip.SetToolTip($btnBackupListShow, 'Opens Explorer with the backup file picked out')
+
+# a backup that stopped is a folder with a manifest saying so; carrying it on
+# fetches what is missing and packs it, however long ago it stopped
+$btnBackupListResume = New-Object System.Windows.Forms.Button
+$btnBackupListResume.Text = 'Continue this one'
+$btnBackupListResume.Location = New-Object System.Drawing.Point(342, 2)
+$btnBackupListResume.Size = New-Object System.Drawing.Size(134, 26)
+$pnlBackupListButtons.Controls.Add($btnBackupListResume)
+$toolTip.SetToolTip($btnBackupListResume, 'Carries a backup that stopped part way on from where it got to - only what is missing is fetched. It works after the program has been closed and opened again')
 
 $tabBackupInside = New-Object System.Windows.Forms.TabPage
 $tabBackupInside.Text = 'What is inside'
@@ -12628,7 +12655,7 @@ function Set-BackupBusyUi {
     $btnBackupCancel.Enabled = $Running
     foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps,
         $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse,
-        $btnBackupAppsAll, $btnBackupAppsNone)) {
+        $btnBackupAppsAll, $btnBackupAppsNone, $btnBackupListResume)) {
         $control.Enabled = -not $Running
     }
     if (-not $Running) {
@@ -12640,6 +12667,7 @@ function Set-BackupBusyUi {
 function Get-BackupTickedParts {
     $parts = @()
     if ($chkBackupFiles.Checked) { $parts += 'files' }
+    if ($chkBackupCard.Checked) { $parts += 'card' }
     if ($chkBackupApps.Checked) { $parts += 'apps' }
     if ($chkBackupPersonal.Checked) { $parts += 'personal' }
     if ($chkBackupSettings.Checked) { $parts += 'settings' }
@@ -12940,6 +12968,28 @@ function Open-BackupFromList {
     $tabsBackupView.SelectedTab = $tabBackupInside
 }
 
+function Resume-BackupFromList {
+    # carries the backup picked in the list on, into the folder it left behind
+    $row = Get-BackupListPick
+    if (-not $row) { Write-Log 'Pick the backup to carry on in the list first.' $colorWarn; return }
+    if ($row.State -ne 'stopped part way') {
+        Write-Log 'That backup finished; there is nothing to carry on.' $colorWarn
+        Write-Log '  A backup that stopped says "stopped part way" in the State column.' $colorInfo
+        return
+    }
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Set-BackupBusyUi -Running $true
+    try {
+        $manifest = Resume-PhoneBackup -Serial $serial -Folder $row.Path
+    } finally {
+        Set-BackupBusyUi -Running $false
+    }
+    if ($manifest) { $null = Show-BackupAt -Path $manifest.Path }
+    Update-BackupList
+}
+
 function Show-BackupPickedInExplorer {
     $row = Get-BackupListPick
     if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
@@ -12972,7 +13022,13 @@ function Start-RestoreFiles {
     if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
 
     Write-Log 'Restore: reading what the phone already has ...' $colorStep
-    $plan = Get-BackupFilePlan -Source $script:backupSource
+    # where a card's files would go: the card in this phone, whatever it is called
+    $cards = @(Get-BackupCardPaths -Serial $serial)
+    $plan = Get-BackupFilePlan -Source $script:backupSource -CardRoot $(if ($cards.Count -gt 0) { $cards[0] } else { '' })
+    if ($plan.CardSkipped -gt 0) {
+        Write-Log ("  $($plan.CardSkipped) file(s) in this backup came off a memory card, and there is none in " +
+            'this phone: they are left out.') $colorWarn
+    }
     if ($plan.Total -eq 0) { Write-Log 'This backup holds no files.' $colorWarn; return }
     $plan = Set-BackupFilePlanState -Plan $plan -Serial $serial
 
@@ -13072,6 +13128,7 @@ $btnBackupOpenFolder.Add_Click({ Show-BackupInExplorer })
 $btnBackupListRefresh.Add_Click({ Update-BackupList })
 $btnBackupListOpen.Add_Click({ Open-BackupFromList })
 $btnBackupListShow.Add_Click({ Show-BackupPickedInExplorer })
+$btnBackupListResume.Add_Click({ Resume-BackupFromList })
 $btnBackupWhereBrowse.Add_Click({ Select-BackupFolder })
 $btnBackupSaveCopy.Add_Click({ Save-BackupPickedFiles })
 $lstBackupList.Add_DoubleClick({ Open-BackupFromList })

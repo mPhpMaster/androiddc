@@ -56,7 +56,8 @@ function Set-BackupPageBusy {
 
     $ui.BackupCancel.IsEnabled = $Running
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps',
-        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing')) {
+        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing',
+        'BackupListResume')) {
         $ui[$name].IsEnabled = -not $Running
     }
     if (-not $Running) {
@@ -68,6 +69,7 @@ function Set-BackupPageBusy {
 function Get-BackupPageParts {
     $parts = @()
     if ($ui.BackupFiles.IsChecked) { $parts += 'files' }
+    if ($ui.BackupCard.IsChecked) { $parts += 'card' }
     if ($ui.BackupApps.IsChecked) { $parts += 'apps' }
     if ($ui.BackupPersonal.IsChecked) { $parts += 'personal' }
     if ($ui.BackupSettings.IsChecked) { $parts += 'settings' }
@@ -312,6 +314,32 @@ function Show-BackupPagePath {
     }
 }
 
+function Resume-BackupPagePicked {
+    # carries the backup picked in the list on, into the folder it left behind
+    $row = Get-BackupPagePick
+    if (-not $row) { Write-Log 'Pick the backup to carry on in the list first.' $colorWarn; return }
+    if ($row.State -ne 'stopped part way') {
+        Write-Log 'That backup finished; there is nothing to carry on.' $colorWarn
+        Write-Log '  A backup that stopped says "stopped part way" in the STATE column.' $colorInfo
+        return
+    }
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Set-BackupPageBusy -Running $true
+    try {
+        $manifest = Resume-PhoneBackup -Serial $serial -Folder $row.Path
+    } finally {
+        Set-BackupPageBusy -Running $false
+    }
+    if ($manifest) {
+        $null = Show-BackupPageAt -Path $manifest.Path
+        if ($manifest.Complete) { Show-Toast -Text 'Backup carried on to the end' -Color 'good' }
+        else { Show-Toast -Text "Stopped again: $($manifest.Stopped)" -Color 'warn' }
+    }
+    Update-BackupPageList
+}
+
 function Show-BackupPagePicked {
     $row = Get-BackupPagePick
     if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
@@ -341,7 +369,13 @@ function Start-BackupPageFiles {
     if (-not $serial) { return }
     if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
 
-    $plan = Get-BackupFilePlan -Source $script:backupSource
+    # where a card's files would go: the card in this phone, whatever it is called
+    $cards = @(Get-BackupCardPaths -Serial $serial)
+    $plan = Get-BackupFilePlan -Source $script:backupSource -CardRoot $(if ($cards.Count -gt 0) { $cards[0] } else { '' })
+    if ($plan.CardSkipped -gt 0) {
+        Write-Log ("  $($plan.CardSkipped) file(s) in this backup came off a memory card, and there is none in " +
+            'this phone: they are left out.') $colorWarn
+    }
     if ($plan.Total -eq 0) { Write-Log 'This backup holds no files.' $colorWarn; return }
     Write-Log 'Restore: reading what the phone already has ...' $colorStep
     $plan = Set-BackupFilePlanState -Plan $plan -Serial $serial
@@ -434,6 +468,7 @@ $ui.BackupShowFolder.Add_Click({ Show-BackupPageFolder })
 $ui.BackupListRefresh.Add_Click({ Update-BackupPageList })
 $ui.BackupListOpen.Add_Click({ Open-BackupPagePicked })
 $ui.BackupListShow.Add_Click({ Show-BackupPagePicked })
+$ui.BackupListResume.Add_Click({ Resume-BackupPagePicked })
 $ui.BackupSaveCopy.Add_Click({ Save-BackupPageCopy })
 $ui.BackupAppsMissing.Add_Click({ Select-BackupPageMissing })
 $ui.BackupAppFind.Add_TextChanged({ Set-BackupPageAppFilter })
@@ -468,7 +503,8 @@ if (Test-BackupShared) {
 } else {
     $ui.BackupInfo.Text = 'shared\Backup.ps1 is not in the project folder: no backups from here.'
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupBrowse', 'BackupRestoreFiles', 'BackupInstallApps',
-        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen', 'BackupListShow')) {
+        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen', 'BackupListShow',
+        'BackupListResume')) {
         $ui[$name].IsEnabled = $false
     }
 }

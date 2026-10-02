@@ -17,11 +17,15 @@
         <TextBlock Text="Port" Style="{StaticResource FieldLabel}"/>
         <TextBox x:Name="FtpPort" Text="2121" Width="120" HorizontalAlignment="Left" Margin="0,0,0,12"/>
         <StackPanel Orientation="Horizontal">
-          <Button x:Name="FtpGenerate" Content="Generate new login" Style="{StaticResource Ghost}" Margin="0,0,8,0"/>
-          <Button x:Name="FtpStart" Content="Start server" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
-          <Button x:Name="FtpStop" Content="Stop server"/>
+          <Button x:Name="FtpGenerate" Content="Generate new login" Style="{StaticResource Ghost}" Margin="0,0,8,0"
+                  ToolTip="Makes up a new username and password; start the server again for them to count"/>
+          <Button x:Name="FtpStart" Content="Start server" Style="{StaticResource Primary}" Margin="0,0,8,0"
+                  ToolTip="Starts the FTP server on the phone, so this PC can reach its files over the network"/>
+          <Button x:Name="FtpStop" Content="Stop server"
+                  ToolTip="Stops the server on the phone; nothing on the phone is reachable afterwards"/>
         </StackPanel>
-        <Button x:Name="FtpRemoveCompanion" Content="Uninstall FTP phone app" Style="{StaticResource Ghost}" HorizontalAlignment="Left" Margin="0,12,0,0"/>
+        <Button x:Name="FtpRemoveCompanion" Content="Uninstall FTP phone app" Style="{StaticResource Ghost}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                ToolTip="Removes the small AndroidDC app from the phone - the one that shows the notification with a Stop button"/>
       </StackPanel>
     </Border>
 
@@ -30,9 +34,12 @@
         <TextBlock Text="PHONE ADDRESS" Style="{StaticResource Caps}"/>
         <TextBox x:Name="FtpAddress" IsReadOnly="True" Text="Select a phone to see its address." Margin="0,0,0,12"/>
         <StackPanel Orientation="Horizontal">
-          <Button x:Name="FtpExplorer" Content="Open in Explorer" Style="{StaticResource Primary}" Margin="0,0,8,0"/>
-          <Button x:Name="FtpTest" Content="Test connection" Margin="0,0,8,0"/>
-          <Button x:Name="FtpCopy" Content="Copy address"/>
+          <Button x:Name="FtpExplorer" Content="Open in Explorer" Style="{StaticResource Primary}" Margin="0,0,8,0"
+                  ToolTip="Opens the address above in Explorer, with the username and password filled in"/>
+          <Button x:Name="FtpTest" Content="Test connection" Margin="0,0,8,0"
+                  ToolTip="Signs in to the server and lists one folder, to see that it answers from this PC"/>
+          <Button x:Name="FtpCopy" Content="Copy address"
+                  ToolTip="Copies the ftp:// address to the clipboard, to paste into another program"/>
         </StackPanel>
         <TextBlock x:Name="FtpStatus" Text="Select a phone, then start the server."
                    Style="{StaticResource MutedLine}" Margin="0,12,0,0"/>

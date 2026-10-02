@@ -2,6 +2,24 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### A backup can hold the memory card, and can be carried on
+
+* **The memory card is a part of its own**, ticked or not like the other four. It is **off by
+  default**, because a card can hold more than the phone does. Each card's files go under its
+  own name (`card/1A2B-3C4D/...`), so two cards never mix, and putting them back sends them to
+  the card in the phone at that moment - whatever that one is called. With no card in the
+  phone, the files that came off one are counted and left, and the log says so.
+* **A backup that stopped can be carried on.** *My backups* marks it *stopped part way*;
+  **Continue this one** asks the phone what it holds and how big each file is, reads the folder
+  for what came over, and fetches only the difference - a file cut off halfway is fetched
+  again, one that arrived whole is left alone. Apps already fetched whole are skipped by
+  comparing their APK sizes with the phone's. Then it is packed like any other backup.
+* Nothing from the interrupted run is needed to carry it on - no notes, no half state - so it
+  works after the program has been closed and opened again, or days later. It only refuses to
+  carry a backup of one phone on with another phone plugged in.
+
 ## 1.4.0
 
 ### Phone FTP controls

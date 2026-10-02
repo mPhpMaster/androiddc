@@ -15,9 +15,14 @@ Say '== what a backup can hold =='
 $parts = @(Get-BackupParts)
 $ids = @($parts | ForEach-Object { $_.Id })
 Say ("  {0} parts: {1}   {2}" -f $parts.Count, ($ids -join ', '),
-    (Mark (($ids -join ',') -eq 'files,apps,personal,settings')))
-Say ("  each one has words for it   {0}" -f (Mark (@($parts | Where-Object { $_.Label -and $_.Note }).Count -eq 4)))
-Say ("  the tab ticks all four by default   {0}" -f (Mark (((Get-BackupTickedParts) -join ',') -eq 'files,apps,personal,settings')))
+    (Mark (($ids -join ',') -eq 'files,card,apps,personal,settings')))
+Say ("  each one has words for it   {0}" -f (Mark (@($parts | Where-Object { $_.Label -and $_.Note }).Count -eq 5)))
+Say ("  the tab ticks four of them, the card left off   {0}" -f (Mark (
+    ((Get-BackupTickedParts) -join ',') -eq 'files,apps,personal,settings' -and -not $chkBackupCard.Checked)))
+$chkBackupCard.Checked = $true
+Say ("  ticking the card puts it in: {0}   {1}" -f ((Get-BackupTickedParts) -join ','),
+    (Mark (((Get-BackupTickedParts) -join ',') -eq 'files,card,apps,personal,settings')))
+$chkBackupCard.Checked = $false
 
 Say ''
 Say '== the name it is given =='
@@ -27,6 +32,51 @@ Say ("  '{0}'   {1}" -f $name, (Mark ($name -eq 'AndroidDC-backup-Redmi-13C-ABC1
 $odd = ConvertTo-BackupName -Model 'a/b:c*?' -Serial '1"2' -When $when
 Say ("  a model with \ / : * ? in it: '{0}'   {1}" -f $odd,
     (Mark ($odd -notmatch '[\\/:*?"<>|]' -and $odd -like 'AndroidDC-backup-*-20260920-140509')))
+
+Say ''
+Say '== a memory card in a backup =='
+# a backup of a phone with a card: the card's files sit under card\<its name>,
+# so two cards - or a card and the phone - never land on top of each other
+# in a folder of its own: the checks further down count what is in $work
+$cardFolder = Join-Path $work 'card-test\AndroidDC-backup-card'
+$null = New-Item -ItemType Directory -Path (Join-Path $cardFolder 'files\Download') -Force
+$null = New-Item -ItemType Directory -Path (Join-Path $cardFolder 'card\1A2B-3C4D\DCIM') -Force
+Set-Content -LiteralPath (Join-Path $cardFolder 'files\Download\phone.txt') -Value 'on the phone' -Encoding Ascii
+Set-Content -LiteralPath (Join-Path $cardFolder 'card\1A2B-3C4D\DCIM\card.jpg') -Value 'on the card' -Encoding Ascii
+Save-BackupText -Path (Join-Path $cardFolder 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-22T10:00:00'
+    Parts = @('files', 'card'); Files = [PSCustomObject]@{ Files = 1; Bytes = 12 }
+    Card = [PSCustomObject]@{ Cards = @('/storage/1A2B-3C4D'); Files = 1; Bytes = 11; Refused = @() }
+    Apps = @(); Personal = $null; Settings = @(); Bytes = 23; Complete = $true; Stopped = ''
+}))
+
+$cardSource = Open-BackupSource -Path $cardFolder
+Say ("  its words say what came off the card: {0}" -f (
+    (@(Get-BackupSummaryLines -Manifest $cardSource.Manifest -Source $cardSource) | Where-Object { $_ -like 'Memory card*' }) -join ''))
+Say ("  the summary names the card part   {0}" -f (Mark (
+    ((@(Get-BackupSummaryLines -Manifest $cardSource.Manifest -Source $cardSource)) -join ' ') -match 'Memory card: 1 file')))
+Say ("  and the list of what it holds says 'card'   {0}" -f (Mark (
+    (Get-BackupPartWords -Parts $cardSource.Manifest.Parts) -eq 'files, card')))
+
+$cardInside = Get-BackupInsideRows -Source $cardSource
+$cardRow = @($cardInside.Rows | Where-Object { $_.Entry -like 'card/*' })[0]
+Say ("  inside it, that file is a Card file that was at {0}   {1}" -f $cardRow.Path,
+    (Mark ($cardRow.What -eq 'Card' -and $cardRow.Path -eq '/storage/1A2B-3C4D/DCIM/card.jpg')))
+
+# with a card in the phone now, whatever it is called, the files go onto it
+$cardPlan = Get-BackupFilePlan -Source $cardSource -CardRoot '/storage/9999-8888'
+$goes = (@($cardPlan.Items | ForEach-Object { $_.Remote }) | Sort-Object) -join ', '
+Say ("  put back with a card in the phone, they go to: {0}" -f $goes)
+Say ("  the phone's file to /sdcard, the card's to the card that is there now   {0}" -f (Mark (
+    $cardPlan.Total -eq 2 -and $cardPlan.CardSkipped -eq 0 -and
+    $goes -eq '/sdcard/Download/phone.txt, /storage/9999-8888/DCIM/card.jpg')))
+Say ("  and it knows where to ask the phone what it has: {0}   {1}" -f (@($cardPlan.Tops) -join ', '),
+    (Mark ((@($cardPlan.Tops) -join ',') -eq '/sdcard/Download,/storage/9999-8888/DCIM')))
+
+# with no card in the phone there is nowhere to put them, and it says so
+$noCard = Get-BackupFilePlan -Source $cardSource
+Say ("  with no card in the phone: {0} file(s) to send, {1} left out   {2}" -f $noCard.Total, $noCard.CardSkipped,
+    (Mark ($noCard.Total -eq 1 -and $noCard.CardSkipped -eq 1 -and $noCard.Items[0].Remote -eq '/sdcard/Download/phone.txt')))
 
 Say ''
 Say '== reading what content query prints =='
@@ -276,6 +326,83 @@ $bigFound = Get-BackupInsideRows -Source $big -Filter 'photo-4242.jpg'
 $findMs = $watch.ElapsedMilliseconds
 Say ("  and looking for one of them takes {0} ms, off the index it kept   {1}" -f $findMs,
     (Mark ($bigFound.Total -eq 1 -and $findMs -lt 5000)))
+
+Say ''
+Say '== carrying a stopped backup on =='
+# what a backup that stopped leaves behind: a folder, a manifest saying it is
+# not complete, and the files that did come over
+$half = Join-Path $work 'half\AndroidDC-backup-half'
+$null = New-Item -ItemType Directory -Path (Join-Path $half 'files\DCIM') -Force
+# one file that came over whole, and one that was cut off part way
+[System.IO.File]::WriteAllBytes((Join-Path $half 'files\DCIM\whole.jpg'), (New-Object byte[] 10))
+[System.IO.File]::WriteAllBytes((Join-Path $half 'files\DCIM\short.jpg'), (New-Object byte[] 3))
+Save-BackupText -Path (Join-Path $half 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-22T09:00:00'
+    Parts = @('files'); Files = [PSCustomObject]@{ Files = 2; Bytes = 13 }
+    Card = $null; Apps = @(); Personal = $null; Settings = @(); Bytes = 13
+    Complete = $false; Stopped = 'the phone was disconnected'; Finished = '2026-09-22T09:20:00'
+}))
+
+$halfSource = Open-BackupSource -Path $half
+Say ("  a stopped backup is one that can be carried on   {0}" -f (Mark (Test-BackupResumable -Source $halfSource)))
+Say ("  a packed one is not: it finished   {0}" -f (Mark (-not (Test-BackupResumable -Source (Open-BackupSource -Path $zipPath)))))
+$rows = @(Get-BackupsInFolder -Folder (Split-Path -Parent $half))
+Say ("  and the list says why: '{0}'   {1}" -f $rows[0].State, (Mark ($rows[0].State -eq 'stopped part way')))
+
+# the phone says what it holds and how big each one is; the fakes stand in for it
+$fakeShell = {
+    param($Serial, $CommandArguments)
+    $command = (@($CommandArguments) -join ' ')
+    $text = ''
+    if ($command -eq 'ls -1 /sdcard/') { $text = "DCIM`n" }
+    elseif ($command -like "find '/sdcard/DCIM' -type f*") {
+        # whole.jpg is here already, short.jpg came over cut off, new.jpg never arrived
+        $text = "10 /sdcard/DCIM/whole.jpg`n7 /sdcard/DCIM/short.jpg`n5 /sdcard/DCIM/new.jpg`n"
+    }
+    return [PSCustomObject]@{ Lines = @($text -split "`n"); Text = $text; ExitCode = 0 }
+}
+
+$carried = & {
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    function Invoke-BackupAdb {
+        param($ArgumentList, $Caption, $Expected, $OnPoll)
+        $script:fetched += ,(@($ArgumentList)[4])
+        return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false }
+    }
+    $script:fetched = @()
+    Start-BackupRun
+    $one = Resume-BackupFiles -Serial 'ABC123' -Folder $half
+    Complete-BackupRun
+    [PSCustomObject]@{ Result = $one; Fetched = @($script:fetched) }
+}
+Say ("  it fetched: {0}" -f (($carried.Fetched | Sort-Object) -join ', '))
+Say ("  only the one that was cut off and the one never fetched, {0} kept   {1}" -f $carried.Result.Kept, (Mark (
+    $carried.Result.Fetched -eq 2 -and $carried.Result.Kept -eq 1 -and
+    (($carried.Fetched | Sort-Object) -join ',') -eq '/sdcard/DCIM/new.jpg,/sdcard/DCIM/short.jpg')))
+
+$wrongPhone = & {
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Resume-PhoneBackup -Serial 'ANOTHER-PHONE' -Folder $half
+}
+Say ("  a backup of another phone is refused, not mixed   {0}" -f (Mark ($null -eq $wrongPhone)))
+Say ("  so is one that already finished   {0}" -f (Mark ($null -eq (Resume-PhoneBackup -Serial 'ABC123' -Folder $zipPath))))
+
+$finished = & {
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    function Invoke-BackupAdb {
+        param($ArgumentList, $Caption, $Expected, $OnPoll)
+        # what the phone would have sent, so the packed backup holds it
+        [System.IO.File]::WriteAllBytes((@($ArgumentList)[5]), (New-Object byte[] 4))
+        return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false }
+    }
+    Resume-PhoneBackup -Serial 'ABC123' -Folder $half
+}
+Say ("  carried on to the end: {0}, complete {1}" -f [System.IO.Path]::GetFileName("$($finished.Path)"), $finished.Complete)
+Say ("  it is one .zip now, the folder is gone, and the manifest says complete   {0}" -f (Mark (
+    $finished.Complete -and $finished.Kind -eq 'zip' -and (Test-Path -LiteralPath $finished.Path -PathType Leaf) -and
+    -not (Test-Path -LiteralPath $half))))
+Say ("  and what was already here was not fetched again   {0}" -f (Mark (
+    (Open-BackupSource -Path $finished.Path).Manifest.Files.Kept -eq 1)))
 
 Say ''
 Say '== the backups in a folder =='
