@@ -164,13 +164,16 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 
 | Purpose | Command |
 |---|---|
-| What is in internal storage | `adb shell ls -1 /sdcard/`, then `adb pull -a /sdcard/<folder> <here>`, one folder at a time |
+| Who is on the phone | `adb shell pm list users`, then one `ls -1 <their storage>` each to see whose files adb may read |
+| What is in internal storage | `adb shell ls -1 /sdcard/`, then `adb pull -a /sdcard/<folder> <here>`, one folder at a time. For a user other than the owner, the same two against `/storage/emulated/<id>` |
 | The memory card, when it is ticked | `adb shell sm list-volumes public` (or the `1A2B-3C4D` names under `/storage`), then the same `ls` and `pull -a` for each card |
 | Carrying a stopped backup on | `adb shell find '<folder>' -type f -exec stat -c '%s %n' {} +` to learn what the phone holds and how big each file is, compared with the folder here; only the difference is pulled, one file at a time |
 | Where every app's APK is | `adb shell pm list packages -f -3` for all of them at once, then one `ls` over their folders for the splits; `pm path <package>` only for what that did not answer |
 | The apps you installed | `adb shell pm list packages -3 --show-versioncode`, `adb shell pm path <package>`, then `adb pull` of each APK. The names come from `scrcpy --list-apps`, and name plus version are written into the backup as `apps\apps.json` |
 | Whether the phone has an app already | `adb shell pm list packages --show-versioncode`, compared with what the backup wrote down |
-| Contacts, messages, call log | `adb shell content query --uri content://com.android.contacts/data/phones`, the same for `content://sms` and `content://call_log/calls` |
+| Contacts, messages, call log | `adb shell content query --uri content://com.android.contacts/data/phones`, the same for `content://sms` and `content://call_log/calls`. Contacts are asked for per user (`content query --user <id> ...`); messages and the call log are not, because their providers are `singleUser` and answer the same for every user - measured |
+| The apps a user has | `adb shell pm list packages -3 --show-versioncode --user <id>`, which answers even for a user whose files adb cannot read. The APK itself belongs to the phone, so it is pulled once and the backup writes down which users have it |
+| A user's own settings | `adb shell settings --user <id> list system` and `list secure`, which really do differ per user - measured at 344 lines against 123 |
 | Settings and the app list | `adb shell settings list system|secure|global`, `getprop`, `pm list packages -3 --show-versioncode`, `pm list packages -s` |
 | Which files the phone already has | `adb shell find '/sdcard/<folder>' -type f`, once per folder rather than once per file |
 | Sending a file back | `adb push <file> /sdcard/<path>` |

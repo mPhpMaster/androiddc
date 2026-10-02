@@ -573,6 +573,184 @@ $null = Show-BackupAt -Path $work
 Say ("  a folder without a manifest is refused   {0}" -f (Mark ($script:backupPath -eq $zipPath)))
 
 Say ''
+Say '== which user a backup is of =='
+# Android keeps each user's files apart. adb may read some of them: measured on
+# a phone with three users, where the owner's and a clone profile's could be
+# read and a stopped guest's could not. Every phone here is made up.
+$userShell = {
+    param($Serial, $CommandArguments)
+    $command = (@($CommandArguments) -join ' ')
+    $text = ''
+    if ($command -eq 'pm list users') {
+        $text = "Users:`n`tUserInfo{0:Owner:c13} running`n`tUserInfo{10:Guest:414}`n`tUserInfo{999:Dual apps:20001010} running"
+    } elseif ($command -like "ls -1 '/storage/emulated/10'*") {
+        $text = ''
+    } elseif ($command -like 'ls -1 *readable*') {
+        $text = 'readable'
+    }
+    return [PSCustomObject]@{ Lines = @($text -split "`n"); Text = $text; ExitCode = 0 }
+}
+$users = @(& { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $userShell $Serial $CommandArguments }
+    @(Get-BackupUsers -Serial 'ABC123') })
+Say ("  {0} user(s): {1}" -f $users.Count, ((@($users | ForEach-Object { Get-BackupUserWords -User $_ })) -join ', '))
+Say ("  the names and the ids come off pm list users   {0}" -f (Mark (
+    $users.Count -eq 3 -and $users[0].Id -eq 0 -and $users[2].Id -eq 999 -and $users[2].Name -eq 'Dual apps')))
+Say ("  the guest's storage is shut, and it says so rather than taking nothing quietly   {0}" -f (Mark (
+    $users[0].Readable -and -not $users[1].Readable -and $users[2].Readable)))
+Say ("  who is running is read too   {0}" -f (Mark ($users[0].Running -and -not $users[1].Running)))
+
+Say ("  the owner's files are /sdcard and go where they always went   {0}" -f (Mark (
+    (Get-BackupUserPath -Id 0) -eq '/sdcard' -and (Get-BackupUserFolder -Id 0) -eq '')))
+Say ("  user 999 is {0} and goes into {1}   {2}" -f (Get-BackupUserPath -Id 999), (Get-BackupUserFolder -Id 999),
+    (Mark ((Get-BackupUserPath -Id 999) -eq '/storage/emulated/999' -and (Get-BackupUserFolder -Id 999) -eq 'users/999')))
+Say ("  asking for nobody means the owner, as a backup always meant   {0}" -f (Mark (
+    ((Get-BackupUserIds -Users @()) -join ',') -eq '0')))
+Say ("  ids are sorted and said once: {0}   {1}" -f ((Get-BackupUserIds -Users @(999, 0, 999)) -join ','),
+    (Mark (((Get-BackupUserIds -Users @(999, 0, 999)) -join ',') -eq '0,999')))
+Say ("  and the rows themselves can be handed in   {0}" -f (Mark (
+    ((Get-BackupUserIds -Users @($users[0], $users[2])) -join ',') -eq '0,999')))
+
+# a backup of two users: each one's files land in their own place
+$twoUsers = Join-Path $work 'two-users'
+$null = New-Item -ItemType Directory -Path $twoUsers -Force
+$taken = & {
+    function Invoke-DeviceShell {
+        param($Serial, $CommandArguments)
+        $command = (@($CommandArguments) -join ' ')
+        $text = ''
+        if ($command -eq 'ls -1 /sdcard/') { $text = "DCIM`n" }
+        elseif ($command -eq 'ls -1 /storage/emulated/999/') { $text = "Download`n" }
+        elseif ($command -like 'du -sk*') { $text = "100 x" }
+        return [PSCustomObject]@{ Lines = @($text -split "`n"); Text = $text; ExitCode = 0 }
+    }
+    function Invoke-BackupAdb {
+        param($ArgumentList, $Caption, $Expected, $OnPoll)
+        # what the phone would have sent, into the folder adb was told to use
+        $local = @($ArgumentList)[-1]
+        $null = New-Item -ItemType Directory -Path $local -Force
+        [System.IO.File]::WriteAllBytes((Join-Path $local 'one.jpg'), (New-Object byte[] 6))
+        $script:pulls += ,(@($ArgumentList)[4])
+        return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false }
+    }
+    $script:pulls = @()
+    Start-BackupRun
+    $one = Backup-PhoneFiles -Serial 'ABC123' -Folder $twoUsers -Users @(0, 999)
+    Complete-BackupRun
+    [PSCustomObject]@{ Result = $one; Pulled = @($script:pulls) }
+}
+Say ("  it pulled: {0}" -f (($taken.Pulled | Sort-Object) -join ', '))
+Say ("  each user's own storage, not /sdcard twice   {0}" -f (Mark (
+    (($taken.Pulled | Sort-Object) -join ',') -eq '/sdcard/DCIM,/storage/emulated/999/Download')))
+Say ("  the owner's land in files\, user 999's in users\999\files\   {0}" -f (Mark (
+    (Test-Path -LiteralPath (Join-Path $twoUsers 'files\DCIM\one.jpg')) -and
+    (Test-Path -LiteralPath (Join-Path $twoUsers 'users\999\files\Download\one.jpg')))))
+Say ("  counted together: {0} file(s), and each user is written down   {1}" -f $taken.Result.Files, (Mark (
+    $taken.Result.Files -eq 2 -and @($taken.Result.Users).Count -eq 2 -and
+    @($taken.Result.Users)[1].Id -eq 999)))
+
+# a user whose storage cannot be read is named and skipped, not left empty
+$shut = & {
+    function Invoke-DeviceShell { param($Serial, $CommandArguments)
+        return [PSCustomObject]@{ Lines = @(); Text = ''; ExitCode = 0 } }
+    function Invoke-BackupAdb { param($ArgumentList, $Caption, $Expected, $OnPoll)
+        $script:tried++; return [PSCustomObject]@{ ExitCode = 0; Text = ''; Stopped = $false } }
+    $script:tried = 0
+    Start-BackupRun
+    $one = Backup-PhoneFiles -Serial 'ABC123' -Folder (Join-Path $work 'shut-user') -Users @(10)
+    Complete-BackupRun
+    [PSCustomObject]@{ Result = $one; Tried = $script:tried }
+}
+Say ("  a user adb cannot read is skipped without pulling anything   {0}" -f (Mark (
+    $shut.Tried -eq 0 -and $shut.Result.Files -eq 0 -and -not @($shut.Result.Users)[0].Readable)))
+Say ("  and the log says which user it was   {0}" -f (Mark ($txtLog.Text -match 'nothing of user 10 can be read')))
+
+# reading one back: what each entry is, and where it goes
+Say ("  users/999/files/DCIM/a.jpg is {0}, from {1}" -f (Get-BackupEntryWhat -Entry 'users/999/files/DCIM/a.jpg'),
+    (Get-BackupEntryWhere -Entry 'users/999/files/DCIM/a.jpg'))
+Say ("  an entry says whose it is and where it was   {0}" -f (Mark (
+    (Get-BackupEntryWhat -Entry 'users/999/files/DCIM/a.jpg') -eq 'Files (user 999)' -and
+    (Get-BackupEntryWhere -Entry 'users/999/files/DCIM/a.jpg') -eq '/storage/emulated/999/DCIM/a.jpg' -and
+    (Get-BackupEntryWhat -Entry 'files/DCIM/a.jpg') -eq 'Files' -and
+    (Get-BackupEntryWhere -Entry 'files/DCIM/a.jpg') -eq '/sdcard/DCIM/a.jpg')))
+Say ("  and a backup from before users were a choice is read as the owner's   {0}" -f (Mark (
+    (Split-BackupUserEntry -Entry 'files/DCIM/a.jpg').Id -eq 0 -and
+    (Split-BackupUserEntry -Entry 'users/10/personal/contacts.json').Id -eq 10)))
+
+# putting those files back
+Save-BackupText -Path (Join-Path $twoUsers 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-25T09:00:00'
+    Name = ''; Parts = @('files'); Users = @([PSCustomObject]@{ Id = 0; Name = 'Owner' },
+        [PSCustomObject]@{ Id = 999; Name = 'Dual apps' })
+    Files = [PSCustomObject]@{ Files = 2; Bytes = 12 }; Card = $null; Apps = @(); Personal = $null
+    Settings = @(); Bytes = 12; Complete = $true; Stopped = '' }))
+$twoSource = Open-BackupSource -Path $twoUsers
+$bothHere = Get-BackupFilePlan -Source $twoSource -UserIds @(0, 999)
+$goes = (@($bothHere.Items | ForEach-Object { $_.Remote }) | Sort-Object) -join ', '
+Say ("  put back on a phone with both users, they go to: {0}" -f $goes)
+Say ("  each to the user it came from   {0}" -f (Mark (
+    $bothHere.Total -eq 2 -and $bothHere.UserSkipped -eq 0 -and
+    $goes -eq '/sdcard/DCIM/one.jpg, /storage/emulated/999/Download/one.jpg')))
+$ownerOnly = Get-BackupFilePlan -Source $twoSource -UserIds @(0)
+Say ("  on a phone without user 999: {0} to send, {1} left out   {2}" -f $ownerOnly.Total, $ownerOnly.UserSkipped,
+    (Mark ($ownerOnly.Total -eq 1 -and $ownerOnly.UserSkipped -eq 1 -and
+        $ownerOnly.Items[0].Remote -eq '/sdcard/DCIM/one.jpg')))
+Say ("  and asked without a list of users, nothing is left out   {0}" -f (Mark (
+    (Get-BackupFilePlan -Source $twoSource).Total -eq 2)))
+Say ("  the summary says who it holds: '{0}'   {1}" -f
+    ((@(Get-BackupSummaryLines -Manifest $twoSource.Manifest -Source $twoSource) | Where-Object { $_ -like 'Users:*' }) -join ''),
+    (Mark (((@(Get-BackupSummaryLines -Manifest $twoSource.Manifest -Source $twoSource)) -join ' ') -match
+        'Users: 0 \(Owner\), 999 \(Dual apps\)')))
+Say ("  a backup of the owner alone says nothing about users   {0}" -f (Mark (
+    @(Get-BackupSummaryLines -Manifest $script:backupManifest -Source $script:backupSource |
+        Where-Object { $_ -like 'Users:*' }).Count -eq 0)))
+
+# apps and contacts, asked for per user
+$perUser = & {
+    function Invoke-DeviceShell {
+        param($Serial, $CommandArguments)
+        $command = (@($CommandArguments) -join ' ')
+        $script:asked += ,$command
+        $text = ''
+        if ($command -eq 'pm list packages -3 --show-versioncode') { $text = "package:com.one versionCode:1`npackage:com.both versionCode:2" }
+        elseif ($command -eq 'pm list packages -3 --show-versioncode --user 999') { $text = "package:com.both versionCode:2" }
+        elseif ($command -like 'pm list packages -f -3*') { $text = 'package:/data/app/a/base.apk=com.both' }
+        # the quick way does not know com.one, so it is asked about on its own
+        elseif ($command -eq 'pm path com.one') { $text = 'package:/data/app/b/base.apk' }
+        elseif ($command -like '*--user 999*content://com.android.contacts*') { $text = 'Row: 0 display_name=Clone, data1=+1 555 0999' }
+        elseif ($command -like '*content://com.android.contacts*') { $text = 'Row: 0 display_name=Owner, data1=+1 555 0100' }
+        return [PSCustomObject]@{ Lines = @($text -split "`n"); Text = $text; ExitCode = 0 }
+    }
+    function Invoke-BackupAdb { param($ArgumentList, $Caption, $Expected, $OnPoll)
+        # the last argument is where adb was told to put it, whether the call
+        # was "pull -a <folder>" or "pull <apk>"
+        [System.IO.File]::WriteAllBytes((@($ArgumentList)[-1]), (New-Object byte[] 4))
+        return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false } }
+    $script:asked = @()
+    Start-BackupRun
+    $apps = @(Backup-PhoneApps -Serial 'ABC123' -Folder (Join-Path $work 'per-user') -Users @(0, 999))
+    $personal = Backup-PhonePersonal -Serial 'ABC123' -Folder (Join-Path $work 'per-user') -Users @(0, 999)
+    Complete-BackupRun
+    [PSCustomObject]@{ Apps = $apps; Personal = $personal; Asked = @($script:asked) }
+}
+$both = @($perUser.Apps | Where-Object { $_.Package -eq 'com.both' })[0]
+$one = @($perUser.Apps | Where-Object { $_.Package -eq 'com.one' })[0]
+Say ("  apps: com.both belongs to {0}, com.one to {1}" -f (($both.Users) -join '+'), (($one.Users) -join '+'))
+Say ("  each app says which users have it, and its APK is fetched once   {0}" -f (Mark (
+    @($perUser.Apps).Count -eq 2 -and (($both.Users) -join ',') -eq '0,999' -and (($one.Users) -join ',') -eq '0')))
+Say ("  contacts were asked for per user   {0}" -f (Mark (
+    @($perUser.Asked | Where-Object { $_ -like '*--user 999*contacts*' }).Count -eq 1 -and
+    @($perUser.Personal.Users).Count -eq 2)))
+Say ("  user 999's contacts went to: {0}" -f (@(Get-ChildItem -LiteralPath (Join-Path $work 'per-user') -Recurse -Filter contacts.json | ForEach-Object { $_.FullName.Substring($work.Length) }) -join ', '))
+Say ("  user 999's contacts are their own file   {0}" -f (Mark (
+    (Test-Path -LiteralPath (Join-Path $work 'per-user\users\999\personal\contacts.json')) -and
+    ((Get-Content -LiteralPath (Join-Path $work 'per-user\users\999\personal\contacts.json') -Raw) -match 'Clone'))))
+Say ("  messages and the call log were asked for once, not once per user   {0}" -f (Mark (
+    @($perUser.Asked | Where-Object { $_ -like '*content://sms*' }).Count -eq 1 -and
+    @($perUser.Asked | Where-Object { $_ -like '*content://call_log*' }).Count -eq 1)))
+Say ("  because Android shows every user the same ones - and the log says so   {0}" -f (Mark (
+    $txtLog.Text -match 'messages and the call log belong to the phone')))
+
+Say ''
 Say '== stopping, and saying so =='
 Say ("  a phone that has gone is recognised   {0}" -f (Mark (
     (Test-BackupDeviceGone -Text "adb: error: device 'ABC123' not found") -and
@@ -648,6 +826,34 @@ Set-BackupBusyUi -Running $false
 Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $btnBackupCancel.Enabled) -and $btnBackupRun.Enabled -and $btnRestoreFiles.Enabled -and $prgBackup.Value -eq 0)))
 
+Say ''
+Say '== the box that picks the user =='
+& { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $userShell $Serial $CommandArguments }
+    function Get-SelectedSerial { 'ABC123' }
+    Update-BackupUsers -Force }
+Say ("  the box offers: {0}" -f ((@($cmbBackupUser.Items)) -join ' | '))
+Say ("  one line per user adb can read, and one for all of them   {0}" -f (Mark (
+    $cmbBackupUser.Items.Count -eq 3 -and "$($cmbBackupUser.Items[0])" -eq 'The main user (0) - Owner' -and
+    "$($cmbBackupUser.Items[1])" -eq 'User 999 - Dual apps' -and
+    "$($cmbBackupUser.Items[2])" -like 'Everyone adb can read*')))
+Say ("  the guest is not offered, and the note says why: '{0}'   {1}" -f $lblBackupUserNote.Text, (Mark (
+    $lblBackupUserNote.Text -eq '3 user(s); adb cannot read 10')))
+Say ("  it starts on the main user   {0}" -f (Mark (
+    $cmbBackupUser.SelectedIndex -eq 0 -and ((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0')))
+$cmbBackupUser.SelectedIndex = 2
+Say ("  picking everyone asks for: {0}   {1}" -f ((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ','),
+    (Mark (((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0,999')))
+$cmbBackupUser.SelectedIndex = 1
+Say ("  and picking one user asks for that one alone: {0}   {1}" -f
+    ((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ','),
+    (Mark (((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ',') -eq '999')))
+$cmbBackupUser.SelectedIndex = 0
+& { function Get-SelectedSerial { $null }
+    Update-BackupUsers -Force }
+Say ("  no phone picked: '{0}'   {1}" -f $lblBackupUserNote.Text, (Mark ($lblBackupUserNote.Text -eq 'no phone picked')))
+Set-BackupBusyUi -Running $true
+Say ("  while a backup runs the box cannot be changed   {0}" -f (Mark (-not $cmbBackupUser.Enabled)))
+Set-BackupBusyUi -Running $false
 Say ''
 Say '== a real backup, reading only =='
 $attached = @(Get-AdbDevices | Where-Object { $_.Serial -eq $TestSerial -and $_.State -eq 'device' }).Count -gt 0

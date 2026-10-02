@@ -3846,8 +3846,9 @@ $tabBackup.Controls.Add($grpBackupRestore)
 $grpBackupMake = New-Object System.Windows.Forms.GroupBox
 $grpBackupMake.Text = 'Back this phone up'
 $grpBackupMake.Dock = 'Top'
-# 130, not 104: the memory card is a row of its own under the four ticks
-$grpBackupMake.Height = 130
+# 156, not 104: the memory card and the name are a row of their own under the
+# four ticks, and who the backup is of is another
+$grpBackupMake.Height = 156
 $tabBackup.Controls.Add($grpBackupMake)
 
 $chkBackupFiles = New-Object System.Windows.Forms.CheckBox
@@ -3912,29 +3913,57 @@ $chkBackupPack.Size = New-Object System.Drawing.Size(166, 22)
 $grpBackupMake.Controls.Add($chkBackupPack)
 $toolTip.SetToolTip($chkBackupPack, 'One file instead of a folder, which is tidier to keep and to move. It costs a second pass over everything - about 40% more time - and a backup left as a folder can be brought up to date later instead of taken again')
 
+# Which people on the phone this backup is of. Android keeps a user's files
+# apart from everyone else's, and adb can read some of them: the box says which
+# it found, and what it cannot read it says so about rather than silently
+# taking nothing.
+$lblBackupUsers = New-Object System.Windows.Forms.Label
+$lblBackupUsers.Text = 'Back up:'
+$lblBackupUsers.Location = New-Object System.Drawing.Point(12, 77)
+$lblBackupUsers.Size = New-Object System.Drawing.Size(60, 20)
+$grpBackupMake.Controls.Add($lblBackupUsers)
+
+$cmbBackupUser = New-Object System.Windows.Forms.ComboBox
+$cmbBackupUser.DropDownStyle = 'DropDownList'
+$cmbBackupUser.Location = New-Object System.Drawing.Point(76, 74)
+$cmbBackupUser.Size = New-Object System.Drawing.Size(290, 24)
+$null = $cmbBackupUser.Items.Add('The main user (0)')
+$cmbBackupUser.SelectedIndex = 0
+$grpBackupMake.Controls.Add($cmbBackupUser)
+$toolTip.SetToolTip($cmbBackupUser, 'Which user on the phone to back up: the main one, every user whose files adb can read, or one of them on its own. The owner goes where it always has; anyone else goes into users\<id>\ inside the backup')
+
+$lblBackupUserNote = New-Object System.Windows.Forms.Label
+$lblBackupUserNote.Text = 'read from the phone when this tab is opened'
+$lblBackupUserNote.ForeColor = [System.Drawing.Color]::DimGray
+$lblBackupUserNote.Location = New-Object System.Drawing.Point(374, 77)
+$lblBackupUserNote.Size = New-Object System.Drawing.Size(326, 20)
+$lblBackupUserNote.AutoEllipsis = $true
+$grpBackupMake.Controls.Add($lblBackupUserNote)
+$toolTip.SetToolTip($lblBackupUserNote, 'What the phone answered: how many users it has, and whose files adb may read')
+
 $btnBackupRun = New-Object System.Windows.Forms.Button
 $btnBackupRun.Text = 'Back up now ...'
-$btnBackupRun.Location = New-Object System.Drawing.Point(12, 74)
+$btnBackupRun.Location = New-Object System.Drawing.Point(12, 100)
 $btnBackupRun.Size = New-Object System.Drawing.Size(140, 28)
 $grpBackupMake.Controls.Add($btnBackupRun)
 $toolTip.SetToolTip($btnBackupRun, 'Asks where to keep it, then writes a folder named after this phone and the time')
 
 $btnBackupCancel = New-Object System.Windows.Forms.Button
 $btnBackupCancel.Text = 'Cancel'
-$btnBackupCancel.Location = New-Object System.Drawing.Point(158, 74)
+$btnBackupCancel.Location = New-Object System.Drawing.Point(158, 100)
 $btnBackupCancel.Size = New-Object System.Drawing.Size(90, 28)
 $btnBackupCancel.Enabled = $false
 $grpBackupMake.Controls.Add($btnBackupCancel)
 $toolTip.SetToolTip($btnBackupCancel, 'Stops the backup or the restore where it is; what was already done stays')
 
 $prgBackup = New-Object System.Windows.Forms.ProgressBar
-$prgBackup.Location = New-Object System.Drawing.Point(256, 78)
+$prgBackup.Location = New-Object System.Drawing.Point(256, 104)
 $prgBackup.Size = New-Object System.Drawing.Size(150, 20)
 $grpBackupMake.Controls.Add($prgBackup)
 
 $lblBackupProgress = New-Object System.Windows.Forms.Label
 $lblBackupProgress.Text = 'What an app keeps inside itself cannot be read without root - see the guide.'
-$lblBackupProgress.Location = New-Object System.Drawing.Point(414, 80)
+$lblBackupProgress.Location = New-Object System.Drawing.Point(414, 106)
 $lblBackupProgress.Size = New-Object System.Drawing.Size(286, 20)
 $lblBackupProgress.AutoEllipsis = $true
 $grpBackupMake.Controls.Add($lblBackupProgress)
@@ -11957,6 +11986,7 @@ $lstDevices.Add_SelectedIndexChanged({
     # opened backup are read against the phone now picked
     Update-BackupAppsIfShown
     Update-EraseIfShown
+    Update-BackupUsersIfShown
 })
 
 $btnInstallClient.Add_Click({
@@ -12267,6 +12297,8 @@ $tabsAdvanced.Add_SelectedIndexChanged({
     }
     # the same for the tools page: what there is to erase, read on arrival
     Update-EraseIfShown
+    # and for the backup tab: who is on this phone
+    Update-BackupUsersIfShown
 })
 
 
@@ -12880,6 +12912,10 @@ $form.Add_Resize({
 # The tab's own work; the backup itself is shared\Backup.ps1, which the Nova
 # window uses as well.
 
+# the phone the user list was read from, and what the box's lines mean: each
+# line is a set of ids, so "everyone" and "just this one" are the same question
+$script:backupUsersFor = ''
+$script:backupUserChoices = @()
 $script:backupPath = ''
 $script:backupSource = $null
 $script:backupManifest = $null
@@ -12921,7 +12957,8 @@ function Set-BackupBusyUi {
     $btnBackupCancel.Enabled = $Running
     foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps,
         $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse,
-        $btnBackupAppsAll, $btnBackupAppsNone, $btnBackupListResume, $btnBackupListDelete)) {
+        $btnBackupAppsAll, $btnBackupAppsNone, $btnBackupListResume, $btnBackupListDelete,
+        $cmbBackupUser)) {
         $control.Enabled = -not $Running
     }
     if (-not $Running) {
@@ -13171,6 +13208,66 @@ function Get-BackupListPick {
     return $script:backupListRows[$index]
 }
 
+function Update-BackupUsers {
+    # who is on this phone, and which of them adb may read. It costs a handful
+    # of adb calls, so it is read when the tab is opened or the phone changes.
+    param([switch]$Force)
+
+    $serial = Get-SelectedSerial
+    if (-not $serial) {
+        $script:backupUsersFor = ''
+        $lblBackupUserNote.Text = 'no phone picked'
+        return
+    }
+    if (-not $Force -and $script:backupUsersFor -eq $serial) { return }
+    $script:backupUsersFor = $serial
+
+    $users = @(Get-BackupUsers -Serial $serial)
+    $readable = @($users | Where-Object { $_.Readable })
+    $choices = New-Object System.Collections.Generic.List[object]
+    foreach ($user in $users) {
+        if (-not $user.Readable) { continue }
+        $text = $(if ($user.Id -le 0) { 'The main user (0)' } else { "User $($user.Id)" })
+        if ("$($user.Name)") { $text += " - $($user.Name)" }
+        $null = $choices.Add([PSCustomObject]@{ Text = $text; Ids = @($user.Id); Users = @($user) })
+    }
+    if ($readable.Count -gt 1) {
+        $null = $choices.Add([PSCustomObject]@{
+            Text  = "Everyone adb can read ($($readable.Count) users)"
+            Ids   = @($readable | ForEach-Object { $_.Id })
+            Users = @($readable) })
+    }
+    if ($choices.Count -eq 0) {
+        $null = $choices.Add([PSCustomObject]@{ Text = 'The main user (0)'; Ids = @(0); Users = @() })
+    }
+
+    $script:backupUserChoices = $choices.ToArray()
+    $cmbBackupUser.Items.Clear()
+    foreach ($choice in $script:backupUserChoices) { $null = $cmbBackupUser.Items.Add($choice.Text) }
+    $cmbBackupUser.SelectedIndex = 0
+
+    $shut = @($users | Where-Object { -not $_.Readable })
+    if ($shut.Count -eq 0) {
+        $lblBackupUserNote.Text = "$($users.Count) user(s) on this phone"
+    } else {
+        $lblBackupUserNote.Text = "$($users.Count) user(s); adb cannot read " +
+            (@($shut | ForEach-Object { "$($_.Id)" }) -join ', ')
+    }
+}
+
+function Update-BackupUsersIfShown {
+    if ((Test-PageShown -Page $tabBackup) -and $script:busy -eq 0) { Update-BackupUsers }
+}
+
+function Get-BackupPickedUsers {
+    # the users the box is on, as the rows the backup writes into its manifest
+    $index = $cmbBackupUser.SelectedIndex
+    if ($index -lt 0 -or $index -ge @($script:backupUserChoices).Count) { return @(0) }
+    $choice = $script:backupUserChoices[$index]
+    if (@($choice.Users).Count -gt 0) { return @($choice.Users) }
+    return @($choice.Ids)
+}
+
 function Start-BackupNow {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -13186,7 +13283,7 @@ function Start-BackupNow {
     Set-BackupBusyUi -Running $true
     try {
         $manifest = Invoke-PhoneBackup -Serial $serial -Destination $dialog.SelectedPath -Parts $parts -Model $model `
-            -Name "$($txtBackupName.Text)".Trim() -Pack $chkBackupPack.Checked
+            -Name "$($txtBackupName.Text)".Trim() -Pack $chkBackupPack.Checked -Users (Get-BackupPickedUsers)
     } finally {
         Set-BackupBusyUi -Running $false
     }
@@ -13322,10 +13419,15 @@ function Start-RestoreFiles {
     Write-Log 'Restore: reading what the phone already has ...' $colorStep
     # where a card's files would go: the card in this phone, whatever it is called
     $cards = @(Get-BackupCardPaths -Serial $serial)
-    $plan = Get-BackupFilePlan -Source $script:backupSource -CardRoot $(if ($cards.Count -gt 0) { $cards[0] } else { '' })
+    $plan = Get-BackupFilePlan -Source $script:backupSource -CardRoot $(if ($cards.Count -gt 0) { $cards[0] } else { '' }) `
+        -UserIds @(@(Get-BackupUsers -Serial $serial -Quick) | ForEach-Object { $_.Id })
     if ($plan.CardSkipped -gt 0) {
         Write-Log ("  $($plan.CardSkipped) file(s) in this backup came off a memory card, and there is none in " +
             'this phone: they are left out.') $colorWarn
+    }
+    if ($plan.UserSkipped -gt 0) {
+        Write-Log ("  $($plan.UserSkipped) file(s) belong to a user this phone does not have any more: " +
+            'they are left out.') $colorWarn
     }
     if ($plan.Total -eq 0) { Write-Log 'This backup holds no files.' $colorWarn; return }
     $plan = Set-BackupFilePlanState -Plan $plan -Serial $serial

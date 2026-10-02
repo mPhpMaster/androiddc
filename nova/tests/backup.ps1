@@ -158,6 +158,43 @@ Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $ui.BackupCancel.IsEnabled) -and $ui.BackupRun.IsEnabled -and $ui.BackupRestoreFiles.IsEnabled)))
 
 Say ''
+Say '== which user the backup is of =='
+# the same shared work as the classic window; what is checked here is the box
+# on the page, filled from a made-up phone with three users
+$userShell = {
+    param($Serial, $CommandArguments)
+    $command = (@($CommandArguments) -join ' ')
+    $text = ''
+    if ($command -eq 'pm list users') {
+        $text = "Users:`n`tUserInfo{0:Owner:c13} running`n`tUserInfo{10:Guest:414}`n`tUserInfo{999:Dual apps:20001010} running"
+    } elseif ($command -like "ls -1 '/storage/emulated/10'*") {
+        $text = ''
+    } elseif ($command -like 'ls -1 *readable*') {
+        $text = 'readable'
+    }
+    return [PSCustomObject]@{ Lines = @($text -split "`n"); Text = $text; ExitCode = 0 }
+}
+& { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $userShell $Serial $CommandArguments }
+    function Get-SelectedSerial { 'ABC123' }
+    Update-BackupPageUsers -Force }
+$null = Wait-Idle
+Say ("  the box offers: {0}" -f ((@($ui.BackupUsers.Items)) -join ' | '))
+Say ("  one line per user adb can read, and one for all of them   {0}" -f (Mark (
+    $ui.BackupUsers.Items.Count -eq 3 -and "$($ui.BackupUsers.Items[0])" -eq 'The main user (0) - Owner' -and
+    "$($ui.BackupUsers.Items[2])" -like 'Everyone adb can read*')))
+Say ("  the guest is left out, and the note says why: '{0}'   {1}" -f $ui.BackupUsersNote.Text, (Mark (
+    $ui.BackupUsersNote.Text -eq '3 user(s); adb cannot read 10')))
+Say ("  it starts on the main user   {0}" -f (Mark (
+    ((@(Get-BackupPageUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0')))
+$ui.BackupUsers.SelectedIndex = 2
+Say ("  picking everyone asks for: {0}   {1}" -f ((@(Get-BackupPageUsers) | ForEach-Object { $_.Id }) -join ','),
+    (Mark (((@(Get-BackupPageUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0,999')))
+$ui.BackupUsers.SelectedIndex = 0
+Set-BackupPageBusy -Running $true
+Say ("  while a backup runs the box cannot be changed   {0}" -f (Mark (-not $ui.BackupUsers.IsEnabled)))
+Set-BackupPageBusy -Running $false
+
+Say ''
 Say '== fitting the window =='
 foreach ($size in @('default', 'min')) {
     Set-WindowSize -Size $size

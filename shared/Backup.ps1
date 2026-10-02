@@ -566,23 +566,139 @@ function Get-BackupRowValue {
 }
 
 function Get-BackupStorageEntries {
-    # the top level of /sdcard, with what adb cannot read left out
-    param([string]$Serial)
+    # the top level of one user's storage, with what adb cannot read left out
+    param([string]$Serial, [string]$Root = '/sdcard')
 
     $entries = @()
-    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-1', '/sdcard/')).Lines) {
+    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-1', ($Root + '/'))).Lines) {
         $name = "$line".Trim()
         if (-not $name -or $name -match 'Permission denied|No such file|Not a directory') { continue }
         if ($name -eq 'Android') {
             # Android/data and Android/obb have been closed to adb since Android
             # 11; Android/media is not, and holds what messaging apps keep
-            $media = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-d', '/sdcard/Android/media')).Text
-            if ($media -match '/sdcard/Android/media') { $entries += 'Android/media' }
+            $media = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('ls', '-d', "$Root/Android/media")).Text
+            if ($media -match "$Root/Android/media") { $entries += 'Android/media' }
             continue
         }
         $entries += $name
     }
     return $entries
+}
+
+function Get-BackupUserPath {
+    # where a user's own files are. The owner's are /sdcard, which is what
+    # /storage/emulated/0 is called everywhere else in this program.
+    param([int]$Id)
+
+    if ($Id -le 0) { return '/sdcard' }
+    return "/storage/emulated/$Id"
+}
+
+function Get-BackupUserFolder {
+    # where that user's things go inside the backup. The owner keeps the
+    # folders a backup has always had - files\, personal\, settings\ - so
+    # every backup taken before this one still reads and restores exactly as
+    # it did; anyone else goes under users\<id>\.
+    param([int]$Id)
+
+    if ($Id -le 0) { return '' }
+    return "users/$Id"
+}
+
+function Get-BackupUserWords {
+    param($User)
+
+    if ($null -eq $User) { return '' }
+    $words = "$($User.Id)"
+    if ("$($User.Name)") { $words += " ($($User.Name))" }
+    return $words
+}
+
+function Get-BackupUserRows {
+    # what the manifest says about the users a backup holds: the id, and the
+    # name they had on the phone at the time, so a backup read later can say
+    # "user 999 (Dual apps)" about a phone that has since been reset
+    param([string]$Serial, $Users = @(0))
+
+    $ids = @(Get-BackupUserIds -Users $Users)
+    $named = @{}
+    foreach ($user in @($Users)) {
+        if ($null -eq $user -or $user -is [int]) { continue }
+        if ($user.PSObject.Properties['Id'] -and $user.PSObject.Properties['Name']) { $named["$($user.Id)"] = "$($user.Name)" }
+    }
+    if ($named.Count -eq 0 -and $Serial) {
+        foreach ($user in @(Get-BackupUsers -Serial $Serial -Quick)) { $named["$($user.Id)"] = "$($user.Name)" }
+    }
+    $rows = @()
+    foreach ($id in $ids) {
+        $rows += [PSCustomObject]@{ Id = $id; Name = $(if ($named.ContainsKey("$id")) { $named["$id"] } else { '' }) }
+    }
+    return $rows
+}
+
+function Get-BackupUsers {
+    <#
+        The people on this phone, and what adb may read of each.
+
+          pm list users -> UserInfo{0:Owner:c13} running
+                           UserInfo{10:Guest:414}
+                           UserInfo{999:Dual apps:20001010} running
+
+        Measured on a phone with those three: the owner's files could be read
+        and so could the clone profile's, while the guest's could not
+        (/storage/emulated/10 answers Permission denied), and every user's app
+        list could be asked for whatever its files said. So Readable is tested,
+        one ls per user, rather than assumed - pass -Quick to skip that.
+    #>
+    param([string]$Serial, [switch]$Quick)
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'list', 'users')).Lines) {
+        if ("$line" -notmatch 'UserInfo\{(\d+):(.*):[0-9a-fA-F]+\}') { continue }
+        # read out of $Matches at once: the next -match in this loop replaces
+        # it, and the name was lost that way for every user adb could read -
+        # the ones where the readable test below actually matched something
+        $id = [int]$Matches[1]
+        $name = "$($Matches[2])".Trim()
+        $running = ("$line" -match 'running')
+        $path = Get-BackupUserPath -Id $id
+        $readable = $true
+        if (-not $Quick) {
+            $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+                'ls -1 ' + (Quote-DeviceArgument $path) + ' >/dev/null 2>&1 && echo readable')).Text
+            $readable = ("$text" -match 'readable')
+        }
+        $null = $rows.Add([PSCustomObject]@{
+            Id       = $id
+            Name     = $name
+            Running  = $running
+            Path     = $path
+            Readable = $readable
+        })
+    }
+    if ($rows.Count -eq 0) {
+        # a phone whose pm answers nothing still has an owner, and that is the
+        # one every backup before this took
+        $null = $rows.Add([PSCustomObject]@{
+            Id = 0; Name = ''; Running = $true; Path = '/sdcard'; Readable = $true })
+    }
+    return $rows.ToArray()
+}
+
+function Get-BackupUserIds {
+    # the ids to work through, in order and without repeats; nothing asked for
+    # means the owner, which is what a backup meant before users were a choice
+    param($Users)
+
+    $ids = New-Object System.Collections.Generic.List[int]
+    foreach ($user in @($Users)) {
+        if ($null -eq $user) { continue }
+        $id = $(if ($user -is [int]) { [int]$user } else { [int]$user.Id })
+        if (-not $ids.Contains($id)) { $null = $ids.Add($id) }
+    }
+    if ($ids.Count -eq 0) { $null = $ids.Add(0) }
+    $ids.Sort()
+    return $ids.ToArray()
 }
 
 function Get-BackupCardPaths {
@@ -662,60 +778,98 @@ function Get-BackupFolderSize {
 }
 
 function Backup-PhoneFiles {
-    # /sdcard onto the PC, one top-level folder at a time, so the log says where
-    # it is and Cancel lands between folders as well as inside one
-    param([string]$Serial, [string]$Folder)
+    <#
+        The files of each user that was asked for, onto this PC, one top-level
+        folder at a time so the log says where it is and Cancel lands between
+        folders as well as inside one.
 
-    $target = Join-Path $Folder 'files'
-    $null = New-Item -ItemType Directory -Path $target -Force
-    $entries = @(Get-BackupStorageEntries -Serial $Serial)
-    Write-Log "Backup: $($entries.Count) folder(s) of internal storage ..." $colorStep
+        The owner's go into files\, exactly where they have always gone;
+        anyone else's into users\<id>\files\. A user whose storage adb
+        cannot read - a stopped guest, measured - is named and skipped rather
+        than left as an empty folder nobody can explain.
+    #>
+    param([string]$Serial, [string]$Folder, $Users = @(0))
 
-    # how big each one is, before anything is pulled: it is what makes "about
-    # twenty minutes left" mean something. du is asked once per folder either
-    # way - this only asks sooner.
-    $sizes = Get-BackupRemoteSizeMap -Serial $Serial -Paths @($entries | ForEach-Object { "/sdcard/$_" }) -Caption 'internal storage'
-    $total = [long]0
-    foreach ($size in $sizes.Values) { if ($size -gt 0) { $total += $size } }
-    Start-BackupClock -Total $total
-
-    $index = 0
+    $ids = @(Get-BackupUserIds -Users $Users)
     $refused = @()
-    foreach ($entry in $entries) {
+    $perUser = New-Object System.Collections.Generic.List[object]
+    $folders = @()
+
+    foreach ($id in $ids) {
         if (Test-BackupStopped) { break }
-        $index++
-        Write-BackupProgress -Text "Files: $entry" -Done $index -Total $entries.Count
-        Write-Log "  pulling /sdcard/$entry ..." $colorInfo
+        $root = Get-BackupUserPath -Id $id
+        # users\999\files, not a -replace: the + binds tighter than the cast,
+        # so a slash would have been swapped for "\files" and given users\files999
+        $target = $(if ($id -le 0) { Join-Path $Folder 'files' } else { Join-Path $Folder "users\$id\files" })
+        $null = New-Item -ItemType Directory -Path $target -Force
+        $who = $(if ($id -le 0) { 'Files' } else { "Files (user $id)" })
 
-        $local = Join-Path $target ($entry -replace '/', [string][char]92)
-        $parent = Split-Path -Parent $local
-        if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
-
-        $expected = [long](-1)
-        if ($sizes.ContainsKey("/sdcard/$entry")) { $expected = [long]$sizes["/sdcard/$entry"] }
-        $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', "/sdcard/$entry", $local) `
-            -Caption "Files: $entry" -Expected $expected -OnPoll { Get-BackupFolderSize -Path $local }.GetNewClosure()
-        Add-BackupClockDone -Amount $(if ($expected -gt 0) { $expected } else { (Get-BackupFolderSize -Path $local) })
-        if ($result.Stopped) { break }
-        if ($result.ExitCode -ne 0) {
-            $refused += $entry
-            Write-Log ('  ' + $result.Text) $colorWarn
-            # adb gives up on a whole folder over one name it cannot write -
-            # measured on a folder named in Arabic-Indic digits, where it said
-            # "cannot create ... Not a directory" and left the rest behind. The
-            # files it missed are fetched one by one, into folders made here,
-            # which Windows has no trouble with.
-            $mended = Repair-BackupFolder -Serial $Serial -Remote "/sdcard/$entry" -Local $local -Caption "Files: $entry"
-            if ($mended.Pulled -gt 0) { $refused = @($refused | Where-Object { $_ -ne $entry }) }
+        $entries = @(Get-BackupStorageEntries -Serial $Serial -Root $root)
+        if ($entries.Count -eq 0) {
+            Write-Log "Backup: nothing of user $id can be read ($root), so that user is skipped." $colorWarn
+            $null = $perUser.Add([PSCustomObject]@{ Id = $id; Files = 0; Bytes = [long]0; Folders = @(); Readable = $false })
+            continue
         }
-    }
-    Stop-BackupClock
+        if ($id -le 0) { Write-Log "Backup: $($entries.Count) folder(s) of internal storage ..." $colorStep }
+        else { Write-Log "Backup: $($entries.Count) folder(s) of user $id ..." $colorStep }
+        $folders += @($entries | ForEach-Object { $(if ($id -le 0) { $_ } else { "users/$id/$_" }) })
 
-    $count = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
-    $bytes = Get-BackupFolderSize -Path $target
+        # how big each one is, before anything is pulled: it is what makes
+        # "about twenty minutes left" mean something. du is asked once per
+        # folder either way - this only asks sooner.
+        $sizes = Get-BackupRemoteSizeMap -Serial $Serial -Paths @($entries | ForEach-Object { "$root/$_" }) -Caption $who.ToLower()
+        $total = [long]0
+        foreach ($size in $sizes.Values) { if ($size -gt 0) { $total += $size } }
+        Start-BackupClock -Total $total
+
+        $index = 0
+        foreach ($entry in $entries) {
+            if (Test-BackupStopped) { break }
+            $index++
+            Write-BackupProgress -Text "${who}: $entry" -Done $index -Total $entries.Count
+            Write-Log "  pulling $root/$entry ..." $colorInfo
+
+            $local = Join-Path $target ($entry -replace '/', [string][char]92)
+            $parent = Split-Path -Parent $local
+            if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
+
+            $expected = [long](-1)
+            if ($sizes.ContainsKey("$root/$entry")) { $expected = [long]$sizes["$root/$entry"] }
+            $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', "$root/$entry", $local) `
+                -Caption "${who}: $entry" -Expected $expected -OnPoll { Get-BackupFolderSize -Path $local }.GetNewClosure()
+            Add-BackupClockDone -Amount $(if ($expected -gt 0) { $expected } else { (Get-BackupFolderSize -Path $local) })
+            if ($result.Stopped) { break }
+            if ($result.ExitCode -ne 0) {
+                $refused += $(if ($id -le 0) { $entry } else { "users/$id/$entry" })
+                Write-Log ('  ' + $result.Text) $colorWarn
+                # adb gives up on a whole folder over one name it cannot write -
+                # measured on a folder named in Arabic-Indic digits, where it said
+                # "cannot create ... Not a directory" and left the rest behind. The
+                # files it missed are fetched one by one, into folders made here,
+                # which Windows has no trouble with.
+                $mended = Repair-BackupFolder -Serial $Serial -Remote "$root/$entry" -Local $local -Caption "${who}: $entry"
+                if ($mended.Pulled -gt 0) { $refused = @($refused | Where-Object { $_ -ne "users/$id/$entry" -and $_ -ne $entry }) }
+            }
+        }
+        Stop-BackupClock
+        $null = $perUser.Add([PSCustomObject]@{
+            Id       = $id
+            Files    = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
+            Bytes    = (Get-BackupFolderSize -Path $target)
+            Folders  = @($entries)
+            Readable = $true
+        })
+    }
+
+    # counted over the whole backup, so a backup of the owner alone says what
+    # it always said
+    $count = 0
+    $bytes = [long]0
+    foreach ($row in $perUser) { $count += $row.Files; $bytes += $row.Bytes }
     if ($refused.Count -gt 0) { Write-Log ('  the phone refused: ' + ($refused -join ', ')) $colorWarn }
     Write-Log ("  $count file(s), " + (Format-FileSize -Bytes $bytes)) $colorGood
-    return [PSCustomObject]@{ Files = $count; Bytes = $bytes; Folders = @($entries); Refused = @($refused) }
+    return [PSCustomObject]@{
+        Files = $count; Bytes = $bytes; Folders = @($folders); Refused = @($refused); Users = $perUser.ToArray() }
 }
 
 function Backup-PhoneCard {
@@ -792,17 +946,29 @@ function Backup-PhoneApps {
     # for an app this phone no longer has.
     # SkipDone is for carrying a stopped backup on: an app whose APKs are
     # already here, with the sizes the phone says they have, is left alone.
-    param([string]$Serial, [string]$Folder, [switch]$SkipDone)
+    param([string]$Serial, [string]$Folder, [switch]$SkipDone, $Users = @(0))
 
     $target = Join-Path $Folder 'apps'
     $null = New-Item -ItemType Directory -Path $target -Force
+    $ids = @(Get-BackupUserIds -Users $Users)
     $packages = @()
     $versions = @{}
-    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        'pm', 'list', 'packages', '-3', '--show-versioncode')).Lines) {
-        if ("$line" -notmatch '^package:(\S+)') { continue }
-        $packages += $Matches[1]
-        if ("$line" -match 'versionCode:(\S+)') { $versions[$packages[-1]] = $Matches[1] }
+    # Which apps each user has: "pm list packages --user <id>" answers for any
+    # user, even one whose files adb cannot read - measured on a stopped guest
+    # with fourteen apps. An APK itself belongs to the phone, not to a user, so
+    # it is fetched once however many users have it; who has it is written down.
+    $whoHas = @{}
+    foreach ($id in $ids) {
+        $command = @('pm', 'list', 'packages', '-3', '--show-versioncode')
+        if ($id -gt 0) { $command += @('--user', "$id") }
+        foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments $command).Lines) {
+            if ("$line" -notmatch '^package:(\S+)') { continue }
+            $package = $Matches[1]
+            $packages += $package
+            if ("$line" -match 'versionCode:(\S+)') { $versions[$package] = $Matches[1] }
+            if (-not $whoHas.ContainsKey($package)) { $whoHas[$package] = @() }
+            $whoHas[$package] += $id
+        }
     }
     $packages = @($packages | Sort-Object -Unique)
 
@@ -815,7 +981,7 @@ function Backup-PhoneApps {
     Write-Log "Backup: $($packages.Count) app(s) ..." $colorStep
     # where every app's files are, in a handful of calls instead of one per app:
     # measured at 0.46 s each, which is over a minute of asking on this phone
-    $apkPaths = Get-BackupApkPaths -Serial $Serial
+    $apkPaths = Get-BackupApkPaths -Serial $Serial -Users $ids
 
     $apps = @()
     $index = 0
@@ -842,6 +1008,7 @@ function Backup-PhoneApps {
         if ($SkipDone -and (Test-BackupAppHere -Serial $Serial -Folder $appFolder -RemotePaths $paths)) {
             $apps += [PSCustomObject]@{
                 Package = $package
+                Users   = @($(if ($whoHas.ContainsKey($package)) { $whoHas[$package] } else { @() }))
                 Name    = $(if ($labels.ContainsKey($package)) { "$($labels[$package])" } else { '' })
                 Version = $(if ($versions.ContainsKey($package)) { "$($versions[$package])" } else { '' })
                 Files   = @(@(Get-ChildItem -LiteralPath $appFolder -Filter *.apk -File -ErrorAction SilentlyContinue) |
@@ -863,6 +1030,7 @@ function Backup-PhoneApps {
         if ($saved.Count -eq 0) { continue }
         $apps += [PSCustomObject]@{
             Package = $package
+            Users   = @($(if ($whoHas.ContainsKey($package)) { $whoHas[$package] } else { @() }))
             Name    = $(if ($labels.ContainsKey($package)) { "$($labels[$package])" } else { '' })
             Version = $(if ($versions.ContainsKey($package)) { "$($versions[$package])" } else { '' })
             Files   = @($saved)
@@ -886,19 +1054,25 @@ function Get-BackupApkPaths {
         "pm list packages -f -3" names each app's base APK and the folder it
         sits in; the splits are beside it, so one ls over all those folders at
         once finds them. Anything this does not answer for is asked about on
-        its own by the caller.
+        its own by the caller. With more than one user, it is asked once per
+        user: an app only another user has is not in the owner's list.
     #>
-    param([string]$Serial)
+    param([string]$Serial, $Users = @(0))
 
     $paths = @{}
     $folders = @{}
-    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'list', 'packages', '-f', '-3')).Lines) {
-        if ("$line" -notmatch '^package:(/\S+\.apk)=(\S+)\s*$') { continue }
-        $apk = $Matches[1]
-        $package = $Matches[2]
-        $paths[$package] = @($apk)
-        $folder = (Split-Path -Parent $apk) -replace '\\', '/'
-        if ($folder) { $folders[$folder] = $package }
+    foreach ($id in @(Get-BackupUserIds -Users $Users)) {
+        $command = @('pm', 'list', 'packages', '-f', '-3')
+        if ($id -gt 0) { $command += @('--user', "$id") }
+        foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments $command).Lines) {
+            if ("$line" -notmatch '^package:(/\S+\.apk)=(\S+)\s*$') { continue }
+            $apk = $Matches[1]
+            $package = $Matches[2]
+            if ($paths.ContainsKey($package)) { continue }
+            $paths[$package] = @($apk)
+            $folder = (Split-Path -Parent $apk) -replace '\\', '/'
+            if ($folder) { $folders[$folder] = $package }
+        }
     }
     if ($folders.Count -eq 0) { return $paths }
 
@@ -926,23 +1100,54 @@ function Get-BackupApkPaths {
 }
 
 function Backup-PhonePersonal {
-    # contacts, messages and the call log, as the phone has them now
-    param([string]$Serial, [string]$Folder)
+    <#
+        Contacts, messages and the call log, as the phone has them now.
+
+        Contacts belong to a user: "content query --user <id>" really does
+        answer for that user - measured, where a stopped guest answered "Error
+        while accessing provider" rather than the owner's contacts. So each
+        user asked for gets their own contacts.json.
+
+        Messages and the call log do not. Their providers are declared
+        singleUser, so every user is shown the owner's - measured: user 10 and
+        user 0 both answered with the same 8440 rows. They are therefore taken
+        once, and the log says why rather than writing the same thousands of
+        messages into every user's folder.
+    #>
+    param([string]$Serial, [string]$Folder, $Users = @(0))
 
     $target = Join-Path $Folder 'personal'
     $null = New-Item -ItemType Directory -Path $target -Force
+    $ids = @(Get-BackupUserIds -Users $Users)
+    $perUser = New-Object System.Collections.Generic.List[object]
 
-    Write-BackupProgress -Text 'Contacts ...' -Done 1 -Total 3
     $contacts = @()
-    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        'content query --uri content://com.android.contacts/data/phones --projection display_name:data1')).Text
-    if (Test-BackupDeviceGone -Text $text) { Stop-BackupRun -Reason 'the phone was disconnected' }
-    foreach ($row in (Split-BackupRows -Text $text)) {
-        $number = Get-BackupRowValue -Row $row -Column 'data1'
-        if (-not $number) { continue }
-        $contacts += [PSCustomObject]@{ Name = (Get-BackupRowValue -Row $row -Column 'display_name'); Number = $number }
+    foreach ($id in $ids) {
+        if (Test-BackupStopped) { break }
+        $where = $(if ($id -le 0) { $target } else { Join-Path $Folder "users\$id\personal" })
+        $null = New-Item -ItemType Directory -Path $where -Force
+        Write-BackupProgress -Text $(if ($id -le 0) { 'Contacts ...' } else { "Contacts of user $id ..." }) -Done 1 -Total 3
+        $command = 'content query --uri content://com.android.contacts/data/phones --projection display_name:data1'
+        if ($id -gt 0) { $command = "content query --user $id --uri content://com.android.contacts/data/phones --projection display_name:data1" }
+        $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @($command)).Text
+        if (Test-BackupDeviceGone -Text $text) { Stop-BackupRun -Reason 'the phone was disconnected' }
+        $mine = @()
+        foreach ($row in (Split-BackupRows -Text $text)) {
+            $number = Get-BackupRowValue -Row $row -Column 'data1'
+            if (-not $number) { continue }
+            $mine += [PSCustomObject]@{ Name = (Get-BackupRowValue -Row $row -Column 'display_name'); Number = $number }
+        }
+        if ($mine.Count -eq 0 -and "$text" -match 'Error while accessing provider') {
+            Write-Log "  user $id is not running, so its contacts could not be read." $colorWarn
+        }
+        Save-BackupText -Path (Join-Path $where 'contacts.json') -Text (ConvertTo-Json -InputObject @($mine) -Depth 3)
+        $null = $perUser.Add([PSCustomObject]@{ Id = $id; Contacts = $mine.Count })
+        if ($id -le 0) { $contacts = $mine }
     }
-    Save-BackupText -Path (Join-Path $target 'contacts.json') -Text (ConvertTo-Json -InputObject @($contacts) -Depth 3)
+    # what the summary counts, when the owner was not among them
+    if ($contacts.Count -eq 0 -and $perUser.Count -gt 0) {
+        foreach ($row in $perUser) { if ($row.Contacts -gt 0) { $contacts = @(1..$row.Contacts); break } }
+    }
 
     $messages = @()
     if (-not (Test-BackupStopped)) {
@@ -980,13 +1185,21 @@ function Backup-PhonePersonal {
         Save-BackupText -Path (Join-Path $target 'calls.json') -Text (ConvertTo-Json -InputObject @($calls) -Depth 3)
     }
 
+    if ($ids.Count -gt 1) {
+        Write-Log '  messages and the call log belong to the phone, not to a user: Android shows every user the same ones.' $colorInfo
+    }
     Write-Log "  $($contacts.Count) contact(s), $($messages.Count) message(s), $($calls.Count) call(s)" $colorGood
-    return [PSCustomObject]@{ Contacts = $contacts.Count; Messages = $messages.Count; Calls = $calls.Count }
+    return [PSCustomObject]@{
+        Contacts = $contacts.Count; Messages = $messages.Count; Calls = $calls.Count; Users = $perUser.ToArray() }
 }
 
 function Backup-PhoneSettings {
-    # what the phone says about itself, as text to read while setting one up again
-    param([string]$Serial, [string]$Folder)
+    # what the phone says about itself, as text to read while setting one up
+    # again. Everything here is the owner's, which is also the phone's; a user
+    # asked for beside the owner gets the two lists that are really theirs -
+    # system and secure settings differ per user (measured: 344 lines against
+    # 123) - and the apps they have.
+    param([string]$Serial, [string]$Folder, $Users = @(0))
 
     $target = Join-Path $Folder 'settings'
     $null = New-Item -ItemType Directory -Path $target -Force
@@ -1011,6 +1224,22 @@ function Backup-PhoneSettings {
         $written += $read.File
     }
 
+    foreach ($id in @(Get-BackupUserIds -Users $Users)) {
+        if ($id -le 0 -or (Test-BackupStopped)) { continue }
+        $where = Join-Path $Folder "users\$id\settings"
+        $null = New-Item -ItemType Directory -Path $where -Force
+        foreach ($read in @(
+                [PSCustomObject]@{ File = 'settings-system.txt'; Command = @('settings', '--user', "$id", 'list', 'system') }
+                [PSCustomObject]@{ File = 'settings-secure.txt'; Command = @('settings', '--user', "$id", 'list', 'secure') }
+                [PSCustomObject]@{ File = 'packages-user.txt'; Command = @('pm', 'list', 'packages', '-3', '--show-versioncode', '--user', "$id") })) {
+            if (Test-BackupStopped) { break }
+            Write-BackupProgress -Text "Settings of user ${id}: $($read.File)" -Done $index -Total ($reads.Count + 1)
+            $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments $read.Command).Text
+            Save-BackupText -Path (Join-Path $where $read.File) -Text $text
+            $written += "users/$id/$($read.File)"
+        }
+    }
+
     if (-not (Test-BackupStopped)) {
         Write-BackupProgress -Text 'Settings: the device report' -Done ($reads.Count + 1) -Total ($reads.Count + 1)
         # the Overview page's report, when this window has it
@@ -1031,7 +1260,7 @@ function Invoke-PhoneBackup {
         says whether everything asked for was taken.
     #>
     param([string]$Serial, [string]$Destination, [string[]]$Parts, [string]$Model = '', [string]$Name = '',
-        [bool]$Pack = $true)
+        [bool]$Pack = $true, $Users = @(0))
 
     $wanted = @(@($Parts) | Where-Object { $_ })
     if ($wanted.Count -eq 0) { Write-Log 'Backup: nothing was ticked.' $colorWarn; return $null }
@@ -1054,6 +1283,9 @@ function Invoke-PhoneBackup {
         Created  = $started.ToString('s')
         Name     = "$Name".Trim()
         Parts    = @($wanted)
+        # who this backup is of. A backup from before this said nothing, and is
+        # read as the owner's, which is what it was.
+        Users    = @(Get-BackupUserRows -Serial $Serial -Users $Users)
         Files    = $null
         Card     = $null
         Apps     = @()
@@ -1068,11 +1300,11 @@ function Invoke-PhoneBackup {
     # the packing is inside the run, so Cancel still works while it packs
     try {
         try {
-            if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Backup-PhoneFiles -Serial $Serial -Folder $folder }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Backup-PhoneFiles -Serial $Serial -Folder $folder -Users $Users }
             if (-not (Test-BackupStopped) -and $wanted -contains 'card') { $manifest.Card = Backup-PhoneCard -Serial $Serial -Folder $folder }
-            if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder) }
-            if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
-            if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder -Users $Users) }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder -Users $Users }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder -Users $Users) }
         } finally {
             Save-BackupManifest -Manifest $manifest -Folder $folder
         }
@@ -1293,32 +1525,48 @@ function Repair-BackupFolder {
 }
 
 function Resume-BackupFiles {
-    # internal storage, carried on: the same folders a backup takes, compared
-    # one at a time
-    param([string]$Serial, [string]$Folder)
+    # the files, carried on or brought up to date: the same folders a backup
+    # takes, of the same users it was taken of, compared one at a time
+    param([string]$Serial, [string]$Folder, $Users = @(0))
 
-    $target = Join-Path $Folder 'files'
-    $null = New-Item -ItemType Directory -Path $target -Force
-    $entries = @(Get-BackupStorageEntries -Serial $Serial)
-    Write-Log "Carrying on: $($entries.Count) folder(s) of internal storage ..." $colorStep
-
+    $ids = @(Get-BackupUserIds -Users $Users)
     $pulled = 0
     $kept = 0
-    $index = 0
-    foreach ($entry in $entries) {
+    $count = 0
+    $bytes = [long]0
+    $folders = @()
+
+    foreach ($id in $ids) {
         if (Test-BackupStopped) { break }
-        $index++
-        Write-BackupProgress -Text "Files: $entry" -Done $index -Total $entries.Count
-        $local = Join-Path $target ($entry -replace '/', [string][char]92)
-        $one = Resume-BackupTree -Serial $Serial -Remote "/sdcard/$entry" -Local $local -Caption "Files: $entry"
-        $pulled += $one.Pulled
-        $kept += $one.Kept
+        $root = Get-BackupUserPath -Id $id
+        $target = $(if ($id -le 0) { Join-Path $Folder 'files' } else { Join-Path $Folder ('users' + [string][char]92 + "$id" + [string][char]92 + 'files') })
+        $null = New-Item -ItemType Directory -Path $target -Force
+        $who = $(if ($id -le 0) { 'Files' } else { "Files (user $id)" })
+        $entries = @(Get-BackupStorageEntries -Serial $Serial -Root $root)
+        if ($entries.Count -eq 0) {
+            Write-Log "Carrying on: nothing of user $id can be read ($root), so it stays as it is." $colorWarn
+            continue
+        }
+        Write-Log "Carrying on: $($entries.Count) folder(s) of $($who.ToLower()) ..." $colorStep
+        $folders += @($entries | ForEach-Object { $(if ($id -le 0) { $_ } else { "users/$id/$_" }) })
+
+        $index = 0
+        foreach ($entry in $entries) {
+            if (Test-BackupStopped) { break }
+            $index++
+            Write-BackupProgress -Text "${who}: $entry" -Done $index -Total $entries.Count
+            $local = Join-Path $target ($entry -replace '/', [string][char]92)
+            $one = Resume-BackupTree -Serial $Serial -Remote "$root/$entry" -Local $local -Caption "${who}: $entry"
+            $pulled += $one.Pulled
+            $kept += $one.Kept
+        }
+        $count += @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
+        $bytes += Get-BackupFolderSize -Path $target
     }
 
-    $count = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
-    $bytes = Get-BackupFolderSize -Path $target
     Write-Log ("  $count file(s), " + (Format-FileSize -Bytes $bytes) + " - $pulled fetched now, $kept were here already") $colorGood
-    return [PSCustomObject]@{ Files = $count; Bytes = $bytes; Folders = @($entries); Refused = @(); Fetched = $pulled; Kept = $kept }
+    return [PSCustomObject]@{ Files = $count; Bytes = $bytes; Folders = @($folders); Refused = @()
+        Fetched = $pulled; Kept = $kept }
 }
 
 function Resume-BackupCard {
@@ -1408,6 +1656,9 @@ function Resume-PhoneBackup {
         Created  = "$($read.Created)"
         Name     = $(if ($read.PSObject.Properties['Name']) { "$($read.Name)" } else { '' })
         Parts    = @($wanted)
+        # the same people it was taken of; a backup from before this says
+        # nothing, and Get-BackupUserIds reads that as the owner
+        Users    = @($(if ($read.PSObject.Properties['Users']) { $read.Users } else { @() }))
         Files    = $null
         Card     = $null
         Apps     = @()
@@ -1421,13 +1672,14 @@ function Resume-PhoneBackup {
 
     try {
         try {
-            if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Resume-BackupFiles -Serial $Serial -Folder $folder }
+            $theirs = @($manifest.Users)
+            if (-not (Test-BackupStopped) -and $wanted -contains 'files') { $manifest.Files = Resume-BackupFiles -Serial $Serial -Folder $folder -Users $theirs }
             if (-not (Test-BackupStopped) -and $wanted -contains 'card') { $manifest.Card = Resume-BackupCard -Serial $Serial -Folder $folder }
-            if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder -SkipDone) }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'apps') { $manifest.Apps = @(Backup-PhoneApps -Serial $Serial -Folder $folder -SkipDone -Users $theirs) }
             # these two are a few seconds each, and are taken again rather than
             # guessed at: they are a picture of the phone as it is now
-            if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder }
-            if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder) }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'personal') { $manifest.Personal = Backup-PhonePersonal -Serial $Serial -Folder $folder -Users $theirs }
+            if (-not (Test-BackupStopped) -and $wanted -contains 'settings') { $manifest.Settings = @(Backup-PhoneSettings -Serial $Serial -Folder $folder -Users $theirs) }
         } finally {
             Save-BackupManifest -Manifest $manifest -Folder $folder
         }
@@ -1669,15 +1921,33 @@ function Get-BackupTempFolder {
 
 # ------------------------------------------------------ what is inside it ----
 
+function Split-BackupUserEntry {
+    <#
+        users/10/files/DCIM/a.jpg -> @{ Id = 10; Rest = 'files/DCIM/a.jpg' }
+
+        Anything that is not one of those comes back with no id, and is the
+        owner's: that is where every backup taken before users were a choice
+        put its files.
+    #>
+    param([string]$Entry)
+
+    if ("$Entry" -match '^users/(\d+)/(.+)$') {
+        return [PSCustomObject]@{ Id = [int]$Matches[1]; Rest = $Matches[2] }
+    }
+    return [PSCustomObject]@{ Id = 0; Rest = "$Entry" }
+}
+
 function Get-BackupEntryWhat {
     # which part of the backup an entry belongs to
     param([string]$Entry)
 
-    if ("$Entry" -like 'files/*') { return 'Files' }
+    $split = Split-BackupUserEntry -Entry $Entry
+    $who = $(if ($split.Id -gt 0) { " (user $($split.Id))" } else { '' })
+    if ($split.Rest -like 'files/*') { return 'Files' + $who }
+    if ($split.Rest -like 'personal/*') { return 'Personal' + $who }
+    if ($split.Rest -like 'settings/*') { return 'Settings' + $who }
     if ("$Entry" -like 'card/*') { return 'Card' }
     if ("$Entry" -like 'apps/*') { return 'Apps' }
-    if ("$Entry" -like 'personal/*') { return 'Personal' }
-    if ("$Entry" -like 'settings/*') { return 'Settings' }
     return 'Backup'
 }
 
@@ -1685,7 +1955,10 @@ function Get-BackupEntryWhere {
     # where that file was on the phone, when it came from one
     param([string]$Entry)
 
-    if ("$Entry" -like 'files/*') { return '/sdcard/' + "$Entry".Substring(6) }
+    $split = Split-BackupUserEntry -Entry $Entry
+    if ($split.Rest -like 'files/*') {
+        return (Get-BackupUserPath -Id $split.Id) + '/' + $split.Rest.Substring(6)
+    }
     # card/1A2B-3C4D/DCIM/a.jpg was /storage/1A2B-3C4D/DCIM/a.jpg
     if ("$Entry" -like 'card/*') { return '/storage/' + "$Entry".Substring(5) }
     return "$Entry"
@@ -1789,6 +2062,14 @@ function Get-BackupSummaryLines {
     }
     if ($Manifest.PSObject.Properties['Files'] -and $Manifest.Files) {
         $lines += "Files: $($Manifest.Files.Files) file(s), " + (Format-FileSize -Bytes ([long]$Manifest.Files.Bytes))
+    }
+    # said only when it is worth saying: a backup of the owner alone is what a
+    # backup has always been, and does not need a line about users
+    if ($Manifest.PSObject.Properties['Users']) {
+        $who = @(@($Manifest.Users) | ForEach-Object { Get-BackupUserWords -User $_ })
+        if ($who.Count -gt 1 -or ($who.Count -eq 1 -and $who[0] -notlike '0*')) {
+            $lines += 'Users: ' + ($who -join ', ')
+        }
     }
     if ($Manifest.PSObject.Properties['Card'] -and $Manifest.Card) {
         $lines += "Memory card: $($Manifest.Card.Files) file(s), " + (Format-FileSize -Bytes ([long]$Manifest.Card.Bytes))
@@ -1936,22 +2217,31 @@ function Get-BackupFilePlan {
         it goes on the phone. Nothing is asked of the phone here, so this can
         be read on its own; Set-BackupFilePlanState marks what is already there.
     #>
-    param([Alias('Folder')]$Source, [string]$CardRoot = '')
+    param([Alias('Folder')]$Source, [string]$CardRoot = '', $UserIds = $null)
 
     $source = ConvertTo-BackupSource -Source $Source
-    $plan = [PSCustomObject]@{ Total = 0; Existing = 0; Items = @(); Tops = @(); CardSkipped = 0; Source = $source }
+    $plan = [PSCustomObject]@{ Total = 0; Existing = 0; Items = @(); Tops = @(); CardSkipped = 0
+        UserSkipped = 0; Source = $source }
     if ($null -eq $source) { return $plan }
     $entries = Get-BackupSourceEntries -Source $source
+    # which users the phone has now, when the caller knew to ask. Files of a
+    # user that is not on this phone have nowhere to go: they are counted and
+    # left, the same way a card's files are when there is no card.
+    $here = $null
+    if ($null -ne $UserIds) { $here = @(@($UserIds) | ForEach-Object { [int]$_ }) }
 
     $items = New-Object System.Collections.Generic.List[object]
     $tops = @{}
     foreach ($entry in $entries) {
         $remote = ''
-        if ($entry.Path -like 'files/*') {
-            $relative = $entry.Path.Substring(6)
+        $split = Split-BackupUserEntry -Entry $entry.Path
+        if ($split.Rest -like 'files/*') {
+            $relative = $split.Rest.Substring(6)
             if (-not $relative) { continue }
-            $remote = '/sdcard/' + $relative
-            $tops['/sdcard/' + ($relative -split '/')[0]] = $true
+            if ($null -ne $here -and $here -notcontains $split.Id) { $plan.UserSkipped++; continue }
+            $root = Get-BackupUserPath -Id $split.Id
+            $remote = "$root/" + $relative
+            $tops["$root/" + ($relative -split '/')[0]] = $true
         } elseif ($entry.Path -like 'card/*') {
             # card/<the card it came off>/<path on it>: it goes to the card in
             # the phone now, whatever that one is called. With no card in the

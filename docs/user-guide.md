@@ -264,6 +264,30 @@ saves, an app's own settings - unless the phone is rooted. `adb backup`, the old
 returned almost nothing since Android 12, and `Android/data` and `Android/obb` have been closed
 to adb since Android 11. No tool without root gets past that.
 
+**Which user.** A phone can have more than one person on it - a second user, a guest, the
+clone profile that dual apps run in - and Android keeps each one's files apart. The *Back up*
+box says who this phone has and lets you pick:
+
+* **the main user (0)**, which is what a backup has always meant, and what it still does by
+  default;
+* **one of the others**, on its own;
+* **everyone adb can read**.
+
+Only users whose storage adb may read are offered, and the line beside the box names the ones
+it cannot - measured on a phone with three users, where the owner's files and the clone
+profile's could be read and a stopped guest's could not. The owner's things go exactly where
+they always went (`files\`, `personal\`, `settings\`), so every backup taken before this still
+opens and restores unchanged; anyone else's go into `users\<id>\` beside them, and *What is
+inside* says *Files (user 999)* against each of their files. Putting them back sends each
+user's files to that same user, and says how many were left out if that user is not on the
+phone any more.
+
+Two things are the phone's rather than a user's, and are taken once however many users you ask
+for: **messages and the call log**. Their providers are declared `singleUser`, so Android shows
+every user the same ones - measured: user 0 and user 10 both answered with the same 8440 rows.
+**Contacts** are per user and are taken per user; a user that is not running cannot answer for
+them, and the log says so rather than writing an empty file and calling it done.
+
 **Giving it a name.** The *Call it* box names the backup - *before the update*, *holiday
 photos*. The name goes into the file's name and into the backup itself, so the list shows it
 even if the file is renamed later. Leave it empty and the phone and the time are name enough.

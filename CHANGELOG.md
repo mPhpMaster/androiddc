@@ -4,6 +4,30 @@
 
 ## Unreleased
 
+### A backup can be of any user on the phone, or of all of them
+
+A phone can have more than one person on it, and Android keeps each one's files apart. Until
+now a backup was always the owner's, without saying so. The *Back up* box now says who the
+phone has and lets you pick: the main user, one of the others on its own, or everyone adb can
+read.
+
+* **Only what can really be read is offered.** Each user's storage is tried before the box is
+  filled - measured on a phone with three users, where the owner's files and the clone
+  profile's could be read and a stopped guest's could not - and the line beside the box names
+  the ones it cannot rather than quietly taking nothing.
+* **The owner's things stay where they were**: `files\`, `personal\`, `settings\`. Every backup
+  taken before this opens, restores and carries on exactly as it did. Anyone else goes into
+  `users\<id>\` beside them, *What is inside* says *Files (user 999)* against their files, and
+  a restore sends each user's files back to that same user - or counts them out, in words, if
+  that user is not on the phone any more.
+* **Each app says which users have it.** `pm list packages --user <id>` answers even for a user
+  whose files are shut, and an APK belongs to the phone rather than to a user, so it is still
+  fetched once.
+* **What is not per user is taken once and said so.** Messages and the call log have
+  `singleUser` providers: Android shows every user the same ones - measured, where user 0 and
+  user 10 both answered with the same 8440 rows - so they are taken once instead of being
+  written into every user's folder. Contacts *are* per user, and are taken per user.
+
 ### A factory reset, and a memory card formatted
 
 Two buttons at the bottom of *Advanced > Device tools*, for any Android phone. Both ask twice -

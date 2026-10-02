@@ -47,6 +47,22 @@
         <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource MutedLine}"
                    Text="optional - the phone and the time are in the name either way"/>
       </Grid>
+      <!-- Which people on the phone this backup is of: Android keeps each
+           user's files apart, and adb may read some of them. The list is read
+           off the phone when the page is opened. -->
+      <Grid Margin="0,0,0,10">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="Back up:" VerticalAlignment="Center" Style="{StaticResource MutedLine}"/>
+        <ComboBox x:Name="BackupUsers" Grid.Column="1" Width="300" Margin="8,0,0,0"
+                  ToolTip="Which user on the phone to back up: the main one, every user whose files adb can read, or one of them on its own. The owner goes where it always has; anyone else goes into users\&lt;id&gt;\ inside the backup"/>
+        <TextBlock x:Name="BackupUsersNote" Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                   Style="{StaticResource MutedLine}" TextTrimming="CharacterEllipsis"
+                   Text="read from the phone when this page is opened"/>
+      </Grid>
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto"/>

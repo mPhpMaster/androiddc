@@ -15,6 +15,10 @@ $script:backupListRows = @()
 # whose phone it is
 $script:backupInsideStale = $true
 $script:backupAppsStale = $true
+# the phone the user list was read from, and what each line of the box means:
+# a line is a set of ids, so "everyone" and "just this one" are one question
+$script:backupUsersFor = ''
+$script:backupUserChoices = @()
 # named here, not where it is made: reading a variable that was never assigned
 # is an error under Set-StrictMode
 $script:backupFindTimer = $null
@@ -23,12 +27,12 @@ $script:backupFindTimer = $null
 $script:backupInsideMax = 3000
 
 $backupPage = Register-Page -Key 'backup' -Title 'Backup' -Glyph 'E8F7' -Section 'System' -Xaml 'Backup.xaml' `
-    -OnShow { Update-BackupPageShownTab } `
+    -OnShow { Update-BackupPageShownTab; Update-BackupPageUsers } `
     -OnDeviceChanged {
         # the phone decides which apps are ticked, so they are read again - but
         # only if that tab is the one being looked at
         $script:backupAppsStale = $true
-        if (Test-PageShown -Key 'backup') { Update-BackupPageShownTab }
+        if (Test-PageShown -Key 'backup') { Update-BackupPageShownTab; Update-BackupPageUsers }
     }
 
 function Test-BackupShared {
@@ -57,7 +61,7 @@ function Set-BackupPageBusy {
     $ui.BackupCancel.IsEnabled = $Running
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps',
         'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing',
-        'BackupListResume', 'BackupListDelete')) {
+        'BackupListResume', 'BackupListDelete', 'BackupUsers')) {
         $ui[$name].IsEnabled = -not $Running
     }
     if (-not $Running) {
@@ -243,6 +247,63 @@ function Show-BackupPageAt {
     return $true
 }
 
+function Update-BackupPageUsers {
+    # who is on this phone, and which of them adb may read. It costs a handful
+    # of adb calls, so it is read when the page is opened or the phone changes.
+    param([switch]$Force)
+
+    if (-not (Test-BackupShared)) { return }
+    $serial = Get-SelectedSerial
+    if (-not $serial) {
+        $script:backupUsersFor = ''
+        $ui.BackupUsersNote.Text = 'no phone picked'
+        return
+    }
+    if (-not $Force -and $script:backupUsersFor -eq $serial) { return }
+    $script:backupUsersFor = $serial
+
+    $users = @(Get-BackupUsers -Serial $serial)
+    $readable = @($users | Where-Object { $_.Readable })
+    $choices = New-Object System.Collections.Generic.List[object]
+    foreach ($user in $users) {
+        if (-not $user.Readable) { continue }
+        $text = $(if ($user.Id -le 0) { 'The main user (0)' } else { "User $($user.Id)" })
+        if ("$($user.Name)") { $text += " - $($user.Name)" }
+        $null = $choices.Add([PSCustomObject]@{ Text = $text; Ids = @($user.Id); Users = @($user) })
+    }
+    if ($readable.Count -gt 1) {
+        $null = $choices.Add([PSCustomObject]@{
+            Text  = "Everyone adb can read ($($readable.Count) users)"
+            Ids   = @($readable | ForEach-Object { $_.Id })
+            Users = @($readable) })
+    }
+    if ($choices.Count -eq 0) {
+        $null = $choices.Add([PSCustomObject]@{ Text = 'The main user (0)'; Ids = @(0); Users = @() })
+    }
+
+    $script:backupUserChoices = $choices.ToArray()
+    $ui.BackupUsers.Items.Clear()
+    foreach ($choice in $script:backupUserChoices) { $null = $ui.BackupUsers.Items.Add($choice.Text) }
+    $ui.BackupUsers.SelectedIndex = 0
+
+    $shut = @($users | Where-Object { -not $_.Readable })
+    if ($shut.Count -eq 0) {
+        $ui.BackupUsersNote.Text = "$($users.Count) user(s) on this phone"
+    } else {
+        $ui.BackupUsersNote.Text = "$($users.Count) user(s); adb cannot read " +
+            (@($shut | ForEach-Object { "$($_.Id)" }) -join ', ')
+    }
+}
+
+function Get-BackupPageUsers {
+    # the users the box is on, as the rows the backup writes into its manifest
+    $index = $ui.BackupUsers.SelectedIndex
+    if ($index -lt 0 -or $index -ge @($script:backupUserChoices).Count) { return @(0) }
+    $choice = $script:backupUserChoices[$index]
+    if (@($choice.Users).Count -gt 0) { return @($choice.Users) }
+    return @($choice.Ids)
+}
+
 function Start-BackupPageNow {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -257,7 +318,7 @@ function Start-BackupPageNow {
     Set-BackupPageBusy -Running $true
     try {
         $manifest = Invoke-PhoneBackup -Serial $serial -Destination $where -Parts $parts -Model $model `
-            -Name "$($ui.BackupName.Text)".Trim() -Pack ([bool]$ui.BackupPack.IsChecked)
+            -Name "$($ui.BackupName.Text)".Trim() -Pack ([bool]$ui.BackupPack.IsChecked) -Users (Get-BackupPageUsers)
     } finally {
         Set-BackupPageBusy -Running $false
     }
@@ -399,10 +460,15 @@ function Start-BackupPageFiles {
 
     # where a card's files would go: the card in this phone, whatever it is called
     $cards = @(Get-BackupCardPaths -Serial $serial)
-    $plan = Get-BackupFilePlan -Source $script:backupSource -CardRoot $(if ($cards.Count -gt 0) { $cards[0] } else { '' })
+    $plan = Get-BackupFilePlan -Source $script:backupSource -CardRoot $(if ($cards.Count -gt 0) { $cards[0] } else { '' }) `
+        -UserIds @(@(Get-BackupUsers -Serial $serial -Quick) | ForEach-Object { $_.Id })
     if ($plan.CardSkipped -gt 0) {
         Write-Log ("  $($plan.CardSkipped) file(s) in this backup came off a memory card, and there is none in " +
             'this phone: they are left out.') $colorWarn
+    }
+    if ($plan.UserSkipped -gt 0) {
+        Write-Log ("  $($plan.UserSkipped) file(s) belong to a user this phone does not have any more: " +
+            'they are left out.') $colorWarn
     }
     if ($plan.Total -eq 0) { Write-Log 'This backup holds no files.' $colorWarn; return }
     Write-Log 'Restore: reading what the phone already has ...' $colorStep
@@ -533,7 +599,7 @@ if (Test-BackupShared) {
     $ui.BackupInfo.Text = 'shared\Backup.ps1 is not in the project folder: no backups from here.'
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupBrowse', 'BackupRestoreFiles', 'BackupInstallApps',
         'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen', 'BackupListShow',
-        'BackupListResume', 'BackupListDelete')) {
+        'BackupListResume', 'BackupListDelete', 'BackupUsers')) {
         $ui[$name].IsEnabled = $false
     }
 }
