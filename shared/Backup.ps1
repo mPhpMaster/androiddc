@@ -1921,33 +1921,54 @@ function Get-BackupTempFolder {
 
 # ------------------------------------------------------ what is inside it ----
 
-function Split-BackupUserEntry {
+function Get-BackupUserId {
     <#
-        users/10/files/DCIM/a.jpg -> @{ Id = 10; Rest = 'files/DCIM/a.jpg' }
+        The user an entry belongs to, and what is left after their folder:
 
-        Anything that is not one of those comes back with no id, and is the
-        owner's: that is where every backup taken before users were a choice
-        put its files.
+          users/10/files/DCIM/a.jpg -> 10, and files/DCIM/a.jpg
+          files/DCIM/a.jpg          ->  0, and the same path
+
+        Anything that is not under users\ is the owner's, which is where every
+        backup taken before users were a choice put its files.
+
+        Written with StartsWith and Substring rather than a regex, and handing
+        back two values instead of an object: this runs once or twice for every
+        file in a backup, and a regex with an object to hold the answer turned
+        reading a backup of six thousand files from under two seconds into
+        seventeen. Measured, both ways.
     #>
     param([string]$Entry)
 
-    if ("$Entry" -match '^users/(\d+)/(.+)$') {
-        return [PSCustomObject]@{ Id = [int]$Matches[1]; Rest = $Matches[2] }
-    }
-    return [PSCustomObject]@{ Id = 0; Rest = "$Entry" }
+    if (-not $Entry.StartsWith('users/')) { return @(0, $Entry) }
+    $slash = $Entry.IndexOf('/', 6)
+    if ($slash -le 6) { return @(0, $Entry) }
+    $id = 0
+    if (-not [int]::TryParse($Entry.Substring(6, $slash - 6), [ref]$id)) { return @(0, $Entry) }
+    return @($id, $Entry.Substring($slash + 1))
+}
+
+function Split-BackupUserEntry {
+    # the same thing said as an object, for anything that asks once rather
+    # than once per file
+    param([string]$Entry)
+
+    $split = Get-BackupUserId -Entry $Entry
+    return [PSCustomObject]@{ Id = [int]$split[0]; Rest = [string]$split[1] }
 }
 
 function Get-BackupEntryWhat {
     # which part of the backup an entry belongs to
     param([string]$Entry)
 
-    $split = Split-BackupUserEntry -Entry $Entry
-    $who = $(if ($split.Id -gt 0) { " (user $($split.Id))" } else { '' })
-    if ($split.Rest -like 'files/*') { return 'Files' + $who }
-    if ($split.Rest -like 'personal/*') { return 'Personal' + $who }
-    if ($split.Rest -like 'settings/*') { return 'Settings' + $who }
-    if ("$Entry" -like 'card/*') { return 'Card' }
-    if ("$Entry" -like 'apps/*') { return 'Apps' }
+    $split = Get-BackupUserId -Entry $Entry
+    $id = [int]$split[0]
+    $rest = [string]$split[1]
+    $who = $(if ($id -gt 0) { " (user $id)" } else { '' })
+    if ($rest.StartsWith('files/')) { return 'Files' + $who }
+    if ($rest.StartsWith('personal/')) { return 'Personal' + $who }
+    if ($rest.StartsWith('settings/')) { return 'Settings' + $who }
+    if ($Entry.StartsWith('card/')) { return 'Card' }
+    if ($Entry.StartsWith('apps/')) { return 'Apps' }
     return 'Backup'
 }
 
@@ -1955,12 +1976,15 @@ function Get-BackupEntryWhere {
     # where that file was on the phone, when it came from one
     param([string]$Entry)
 
-    $split = Split-BackupUserEntry -Entry $Entry
-    if ($split.Rest -like 'files/*') {
-        return (Get-BackupUserPath -Id $split.Id) + '/' + $split.Rest.Substring(6)
+    $split = Get-BackupUserId -Entry $Entry
+    $id = [int]$split[0]
+    $rest = [string]$split[1]
+    if ($rest.StartsWith('files/')) {
+        if ($id -le 0) { return '/sdcard/' + $rest.Substring(6) }
+        return "/storage/emulated/$id/" + $rest.Substring(6)
     }
     # card/1A2B-3C4D/DCIM/a.jpg was /storage/1A2B-3C4D/DCIM/a.jpg
-    if ("$Entry" -like 'card/*') { return '/storage/' + "$Entry".Substring(5) }
+    if ($Entry.StartsWith('card/')) { return '/storage/' + $Entry.Substring(5) }
     return "$Entry"
 }
 
@@ -2234,12 +2258,14 @@ function Get-BackupFilePlan {
     $tops = @{}
     foreach ($entry in $entries) {
         $remote = ''
-        $split = Split-BackupUserEntry -Entry $entry.Path
-        if ($split.Rest -like 'files/*') {
-            $relative = $split.Rest.Substring(6)
+        $split = Get-BackupUserId -Entry $entry.Path
+        $userId = [int]$split[0]
+        $rest = [string]$split[1]
+        if ($rest.StartsWith('files/')) {
+            $relative = $rest.Substring(6)
             if (-not $relative) { continue }
-            if ($null -ne $here -and $here -notcontains $split.Id) { $plan.UserSkipped++; continue }
-            $root = Get-BackupUserPath -Id $split.Id
+            if ($null -ne $here -and $here -notcontains $userId) { $plan.UserSkipped++; continue }
+            $root = Get-BackupUserPath -Id $userId
             $remote = "$root/" + $relative
             $tops["$root/" + ($relative -split '/')[0]] = $true
         } elseif ($entry.Path -like 'card/*') {
