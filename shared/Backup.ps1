@@ -58,6 +58,90 @@ $script:backupStopped = $false
 $script:backupStopReason = ''
 $script:backupRunning = $false
 
+# ------------------------------------------------------- how long is left ----
+# One clock for the run in hand. Whoever is doing the work says how much there
+# is and how much of it is done; Write-BackupProgress puts the answer at the
+# end of every line it writes, so the window says it without asking.
+#
+# The guess is the plainest one there is: what has been done, divided by the
+# time it took, carried forward. It is called "about" because that is what it
+# is - a phone that slows down on ten thousand small files is not lying about
+# anything, and neither is this.
+
+$script:backupClockTotal = [long]0
+$script:backupClockDone = [long]0
+$script:backupClockBase = [long]0
+$script:backupClockStarted = $null
+
+function Start-BackupClock {
+    # Total is in whatever unit the caller counts in - bytes for files, items
+    # for apps - because only the ratio is used
+    param([long]$Total, [datetime]$Started = [datetime]::MinValue)
+
+    $script:backupClockTotal = $Total
+    $script:backupClockDone = [long]0
+    $script:backupClockBase = [long]0
+    $script:backupClockStarted = $(if ($Started -eq [datetime]::MinValue) { [datetime]::Now } else { $Started })
+}
+
+function Stop-BackupClock {
+    $script:backupClockTotal = [long]0
+    $script:backupClockStarted = $null
+}
+
+function Add-BackupClockDone {
+    # one more item finished, whole
+    param([long]$Amount)
+
+    $script:backupClockBase += $Amount
+    $script:backupClockDone = $script:backupClockBase
+}
+
+function Set-BackupClockItem {
+    # how far into the item in hand, for the long ones: a 4 GB folder says so
+    # while it is being pulled, not only when it is done
+    param([long]$Amount)
+
+    if ($Amount -lt 0) { $Amount = [long]0 }
+    $script:backupClockDone = $script:backupClockBase + $Amount
+}
+
+function Get-BackupLeftSeconds {
+    # how long is left, in seconds; -1 when there is nothing to go on yet
+    if ($script:backupClockTotal -le 0 -or $null -eq $script:backupClockStarted) { return [double](-1) }
+    $elapsed = ([datetime]::Now - $script:backupClockStarted).TotalSeconds
+    # the first seconds of anything are a bad teacher: adb starts, the phone
+    # wakes its storage, and a guess made then is wild
+    if ($elapsed -lt 4 -or $script:backupClockDone -le 0) { return [double](-1) }
+    $rate = $script:backupClockDone / $elapsed
+    if ($rate -le 0) { return [double](-1) }
+    $left = ($script:backupClockTotal - $script:backupClockDone) / $rate
+    if ($left -lt 0) { $left = 0 }
+    return [double]$left
+}
+
+function Format-BackupLeft {
+    # the words for a number of seconds, and the time of day it lands on when
+    # it is long enough for that to be worth knowing
+    param([double]$Seconds)
+
+    if ($Seconds -lt 0) { return '' }
+    if ($Seconds -lt 45) { return 'less than a minute left' }
+    $minutes = [int][Math]::Round($Seconds / 60)
+    if ($minutes -le 1) { return 'about a minute left' }
+    $when = ([datetime]::Now).AddSeconds($Seconds).ToString('HH:mm')
+    if ($minutes -lt 60) { return "about $minutes minutes left, done by $when" }
+    $hours = [int][Math]::Floor($minutes / 60)
+    $rest = $minutes - ($hours * 60)
+    $word = $(if ($hours -eq 1) { 'an hour' } else { "$hours hours" })
+    if ($rest -eq 0) { return "about $word left, done by $when" }
+    return "about $word $rest min left, done by $when"
+}
+
+function Get-BackupLeftText {
+    return (Format-BackupLeft -Seconds (Get-BackupLeftSeconds))
+}
+
 function Initialize-Backup {
     # Progress: param($Text, $Done, $Total); $Done and $Total are -1 when unknown
     param([scriptblock]$Progress)
@@ -66,7 +150,10 @@ function Initialize-Backup {
 
 function Write-BackupProgress {
     param([string]$Text, [int]$Done = -1, [int]$Total = -1)
-    if ($script:backupProgress) { try { & $script:backupProgress $Text $Done $Total } catch { } }
+
+    $left = Get-BackupLeftText
+    $line = $(if ($left) { "$Text  -  $left" } else { "$Text" })
+    if ($script:backupProgress) { try { & $script:backupProgress $line $Done $Total } catch { } }
 }
 
 # ------------------------------------------------------ starting, stopping ----
@@ -185,6 +272,8 @@ function Invoke-BackupAdb {
                 try { $done = [long](& $OnPoll) } catch { $done = [long](-1) }
                 if ($Expected -gt 0 -and $done -ge 0) {
                     $share = [int]([Math]::Min(100, 100 * $done / $Expected))
+                    # the clock counts this folder as it fills, not only when it ends
+                    Set-BackupClockItem -Amount $done
                     Write-BackupProgress -Text ("$Caption  " + (Format-FileSize -Bytes $done) + ' of ' +
                         (Format-FileSize -Bytes $Expected)) -Done $share -Total 100
                 } elseif ($done -ge 0) {
@@ -295,6 +384,7 @@ function Compress-BackupFolder {
     $rootLength = $rootPath.Length + 1
     Write-Log ("Backup: packing $($files.Count) file(s) into " + [System.IO.Path]::GetFileName($ZipPath) + ' ...') $colorStep
 
+    Start-BackupClock -Total $needed
     $archive = $null
     $stream = $null
     $buffer = New-Object byte[] 1048576
@@ -321,10 +411,14 @@ function Compress-BackupFolder {
             try {
                 $source = [System.IO.File]::Open($file.FullName, [System.IO.FileMode]::Open,
                     [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+                $written = [long]0
                 while ($true) {
                     $read = $source.Read($buffer, 0, $buffer.Length)
                     if ($read -le 0) { break }
                     $target.Write($buffer, 0, $read)
+                    # a 4 GB video is one file: how far into it counts too
+                    $written += $read
+                    Set-BackupClockItem -Amount $written
                     if (Test-BackupStopped) { break }
                     Invoke-BackupPump
                 }
@@ -332,6 +426,7 @@ function Compress-BackupFolder {
                 if ($source) { $source.Dispose() }
                 $target.Dispose()
             }
+            Add-BackupClockDone -Amount $file.Length
             $result.Files++
         }
     } catch {
@@ -343,6 +438,7 @@ function Compress-BackupFolder {
         if ($stream) { try { $stream.Dispose() } catch { } }
         $script:busy--
         if ($script:busy -lt 0) { $script:busy = 0 }
+        Stop-BackupClock
     }
 
     if (Test-BackupStopped) { $result.Stopped = Get-BackupStopReason }
@@ -491,6 +587,29 @@ function Get-BackupRemoteSize {
     return [long](-1)
 }
 
+function Get-BackupRemoteSizeMap {
+    # how big each of these folders on the phone is. It is a du per folder,
+    # which on a full phone takes a moment, so it says what it is doing.
+    param([string]$Serial, [string[]]$Paths, [string]$Caption = '')
+
+    $map = @{}
+    $list = @(@($Paths) | Where-Object { $_ })
+    if ($list.Count -eq 0) { return $map }
+    if ($Caption) { Write-Log "  measuring $Caption ($($list.Count) folder(s)) ..." $colorInfo }
+
+    $index = 0
+    foreach ($path in $list) {
+        if (Test-BackupStopped) { break }
+        $index++
+        Write-BackupProgress -Text "Measuring: $path" -Done $index -Total $list.Count
+        $map[$path] = Get-BackupRemoteSize -Serial $Serial -Path $path
+    }
+    $total = [long]0
+    foreach ($size in $map.Values) { if ($size -gt 0) { $total += $size } }
+    if ($Caption -and $total -gt 0) { Write-Log ('  ' + (Format-FileSize -Bytes $total) + ' to fetch') $colorInfo }
+    return $map
+}
+
 function Save-BackupText {
     # one text file in the backup, written as UTF-8 without a BOM
     param([string]$Path, [string]$Text)
@@ -519,6 +638,14 @@ function Backup-PhoneFiles {
     $entries = @(Get-BackupStorageEntries -Serial $Serial)
     Write-Log "Backup: $($entries.Count) folder(s) of internal storage ..." $colorStep
 
+    # how big each one is, before anything is pulled: it is what makes "about
+    # twenty minutes left" mean something. du is asked once per folder either
+    # way - this only asks sooner.
+    $sizes = Get-BackupRemoteSizeMap -Serial $Serial -Paths @($entries | ForEach-Object { "/sdcard/$_" }) -Caption 'internal storage'
+    $total = [long]0
+    foreach ($size in $sizes.Values) { if ($size -gt 0) { $total += $size } }
+    Start-BackupClock -Total $total
+
     $index = 0
     $refused = @()
     foreach ($entry in $entries) {
@@ -531,15 +658,18 @@ function Backup-PhoneFiles {
         $parent = Split-Path -Parent $local
         if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
 
-        $expected = Get-BackupRemoteSize -Serial $Serial -Path "/sdcard/$entry"
+        $expected = [long](-1)
+        if ($sizes.ContainsKey("/sdcard/$entry")) { $expected = [long]$sizes["/sdcard/$entry"] }
         $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', "/sdcard/$entry", $local) `
             -Caption "Files: $entry" -Expected $expected -OnPoll { Get-BackupFolderSize -Path $local }.GetNewClosure()
+        Add-BackupClockDone -Amount $(if ($expected -gt 0) { $expected } else { (Get-BackupFolderSize -Path $local) })
         if ($result.Stopped) { break }
         if ($result.ExitCode -ne 0) {
             $refused += $entry
             Write-Log ('  ' + $result.Text) $colorWarn
         }
     }
+    Stop-BackupClock
 
     $count = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
     $bytes = Get-BackupFolderSize -Path $target
@@ -576,6 +706,10 @@ function Backup-PhoneCard {
             $entries += $entry
         }
         Write-Log "Backup: the card $name, $($entries.Count) folder(s) ..." $colorStep
+        $sizes = Get-BackupRemoteSizeMap -Serial $Serial -Paths @($entries | ForEach-Object { "$card/$_" }) -Caption "the card $name"
+        $total = [long]0
+        foreach ($size in $sizes.Values) { if ($size -gt 0) { $total += $size } }
+        Start-BackupClock -Total $total
 
         $index = 0
         foreach ($entry in $entries) {
@@ -588,15 +722,18 @@ function Backup-PhoneCard {
             $parent = Split-Path -Parent $local
             if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
 
-            $expected = Get-BackupRemoteSize -Serial $Serial -Path "$card/$entry"
+            $expected = [long](-1)
+            if ($sizes.ContainsKey("$card/$entry")) { $expected = [long]$sizes["$card/$entry"] }
             $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', "$card/$entry", $local) `
                 -Caption "Card: $entry" -Expected $expected -OnPoll { Get-BackupFolderSize -Path $local }.GetNewClosure()
+            Add-BackupClockDone -Amount $(if ($expected -gt 0) { $expected } else { (Get-BackupFolderSize -Path $local) })
             if ($result.Stopped) { break }
             if ($result.ExitCode -ne 0) {
                 $refused += $entry
                 Write-Log ('  ' + $result.Text) $colorWarn
             }
         }
+        Stop-BackupClock
     }
 
     $count = @(Get-ChildItem -LiteralPath $target -Recurse -File -ErrorAction SilentlyContinue).Count
@@ -637,9 +774,13 @@ function Backup-PhoneApps {
 
     $apps = @()
     $index = 0
+    # apps are counted one by one: their sizes are only known once the phone has
+    # been asked for each, which is the work itself
+    Start-BackupClock -Total $packages.Count
     foreach ($package in $packages) {
         if (Test-BackupStopped) { break }
         $index++
+        Add-BackupClockDone -Amount 1
         Write-BackupProgress -Text "Apps: $package" -Done $index -Total $packages.Count
 
         $paths = @()
@@ -680,6 +821,7 @@ function Backup-PhoneApps {
         }
     }
 
+    Stop-BackupClock
     # beside the APKs, so what each one is stays with them even if the manifest
     # is read by something older than this
     Save-BackupText -Path (Join-Path $target 'apps.json') -Text (ConvertTo-Json -InputObject @($apps) -Depth 4)
@@ -1004,7 +1146,11 @@ function Resume-BackupTree {
         Write-Log "  $Caption : all $($result.Kept) file(s) were here already." $colorGood
         return $result
     }
-    Write-Log "  $Caption : $($result.Kept) here already, $($todo.Count) to fetch ..." $colorStep
+    $toFetch = [long]0
+    foreach ($path in $todo) { $toFetch += [long]$onPhone[$path] }
+    Write-Log ("  $Caption : $($result.Kept) here already, $($todo.Count) to fetch (" +
+        (Format-FileSize -Bytes $toFetch) + ') ...') $colorStep
+    Start-BackupClock -Total $toFetch
 
     $index = 0
     foreach ($path in $todo) {
@@ -1018,6 +1164,7 @@ function Resume-BackupTree {
         if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
 
         $pull = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', $path, $target) -Caption $Caption
+        Add-BackupClockDone -Amount ([long]$onPhone[$path])
         if ($pull.Stopped) { break }
         if ($pull.ExitCode -eq 0) {
             $result.Pulled++
@@ -1026,6 +1173,7 @@ function Resume-BackupTree {
             if ($result.Failed -le 5) { Write-Log ('  ' + $pull.Text) $colorWarn }
         }
     }
+    Stop-BackupClock
     return $result
 }
 
@@ -1473,6 +1621,7 @@ function Save-BackupCopy {
     if (-not (Test-Path -LiteralPath $Destination)) { $null = New-Item -ItemType Directory -Path $Destination -Force }
 
     Write-Log "Saving $($list.Count) file(s) out of $($source.Name) ..." $colorStep
+    Start-BackupClock -Total $list.Count
     $archive = Open-BackupArchive -Source $source
     try {
         $index = 0
@@ -1486,9 +1635,11 @@ function Save-BackupCopy {
             } else {
                 $result.Failed++
             }
+            Add-BackupClockDone -Amount 1
         }
     } finally {
         Close-BackupArchive -Archive $archive
+        Stop-BackupClock
     }
     Write-Log "  $($result.Saved) saved to $Destination, $($result.Failed) could not be read." `
         $(if ($result.Failed -gt 0) { $colorWarn } else { $colorGood })
@@ -1763,6 +1914,10 @@ function Restore-BackupFiles {
 
     Write-Log "Restore: sending $($items.Count) file(s) ..." $colorStep
     Start-BackupRun
+    # the backup knows how big every file in it is, so this one is exact
+    $toSend = [long]0
+    foreach ($item in $items) { $toSend += [long]$item.Bytes }
+    Start-BackupClock -Total $toSend
     $sent = 0
     $failed = 0
     $index = 0
@@ -1785,6 +1940,7 @@ function Restore-BackupFiles {
             }
 
             $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'push', $local, $item.Remote) -Caption 'Restore'
+            Add-BackupClockDone -Amount ([long]$item.Bytes)
             if ($unpacked) { Remove-Item -LiteralPath $unpacked -Force -ErrorAction SilentlyContinue }
             if ($result.Stopped) { break }
             if ($result.ExitCode -eq 0) {
@@ -1801,6 +1957,7 @@ function Restore-BackupFiles {
         }
     } finally {
         Close-BackupArchive -Archive $archive
+        Stop-BackupClock
         Complete-BackupRun
     }
 
@@ -1832,6 +1989,7 @@ function Restore-BackupApps {
     $archive = Open-BackupArchive -Source $source
     Write-Log "Restore: installing $($rows.Count) app(s) ..." $colorStep
     Start-BackupRun
+    Start-BackupClock -Total $rows.Count
 
     $installed = 0
     $failed = 0
@@ -1840,6 +1998,7 @@ function Restore-BackupApps {
         foreach ($row in $rows) {
             if (Test-BackupStopped) { break }
             $index++
+            Add-BackupClockDone -Amount 1
             Write-BackupProgress -Text "Apps: $($row.Package)" -Done $index -Total $rows.Count
 
             $apks = @(@($row.Apks) | Where-Object { $_ })
@@ -1892,6 +2051,7 @@ function Restore-BackupApps {
         }
     } finally {
         Close-BackupArchive -Archive $archive
+        Stop-BackupClock
         Complete-BackupRun
     }
 

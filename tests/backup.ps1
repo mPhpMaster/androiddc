@@ -328,6 +328,41 @@ Say ("  and looking for one of them takes {0} ms, off the index it kept   {1}" -
     (Mark ($bigFound.Total -eq 1 -and $findMs -lt 5000)))
 
 Say ''
+Say '== how long is left =='
+# the clock is told when it started, so these are the same every time
+Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-10))
+Add-BackupClockDone -Amount 100
+Say ("  a tenth of it in ten seconds: '{0}'   {1}" -f (Get-BackupLeftText),
+    (Mark ((Get-BackupLeftText) -match '^about 2 minutes left, done by \d\d:\d\d$')))
+Add-BackupClockDone -Amount 800
+Say ("  nine tenths done: '{0}'   {1}" -f (Get-BackupLeftText),
+    (Mark ((Get-BackupLeftText) -eq 'less than a minute left')))
+
+Start-BackupClock -Total 100000 -Started ([datetime]::Now.AddSeconds(-10))
+Add-BackupClockDone -Amount 100
+Say ("  a long one says the hours and the time of day: '{0}'   {1}" -f (Get-BackupLeftText),
+    (Mark ((Get-BackupLeftText) -match '^about 2 hours \d+ min left, done by \d\d:\d\d$')))
+
+# a folder being pulled counts while it fills, not only when it ends
+Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-10))
+Set-BackupClockItem -Amount 250
+Say ("  a quarter of the way into one folder: '{0}'   {1}" -f (Get-BackupLeftText),
+    (Mark ((Get-BackupLeftText) -eq 'less than a minute left')))
+
+Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-1))
+Add-BackupClockDone -Amount 10
+Say ("  the first seconds say nothing, rather than something wild   {0}" -f (Mark ((Get-BackupLeftText) -eq '')))
+
+Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-10))
+Add-BackupClockDone -Amount 100
+Write-BackupProgress -Text 'Files: DCIM' -Done 1 -Total 2
+Say ("  and the line in the window carries it: '{0}'   {1}" -f $lblBackupProgress.Text,
+    (Mark ($lblBackupProgress.Text -match '^Files: DCIM  -  about 2 minutes left')))
+Stop-BackupClock
+Write-BackupProgress -Text 'Files: DCIM' -Done 1 -Total 2
+Say ("  with nothing to go on it says the plain line   {0}" -f (Mark ($lblBackupProgress.Text -eq 'Files: DCIM')))
+
+Say ''
 Say '== carrying a stopped backup on =='
 # what a backup that stopped leaves behind: a folder, a manifest saying it is
 # not complete, and the files that did come over

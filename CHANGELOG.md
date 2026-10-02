@@ -4,7 +4,15 @@
 
 ## Unreleased
 
-### A backup can hold the memory card, and can be carried on
+### A backup can hold the memory card, is carried on where it stopped, and says how long it needs
+
+* **How long is left, in words**: *Files: DCIM  -  about 17 minutes left, done by 15:16*. It is
+  on every line a backup writes - pulling, packing, putting one back, carrying one on - and
+  comes from what has been done over the time it took, so it settles as it goes. Nothing is
+  claimed in the first seconds, when a guess would be wild.
+* To have something to count against, the folders on the phone are measured before anything is
+  pulled (one `du` each, which the backup asked for anyway, only later). Restoring needs no
+  measuring: a backup already knows how big every file in it is.
 
 * **The memory card is a part of its own**, ticked or not like the other four. It is **off by
   default**, because a card can hold more than the phone does. Each card's files go under its

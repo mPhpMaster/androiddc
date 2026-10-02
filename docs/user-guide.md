@@ -233,6 +233,13 @@ It needs nothing that was remembered at the time, so it works after closing and 
 program, or days later; it only asks that the same phone is the one plugged in, so two phones
 never end up in one backup.
 
+**How long it will take.** Before the files are pulled, each folder on the phone is measured
+(`du`), so the line beside the bar can say what is left: *Files: DCIM  -  about 17 minutes left,
+done by 15:16*. It is the plainest guess there is - what has been done, divided by how long it
+took - so it settles down as it goes and moves when the phone does. The same line appears while
+a backup is packed, while one is put back, and while a stopped one is carried on; restoring
+knows every file's size from the backup itself, so there is nothing to measure first.
+
 **While it runs.** The bar beside the button fills as each folder is pulled and again as the
 backup is packed, and the line above it names what is being copied and how much of it is done.
 **Cancel** stops the run where it is: adb is stopped mid-file, and everything already copied
