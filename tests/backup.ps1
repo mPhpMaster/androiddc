@@ -672,9 +672,13 @@ Say ("  an entry says whose it is and where it was   {0}" -f (Mark (
     (Get-BackupEntryWhere -Entry 'users/999/files/DCIM/a.jpg') -eq '/storage/emulated/999/DCIM/a.jpg' -and
     (Get-BackupEntryWhat -Entry 'files/DCIM/a.jpg') -eq 'Files' -and
     (Get-BackupEntryWhere -Entry 'files/DCIM/a.jpg') -eq '/sdcard/DCIM/a.jpg')))
-Say ("  and a backup from before users were a choice is read as the owner's   {0}" -f (Mark (
-    (Split-BackupUserEntry -Entry 'files/DCIM/a.jpg').Id -eq 0 -and
-    (Split-BackupUserEntry -Entry 'users/10/personal/contacts.json').Id -eq 10)))
+Say ("  a backup from before users were a choice is read as the owner's   {0}" -f (Mark (
+    (Get-BackupEntryWhat -Entry 'personal/contacts.json') -eq 'Personal' -and
+    (Get-BackupEntryWhat -Entry 'users/10/personal/contacts.json') -eq 'Personal (user 10)' -and
+    (Get-BackupEntryWhat -Entry 'users/10/settings/settings-secure.txt') -eq 'Settings (user 10)')))
+Say ("  and something that is not a user folder is left alone   {0}" -f (Mark (
+    (Get-BackupEntryWhere -Entry 'users/not-a-number/files/a.jpg') -eq 'users/not-a-number/files/a.jpg' -and
+    (Get-BackupEntryWhat -Entry 'manifest.json') -eq 'Backup')))
 
 # putting those files back
 Save-BackupText -Path (Join-Path $twoUsers 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
@@ -832,18 +836,19 @@ Say '== the box that picks the user =='
     function Get-SelectedSerial { 'ABC123' }
     Update-BackupUsers -Force }
 Say ("  the box offers: {0}" -f ((@($cmbBackupUser.Items)) -join ' | '))
-Say ("  one line per user adb can read, and one for all of them   {0}" -f (Mark (
-    $cmbBackupUser.Items.Count -eq 3 -and "$($cmbBackupUser.Items[0])" -eq 'The main user (0) - Owner' -and
-    "$($cmbBackupUser.Items[1])" -eq 'User 999 - Dual apps' -and
-    "$($cmbBackupUser.Items[2])" -like 'Everyone adb can read*')))
-Say ("  the guest is not offered, and the note says why: '{0}'   {1}" -f $lblBackupUserNote.Text, (Mark (
-    $lblBackupUserNote.Text -eq '3 user(s); adb cannot read 10')))
+Say ("  one line per user, and one for all of them   {0}" -f (Mark (
+    $cmbBackupUser.Items.Count -eq 4 -and "$($cmbBackupUser.Items[0])" -eq 'The main user (0) - Owner' -and
+    "$($cmbBackupUser.Items[1])" -eq 'User 10 - Guest (no files to read)' -and
+    "$($cmbBackupUser.Items[2])" -eq 'User 999 - Dual apps' -and
+    "$($cmbBackupUser.Items[3])" -eq 'Every user (3)')))
+Say ("  the guest is offered with its files marked shut, and the note says so: '{0}'   {1}" -f
+    $lblBackupUserNote.Text, (Mark ($lblBackupUserNote.Text -eq '3 user(s); adb cannot read 10')))
 Say ("  it starts on the main user   {0}" -f (Mark (
     $cmbBackupUser.SelectedIndex -eq 0 -and ((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0')))
-$cmbBackupUser.SelectedIndex = 2
+$cmbBackupUser.SelectedIndex = 3
 Say ("  picking everyone asks for: {0}   {1}" -f ((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ','),
-    (Mark (((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0,999')))
-$cmbBackupUser.SelectedIndex = 1
+    (Mark (((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0,10,999')))
+$cmbBackupUser.SelectedIndex = 2
 Say ("  and picking one user asks for that one alone: {0}   {1}" -f
     ((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ','),
     (Mark (((@(Get-BackupPickedUsers) | ForEach-Object { $_.Id }) -join ',') -eq '999')))

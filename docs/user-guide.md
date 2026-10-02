@@ -271,11 +271,13 @@ box says who this phone has and lets you pick:
 * **the main user (0)**, which is what a backup has always meant, and what it still does by
   default;
 * **one of the others**, on its own;
-* **everyone adb can read**.
+* **every user**.
 
-Only users whose storage adb may read are offered, and the line beside the box names the ones
-it cannot - measured on a phone with three users, where the owner's files and the clone
-profile's could be read and a stopped guest's could not. The owner's things go exactly where
+A user whose files Android keeps shut is still offered, marked *(no files to read)*, because
+their app list, settings and contacts can be read even when their storage cannot; the line
+beside the box names them. Measured on a phone with three users, where the owner's files and
+the clone profile's could be read and a stopped guest's could not, while all three answered
+about their apps. The owner's things go exactly where
 they always went (`files\`, `personal\`, `settings\`), so every backup taken before this still
 opens and restores unchanged; anyone else's go into `users\<id>\` beside them, and *What is
 inside* says *Files (user 999)* against each of their files. Putting them back sends each

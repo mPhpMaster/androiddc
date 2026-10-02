@@ -11,10 +11,11 @@ now a backup was always the owner's, without saying so. The *Back up* box now sa
 phone has and lets you pick: the main user, one of the others on its own, or everyone adb can
 read.
 
-* **Only what can really be read is offered.** Each user's storage is tried before the box is
+* **What cannot be read is marked, not hidden.** Each user's storage is tried before the box is
   filled - measured on a phone with three users, where the owner's files and the clone
-  profile's could be read and a stopped guest's could not - and the line beside the box names
-  the ones it cannot rather than quietly taking nothing.
+  profile's could be read and a stopped guest's could not - and a user whose files are shut is
+  offered as *(no files to read)*, because their app list, settings and contacts can still be
+  taken. The line beside the box names them; the log says which user was skipped and why.
 * **The owner's things stay where they were**: `files\`, `personal\`, `settings\`. Every backup
   taken before this opens, restores and carries on exactly as it did. Anyone else goes into
   `users\<id>\` beside them, *What is inside* says *Files (user 999)* against their files, and

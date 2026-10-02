@@ -3930,7 +3930,7 @@ $cmbBackupUser.Size = New-Object System.Drawing.Size(290, 24)
 $null = $cmbBackupUser.Items.Add('The main user (0)')
 $cmbBackupUser.SelectedIndex = 0
 $grpBackupMake.Controls.Add($cmbBackupUser)
-$toolTip.SetToolTip($cmbBackupUser, 'Which user on the phone to back up: the main one, every user whose files adb can read, or one of them on its own. The owner goes where it always has; anyone else goes into users\<id>\ inside the backup')
+$toolTip.SetToolTip($cmbBackupUser, 'Which user on the phone to back up: the main one, one of the others, or every user. The owner goes where it always has; anyone else goes into users\<id>\ inside the backup. A user whose files Android keeps shut is marked, and what can be read of them - their app list, settings and contacts - is still taken')
 
 $lblBackupUserNote = New-Object System.Windows.Forms.Label
 $lblBackupUserNote.Text = 'read from the phone when this tab is opened'
@@ -13223,19 +13223,20 @@ function Update-BackupUsers {
     $script:backupUsersFor = $serial
 
     $users = @(Get-BackupUsers -Serial $serial)
-    $readable = @($users | Where-Object { $_.Readable })
     $choices = New-Object System.Collections.Generic.List[object]
     foreach ($user in $users) {
-        if (-not $user.Readable) { continue }
         $text = $(if ($user.Id -le 0) { 'The main user (0)' } else { "User $($user.Id)" })
         if ("$($user.Name)") { $text += " - $($user.Name)" }
+        # offered even when their files are shut: their app list, settings and
+        # contacts can still be read, and a label is better than a missing line
+        if (-not $user.Readable) { $text += ' (no files to read)' }
         $null = $choices.Add([PSCustomObject]@{ Text = $text; Ids = @($user.Id); Users = @($user) })
     }
-    if ($readable.Count -gt 1) {
+    if ($users.Count -gt 1) {
         $null = $choices.Add([PSCustomObject]@{
-            Text  = "Everyone adb can read ($($readable.Count) users)"
-            Ids   = @($readable | ForEach-Object { $_.Id })
-            Users = @($readable) })
+            Text  = "Every user ($($users.Count))"
+            Ids   = @($users | ForEach-Object { $_.Id })
+            Users = @($users) })
     }
     if ($choices.Count -eq 0) {
         $null = $choices.Add([PSCustomObject]@{ Text = 'The main user (0)'; Ids = @(0); Users = @() })

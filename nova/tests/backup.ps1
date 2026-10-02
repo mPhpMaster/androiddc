@@ -179,16 +179,17 @@ $userShell = {
     Update-BackupPageUsers -Force }
 $null = Wait-Idle
 Say ("  the box offers: {0}" -f ((@($ui.BackupUsers.Items)) -join ' | '))
-Say ("  one line per user adb can read, and one for all of them   {0}" -f (Mark (
-    $ui.BackupUsers.Items.Count -eq 3 -and "$($ui.BackupUsers.Items[0])" -eq 'The main user (0) - Owner' -and
-    "$($ui.BackupUsers.Items[2])" -like 'Everyone adb can read*')))
-Say ("  the guest is left out, and the note says why: '{0}'   {1}" -f $ui.BackupUsersNote.Text, (Mark (
-    $ui.BackupUsersNote.Text -eq '3 user(s); adb cannot read 10')))
+Say ("  one line per user, and one for all of them   {0}" -f (Mark (
+    $ui.BackupUsers.Items.Count -eq 4 -and "$($ui.BackupUsers.Items[0])" -eq 'The main user (0) - Owner' -and
+    "$($ui.BackupUsers.Items[1])" -eq 'User 10 - Guest (no files to read)' -and
+    "$($ui.BackupUsers.Items[3])" -eq 'Every user (3)')))
+Say ("  the guest is offered with its files marked shut, and the note says so: '{0}'   {1}" -f
+    $ui.BackupUsersNote.Text, (Mark ($ui.BackupUsersNote.Text -eq '3 user(s); adb cannot read 10')))
 Say ("  it starts on the main user   {0}" -f (Mark (
     ((@(Get-BackupPageUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0')))
-$ui.BackupUsers.SelectedIndex = 2
+$ui.BackupUsers.SelectedIndex = 3
 Say ("  picking everyone asks for: {0}   {1}" -f ((@(Get-BackupPageUsers) | ForEach-Object { $_.Id }) -join ','),
-    (Mark (((@(Get-BackupPageUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0,999')))
+    (Mark (((@(Get-BackupPageUsers) | ForEach-Object { $_.Id }) -join ',') -eq '0,10,999')))
 $ui.BackupUsers.SelectedIndex = 0
 Set-BackupPageBusy -Running $true
 Say ("  while a backup runs the box cannot be changed   {0}" -f (Mark (-not $ui.BackupUsers.IsEnabled)))
