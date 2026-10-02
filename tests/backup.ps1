@@ -861,6 +861,16 @@ if (-not $TestSerial -or -not $attached) {
     Say 'SKIPPED - no phone attached right now'
 } else {
     Select-TestPhone
+    # the box reads this phone rather than a made-up one, and picks a line
+    Update-BackupUsers -Force
+    Say ("  the box filled from this phone: {0} line(s) - {1}" -f $cmbBackupUser.Items.Count,
+        ((@($cmbBackupUser.Items)) -join ' | '))
+    Say ("  its note says: '{0}'" -f $lblBackupUserNote.Text)
+    Say ("  a line is picked, and it is a user of this phone   {0}" -f (Mark (
+        $cmbBackupUser.Items.Count -ge 1 -and $cmbBackupUser.SelectedIndex -eq 0 -and
+        "$($cmbBackupUser.Text)" -eq "$($cmbBackupUser.Items[0])" -and
+        @(Get-BackupPickedUsers).Count -ge 1)))
+
     $real = Invoke-PhoneBackup -Serial $TestSerial -Destination $work -Parts @('settings') -Model 'test phone'
     Say ("  it made one file, not a folder: {0}   {1}" -f [System.IO.Path]::GetFileName($real.Path),
         (Mark ($real.Kind -eq 'zip' -and (Test-Path -LiteralPath $real.Path -PathType Leaf) -and
