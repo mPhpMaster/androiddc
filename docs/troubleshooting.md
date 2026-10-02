@@ -124,6 +124,18 @@ Drag it out next to the clock to keep it in sight.
 
 ## A backup or a restore did not do what I expected
 
+**The backup takes a long time.** Most of it is the cable: a phone on USB 2.0 hands files over
+at roughly 15-25 MB/s, so 30 GB is around half an hour however it is fetched. Two things do
+help: untick *Pack into one .zip*, which saves a second pass over everything (about 40% of the
+pull's time), and for a backup you already have as a folder, press *Continue / update* instead
+of taking a new one - only what changed since comes over.
+
+**Some files were quietly missing from a backup.** adb gives up on a whole folder when it
+cannot write one name - it happened here on a folder named in Arabic-Indic digits, where it
+said *cannot create ... Not a directory* and left the rest of that folder behind. AndroidDC now
+notices, and fetches what it missed one file at a time into folders it makes itself. The log
+says *adb left that folder unfinished; fetching what it missed*.
+
 **The backup stopped and I want to carry it on.** Open *Advanced > Backup > My backups*, find
 the line that says **stopped part way**, and press **Continue this one**. Only what is missing
 is fetched - what came over already is not fetched again - and at the end it is packed into the

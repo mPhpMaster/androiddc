@@ -216,6 +216,16 @@ saves, an app's own settings - unless the phone is rooted. `adb backup`, the old
 returned almost nothing since Android 12, and `Android/data` and `Android/obb` have been closed
 to adb since Android 11. No tool without root gets past that.
 
+**Giving it a name.** The *Call it* box names the backup - *before the update*, *holiday
+photos*. The name goes into the file's name and into the backup itself, so the list shows it
+even if the file is renamed later. Leave it empty and the phone and the time are name enough.
+
+**Packing, or not.** *Pack into one .zip* is on by default: one file is tidier to keep and to
+move. It costs a second pass over everything - measured at about 40% on top of the time the
+pull takes - so turning it off is the quickest way to a faster backup. A backup left as a
+folder opens, restores and is read exactly the same way, and it can be **brought up to date**
+later instead of taken again.
+
 **Taking one.** Tick the parts, press *Back up now ...*, pick a folder. Each backup is **one
 `.zip` file** named after the phone and the time, with a `manifest.json` inside it saying what
 it holds - one file to copy, to move, or to put on another drive. The files are pulled into a
@@ -223,15 +233,27 @@ folder of that same name first, because that is what adb writes; the folder is p
 removed. Photos, video and APKs go in as they are rather than being squeezed again, which is
 why the packed size is close to the size on the phone.
 
+**Bringing one up to date.** A backup kept as a folder can be refreshed instead of taken
+again: pick it in *My backups* and press **Continue / update**. The phone is asked what it
+holds and how big each file is, the folder is read for what is already there, and only what is
+new or changed comes over. On a phone whose photos have not moved much, that is minutes instead
+of an hour.
+
 **If it stops part way.** A backup that is cancelled, or whose phone is unplugged, keeps
 everything it already pulled as a folder, and *My backups* marks it **stopped part way**. Pick
-that line and press **Continue this one**: the phone is asked what it holds, the folder is read
+that line and press **Continue / update**: the phone is asked what it holds, the folder is read
 for what came over, and only the difference is fetched - a file that was cut off halfway is
 fetched again, one that arrived whole is left alone. Then it is packed like any other backup.
 
 It needs nothing that was remembered at the time, so it works after closing and reopening the
 program, or days later; it only asks that the same phone is the one plugged in, so two phones
 never end up in one backup.
+
+**How fast it can be.** Measured on a Redmi 13C over its own cable: one large file came over
+at 26 MB/s, a folder of mixed sizes at 14 MB/s. That is the phone's USB 2.0 link, and no
+setting here beats it - 30 GB will take around half an hour whatever this program does. What
+*can* be saved: the packing pass (about 40% on top), and, on a second backup of the same phone,
+everything that has not changed - see *Bringing one up to date* above.
 
 **How long it will take.** Before the files are pulled, each folder on the phone is measured
 (`du`), so the line beside the bar can say what is left: *Files: DCIM  -  about 17 minutes left,
@@ -264,6 +286,9 @@ about them, so a backup moved into that folder appears and one taken out of it i
 
 * Double-click a line, or press *Open this one*, to open it.
 * *Show in Explorer* opens the folder with that backup picked out.
+* **Delete ...** removes the selected backup from this PC, after asking. There is no undoing
+  it, and the phone is not touched. Only something that really is a backup can be deleted this
+  way - a folder with no `manifest.json` in it is left alone.
 * *Refresh* reads the folder again.
 
 **Looking inside one.** *What is inside* lists every file in the opened backup - which part it

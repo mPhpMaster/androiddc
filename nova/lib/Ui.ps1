@@ -261,7 +261,11 @@ function Write-Log {
     $last = $null
     foreach ($line in ($Message -split "`r?`n")) {
         if ($line.Trim() -eq '') { continue }
-        $last = [PSCustomObject]@{ Time = (Get-Date -Format 'HH:mm:ss'); Text = $line; Brush = $brush; Kind = $Color }
+        # the time as a clock shows it; InvariantCulture so it is AM/PM on
+        # every Windows, not the local word for it in a page written in English
+        $last = [PSCustomObject]@{
+            Time = (Get-Date).ToString('h:mm:ss tt', [System.Globalization.CultureInfo]::InvariantCulture)
+            Text = $line; Brush = $brush; Kind = $Color }
         $script:logLines.Add($last)
     }
     # the log keeps the newest 3000 lines; the oldest go first

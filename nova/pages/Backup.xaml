@@ -30,7 +30,23 @@
         <!-- off unless it is asked for: a card can hold more than the phone does -->
         <CheckBox x:Name="BackupCard" Content="Memory card" IsChecked="False" Margin="0,4,18,4"
                   ToolTip="What is on the card in the phone, if there is one. Off by default: a card can be bigger than the phone itself"/>
+        <!-- packing reads and writes everything a second time - about 40% on top
+             of the pull - so it is a choice, not a given -->
+        <CheckBox x:Name="BackupPack" Content="Pack into one .zip" IsChecked="True" Margin="0,4,18,4"
+                  ToolTip="One file instead of a folder, which is tidier to keep and to move. It costs a second pass over everything - about 40% more time - and a backup left as a folder can be brought up to date later instead of taken again"/>
       </WrapPanel>
+      <Grid Margin="0,0,0,10">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="Call it:" VerticalAlignment="Center" Style="{StaticResource MutedLine}"/>
+        <TextBox x:Name="BackupName" Grid.Column="1" Width="240" Margin="8,0,0,0"
+                 ToolTip="What to call this backup - &quot;before the update&quot;, &quot;holiday photos&quot;. It goes into the file name and shows in the list. Leave it empty and the phone and the time are name enough"/>
+        <TextBlock Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource MutedLine}"
+                   Text="optional - the phone and the time are in the name either way"/>
+      </Grid>
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto"/>
@@ -103,7 +119,8 @@
                       ToolTip="The backups in that folder, newest first - double-click one to open it">
               <ListView.View>
                 <GridView>
-                  <GridViewColumn Header="TAKEN" Width="140" DisplayMemberBinding="{Binding When}"/>
+                    <GridViewColumn Header="NAME" Width="140" DisplayMemberBinding="{Binding Called}"/>
+                  <GridViewColumn Header="TAKEN" Width="175" DisplayMemberBinding="{Binding When}"/>
                   <GridViewColumn Header="PHONE" Width="170" DisplayMemberBinding="{Binding Phone}"/>
                   <GridViewColumn Header="HOLDS" Width="150" DisplayMemberBinding="{Binding Holds}"/>
                   <GridViewColumn Header="SIZE" Width="80" DisplayMemberBinding="{Binding Size}"/>
@@ -119,8 +136,10 @@
                       ToolTip="Opens the selected backup, so what is inside it can be read and put back"/>
               <Button x:Name="BackupListShow" Content="Show in Explorer" Margin="0,4,8,0"
                       ToolTip="Opens Explorer with the backup file picked out"/>
-              <Button x:Name="BackupListResume" Content="Continue this one" Margin="0,4,8,0"
-                      ToolTip="Carries a backup that stopped part way on from where it got to - only what is missing is fetched. It works after the program has been closed and opened again"/>
+              <Button x:Name="BackupListResume" Content="Continue / update" Margin="0,4,8,0"
+                      ToolTip="Carries a backup that stopped part way on from where it got to, or brings a finished one up to date - either way only what is missing or changed is fetched. For a backup kept as a folder; it works after the program has been closed and opened again"/>
+              <Button x:Name="BackupListDelete" Style="{StaticResource DangerButton}" Content="Delete ..." Margin="0,4,8,0"
+                      ToolTip="Deletes the selected backup from this PC, after asking. There is no undoing it, and the phone is not touched"/>
             </WrapPanel>
           </Grid>
         </TabItem>

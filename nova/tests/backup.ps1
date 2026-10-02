@@ -22,6 +22,8 @@ $ui.BackupCard.IsChecked = $true
 Say ("  ticking the card puts it in: {0}   {1}" -f ((Get-BackupPageParts) -join ','),
     (Mark (((Get-BackupPageParts) -join ',') -eq 'files,card,apps,personal,settings')))
 $ui.BackupCard.IsChecked = $false
+Say ("  a name can be typed for it, and packing can be turned off   {0}" -f (Mark (
+    "$($ui.BackupName.Text)" -eq '' -and $ui.BackupPack.IsChecked)))
 
 Say ''
 Say '== a backup folder, packed into one .zip =='

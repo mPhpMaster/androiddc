@@ -57,7 +57,7 @@ function Set-BackupPageBusy {
     $ui.BackupCancel.IsEnabled = $Running
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps',
         'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing',
-        'BackupListResume')) {
+        'BackupListResume', 'BackupListDelete')) {
         $ui[$name].IsEnabled = -not $Running
     }
     if (-not $Running) {
@@ -256,7 +256,8 @@ function Start-BackupPageNow {
 
     Set-BackupPageBusy -Running $true
     try {
-        $manifest = Invoke-PhoneBackup -Serial $serial -Destination $where -Parts $parts -Model $model
+        $manifest = Invoke-PhoneBackup -Serial $serial -Destination $where -Parts $parts -Model $model `
+            -Name "$($ui.BackupName.Text)".Trim() -Pack ([bool]$ui.BackupPack.IsChecked)
     } finally {
         Set-BackupPageBusy -Running $false
     }
@@ -315,12 +316,13 @@ function Show-BackupPagePath {
 }
 
 function Resume-BackupPagePicked {
-    # carries the backup picked in the list on, into the folder it left behind
+    # carries a stopped backup on, or brings a finished one up to date; both
+    # are the same work - compare with the phone and fetch the difference
     $row = Get-BackupPagePick
-    if (-not $row) { Write-Log 'Pick the backup to carry on in the list first.' $colorWarn; return }
-    if ($row.State -ne 'stopped part way') {
-        Write-Log 'That backup finished; there is nothing to carry on.' $colorWarn
-        Write-Log '  A backup that stopped says "stopped part way" in the STATE column.' $colorInfo
+    if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
+    if ($row.Kind -ne 'folder') {
+        Write-Log 'That backup is one packed file, so it cannot be carried on or brought up to date.' $colorWarn
+        Write-Log '  Untick "Pack into one .zip" when taking one, and it can be.' $colorInfo
         return
     }
     $serial = Get-TargetSerial
@@ -328,16 +330,42 @@ function Resume-BackupPagePicked {
 
     Set-BackupPageBusy -Running $true
     try {
-        $manifest = Resume-PhoneBackup -Serial $serial -Folder $row.Path
+        $manifest = Resume-PhoneBackup -Serial $serial -Folder $row.Path -Pack ([bool]$ui.BackupPack.IsChecked)
     } finally {
         Set-BackupPageBusy -Running $false
     }
     if ($manifest) {
         $null = Show-BackupPageAt -Path $manifest.Path
-        if ($manifest.Complete) { Show-Toast -Text 'Backup carried on to the end' -Color 'good' }
+        if ($manifest.Complete) { Show-Toast -Text 'Backup brought up to date' -Color 'good' }
         else { Show-Toast -Text "Stopped again: $($manifest.Stopped)" -Color 'warn' }
     }
     Update-BackupPageList
+}
+
+function Remove-BackupPagePicked {
+    # deletes the backup picked in the list, after asking plainly
+    $row = Get-BackupPagePick
+    if (-not $row) { Write-Log 'Pick the backup to delete in the list first.' $colorWarn; return }
+    $sure = Show-Confirm -Title 'Delete a backup' -Text (
+        "Delete $($row.Name) from this PC?`n`n$($row.Phone), taken $($row.When), $($row.Size)`n`n" +
+        'There is no undoing it. Nothing on the phone is touched.')
+    if (-not $sure) { return }
+
+    if (Remove-BackupAt -Path $row.Path) {
+        # the one that was open has just gone
+        if ($script:backupPath -eq $row.Path) {
+            $script:backupSource = $null
+            $script:backupPath = ''
+            $script:backupManifest = $null
+            $script:backupAppsStale = $true
+            $script:backupInsideStale = $true
+            $ui.BackupInfo.Text = 'No backup opened yet.'
+            $ui.BackupInside.ItemsSource = $null
+            $ui.BackupAppList.ItemsSource = $null
+        }
+        Show-Toast -Text 'Backup deleted' -Color 'good'
+        Update-BackupPageList
+    }
 }
 
 function Show-BackupPagePicked {
@@ -469,6 +497,7 @@ $ui.BackupListRefresh.Add_Click({ Update-BackupPageList })
 $ui.BackupListOpen.Add_Click({ Open-BackupPagePicked })
 $ui.BackupListShow.Add_Click({ Show-BackupPagePicked })
 $ui.BackupListResume.Add_Click({ Resume-BackupPagePicked })
+$ui.BackupListDelete.Add_Click({ Remove-BackupPagePicked })
 $ui.BackupSaveCopy.Add_Click({ Save-BackupPageCopy })
 $ui.BackupAppsMissing.Add_Click({ Select-BackupPageMissing })
 $ui.BackupAppFind.Add_TextChanged({ Set-BackupPageAppFilter })
@@ -504,7 +533,7 @@ if (Test-BackupShared) {
     $ui.BackupInfo.Text = 'shared\Backup.ps1 is not in the project folder: no backups from here.'
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupBrowse', 'BackupRestoreFiles', 'BackupInstallApps',
         'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen', 'BackupListShow',
-        'BackupListResume')) {
+        'BackupListResume', 'BackupListDelete')) {
         $ui[$name].IsEnabled = $false
     }
 }

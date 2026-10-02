@@ -3639,7 +3639,9 @@ function Write-Log {
         [System.Drawing.Color]$Color = [System.Drawing.Color]::Gainsboro
     )
 
-    $stamp = Get-Date -Format 'HH:mm:ss'
+    # the time as a clock shows it; InvariantCulture so it is AM/PM on every
+    # Windows, not the local word for it in a window written in English
+    $stamp = (Get-Date).ToString('h:mm:ss tt', [System.Globalization.CultureInfo]::InvariantCulture)
     foreach ($line in ($Message -split "`r?`n")) {
         if ($line.Trim() -eq '') { continue }
         $script:logLines.Add([PSCustomObject]@{ Stamp = $stamp; Text = $line; Color = $Color })
@@ -3840,12 +3842,29 @@ $chkBackupCard.Size = New-Object System.Drawing.Size(240, 22)
 $grpBackupMake.Controls.Add($chkBackupCard)
 $toolTip.SetToolTip($chkBackupCard, 'What is on the card in the phone, if there is one. Off by default: a card can be bigger than the phone itself')
 
-$lblBackupCard = New-Object System.Windows.Forms.Label
-$lblBackupCard.Text = 'Read when the backup starts; with no card in the phone this part stays empty.'
-$lblBackupCard.Location = New-Object System.Drawing.Point(258, 51)
-$lblBackupCard.Size = New-Object System.Drawing.Size(442, 20)
-$lblBackupCard.AutoEllipsis = $true
-$grpBackupMake.Controls.Add($lblBackupCard)
+$lblBackupName = New-Object System.Windows.Forms.Label
+$lblBackupName.Text = 'Call it:'
+$lblBackupName.Location = New-Object System.Drawing.Point(266, 51)
+$lblBackupName.Size = New-Object System.Drawing.Size(54, 20)
+$grpBackupMake.Controls.Add($lblBackupName)
+
+# a name of your own goes into the file's name and into the backup itself, so
+# the list can show it even after the file has been renamed
+$txtBackupName = New-Object System.Windows.Forms.TextBox
+$txtBackupName.Location = New-Object System.Drawing.Point(324, 48)
+$txtBackupName.Size = New-Object System.Drawing.Size(200, 22)
+$grpBackupMake.Controls.Add($txtBackupName)
+$toolTip.SetToolTip($txtBackupName, 'What to call this backup - "before the update", "holiday photos". It goes into the file name and shows in the list. Leave it empty and the phone and the time are name enough')
+
+# packing reads and writes everything a second time - measured at about 40%
+# on top of the pull - so it is a choice, not a given
+$chkBackupPack = New-Object System.Windows.Forms.CheckBox
+$chkBackupPack.Text = 'Pack into one .zip'
+$chkBackupPack.Checked = $true
+$chkBackupPack.Location = New-Object System.Drawing.Point(534, 48)
+$chkBackupPack.Size = New-Object System.Drawing.Size(166, 22)
+$grpBackupMake.Controls.Add($chkBackupPack)
+$toolTip.SetToolTip($chkBackupPack, 'One file instead of a folder, which is tidier to keep and to move. It costs a second pass over everything - about 40% more time - and a backup left as a folder can be brought up to date later instead of taken again')
 
 $btnBackupRun = New-Object System.Windows.Forms.Button
 $btnBackupRun.Text = 'Back up now ...'
@@ -3892,12 +3911,13 @@ $lstBackupList.FullRowSelect = $true
 $lstBackupList.MultiSelect = $false
 $lstBackupList.HideSelection = $false
 $lstBackupList.Dock = 'Fill'
-$null = $lstBackupList.Columns.Add('Taken', 130)
-$null = $lstBackupList.Columns.Add('Phone', 150)
-$null = $lstBackupList.Columns.Add('Holds', 130)
+$null = $lstBackupList.Columns.Add('Name', 130)
+$null = $lstBackupList.Columns.Add('Taken', 160)
+$null = $lstBackupList.Columns.Add('Phone', 140)
+$null = $lstBackupList.Columns.Add('Holds', 120)
 $null = $lstBackupList.Columns.Add('Size', 70)
 $null = $lstBackupList.Columns.Add('State', 100)
-$null = $lstBackupList.Columns.Add('File', 260)
+$null = $lstBackupList.Columns.Add('File', 230)
 $tabBackupList.Controls.Add($lstBackupList)
 
 # the folder the list shows, and the way to change it
@@ -3963,11 +3983,18 @@ $toolTip.SetToolTip($btnBackupListShow, 'Opens Explorer with the backup file pic
 # a backup that stopped is a folder with a manifest saying so; carrying it on
 # fetches what is missing and packs it, however long ago it stopped
 $btnBackupListResume = New-Object System.Windows.Forms.Button
-$btnBackupListResume.Text = 'Continue this one'
+$btnBackupListResume.Text = 'Continue / update'
 $btnBackupListResume.Location = New-Object System.Drawing.Point(342, 2)
 $btnBackupListResume.Size = New-Object System.Drawing.Size(134, 26)
 $pnlBackupListButtons.Controls.Add($btnBackupListResume)
-$toolTip.SetToolTip($btnBackupListResume, 'Carries a backup that stopped part way on from where it got to - only what is missing is fetched. It works after the program has been closed and opened again')
+
+$btnBackupListDelete = New-Object System.Windows.Forms.Button
+$btnBackupListDelete.Text = 'Delete ...'
+$btnBackupListDelete.Location = New-Object System.Drawing.Point(480, 2)
+$btnBackupListDelete.Size = New-Object System.Drawing.Size(90, 26)
+$pnlBackupListButtons.Controls.Add($btnBackupListDelete)
+$toolTip.SetToolTip($btnBackupListDelete, 'Deletes the selected backup from this PC, after asking. There is no undoing it, and the phone is not touched')
+$toolTip.SetToolTip($btnBackupListResume, 'Carries a backup that stopped part way on from where it got to, or brings a finished one up to date - either way only what is missing or changed is fetched. For a backup kept as a folder; it works after the program has been closed and opened again')
 
 $tabBackupInside = New-Object System.Windows.Forms.TabPage
 $tabBackupInside.Text = 'What is inside'
@@ -12655,7 +12682,7 @@ function Set-BackupBusyUi {
     $btnBackupCancel.Enabled = $Running
     foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps,
         $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse,
-        $btnBackupAppsAll, $btnBackupAppsNone, $btnBackupListResume)) {
+        $btnBackupAppsAll, $btnBackupAppsNone, $btnBackupListResume, $btnBackupListDelete)) {
         $control.Enabled = -not $Running
     }
     if (-not $Running) {
@@ -12858,7 +12885,8 @@ function Update-BackupList {
     $script:backupListRows = @(Get-BackupsInFolder -Folder $folder)
     $items = New-Object System.Collections.Generic.List[object]
     foreach ($row in $script:backupListRows) {
-        $item = New-Object System.Windows.Forms.ListViewItem($row.When)
+        $item = New-Object System.Windows.Forms.ListViewItem($(if ($row.Called) { $row.Called } else { '-' }))
+        $null = $item.SubItems.Add($row.When)
         $null = $item.SubItems.Add($row.Phone)
         $null = $item.SubItems.Add($row.Holds)
         $null = $item.SubItems.Add($row.Size)
@@ -12918,7 +12946,8 @@ function Start-BackupNow {
     if ($lstDevices.SelectedItems.Count -gt 0) { $model = $lstDevices.SelectedItems[0].SubItems[2].Text }
     Set-BackupBusyUi -Running $true
     try {
-        $manifest = Invoke-PhoneBackup -Serial $serial -Destination $dialog.SelectedPath -Parts $parts -Model $model
+        $manifest = Invoke-PhoneBackup -Serial $serial -Destination $dialog.SelectedPath -Parts $parts -Model $model `
+            -Name "$($txtBackupName.Text)".Trim() -Pack $chkBackupPack.Checked
     } finally {
         Set-BackupBusyUi -Running $false
     }
@@ -12969,12 +12998,13 @@ function Open-BackupFromList {
 }
 
 function Resume-BackupFromList {
-    # carries the backup picked in the list on, into the folder it left behind
+    # carries a stopped backup on, or brings a finished one up to date; both
+    # are the same work - compare with the phone and fetch the difference
     $row = Get-BackupListPick
-    if (-not $row) { Write-Log 'Pick the backup to carry on in the list first.' $colorWarn; return }
-    if ($row.State -ne 'stopped part way') {
-        Write-Log 'That backup finished; there is nothing to carry on.' $colorWarn
-        Write-Log '  A backup that stopped says "stopped part way" in the State column.' $colorInfo
+    if (-not $row) { Write-Log 'Pick a backup in the list first.' $colorWarn; return }
+    if ($row.Kind -ne 'folder') {
+        Write-Log 'That backup is one packed file, so it cannot be carried on or brought up to date.' $colorWarn
+        Write-Log '  Untick "Pack into one .zip" when taking one, and it can be.' $colorInfo
         return
     }
     $serial = Get-TargetSerial
@@ -12982,12 +13012,41 @@ function Resume-BackupFromList {
 
     Set-BackupBusyUi -Running $true
     try {
-        $manifest = Resume-PhoneBackup -Serial $serial -Folder $row.Path
+        $manifest = Resume-PhoneBackup -Serial $serial -Folder $row.Path -Pack $chkBackupPack.Checked
     } finally {
         Set-BackupBusyUi -Running $false
     }
     if ($manifest) { $null = Show-BackupAt -Path $manifest.Path }
     Update-BackupList
+}
+
+function Remove-BackupPicked {
+    # deletes the backup picked in the list, after asking plainly
+    $row = Get-BackupListPick
+    if (-not $row) { Write-Log 'Pick the backup to delete in the list first.' $colorWarn; return }
+
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        ("Delete this backup from the PC?" + [Environment]::NewLine + [Environment]::NewLine +
+            "$($row.Name)" + [Environment]::NewLine +
+            "$($row.Phone), taken $($row.When), $($row.Size)" + [Environment]::NewLine + [Environment]::NewLine +
+            'There is no undoing it. Nothing on the phone is touched.'),
+        'Delete a backup', 'YesNo', 'Warning', 'Button2')
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+    if (Remove-BackupAt -Path $row.Path) {
+        # the one that was open has just gone
+        if ($script:backupPath -eq $row.Path) {
+            $script:backupSource = $null
+            $script:backupPath = ''
+            $script:backupManifest = $null
+            $script:backupAppsStale = $true
+            $script:backupInsideStale = $true
+            $txtBackupInfo.Text = 'No backup opened yet.'
+            $lstBackupApps.Items.Clear()
+            $lstBackupInside.Items.Clear()
+        }
+        Update-BackupList
+    }
 }
 
 function Show-BackupPickedInExplorer {
@@ -13129,6 +13188,7 @@ $btnBackupListRefresh.Add_Click({ Update-BackupList })
 $btnBackupListOpen.Add_Click({ Open-BackupFromList })
 $btnBackupListShow.Add_Click({ Show-BackupPickedInExplorer })
 $btnBackupListResume.Add_Click({ Resume-BackupFromList })
+$btnBackupListDelete.Add_Click({ Remove-BackupPicked })
 $btnBackupWhereBrowse.Add_Click({ Select-BackupFolder })
 $btnBackupSaveCopy.Add_Click({ Save-BackupPickedFiles })
 $lstBackupList.Add_DoubleClick({ Open-BackupFromList })

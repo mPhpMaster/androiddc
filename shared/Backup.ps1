@@ -129,7 +129,7 @@ function Format-BackupLeft {
     if ($Seconds -lt 45) { return 'less than a minute left' }
     $minutes = [int][Math]::Round($Seconds / 60)
     if ($minutes -le 1) { return 'about a minute left' }
-    $when = ([datetime]::Now).AddSeconds($Seconds).ToString('HH:mm')
+    $when = ([datetime]::Now).AddSeconds($Seconds).ToString('h:mm tt', [System.Globalization.CultureInfo]::InvariantCulture)
     if ($minutes -lt 60) { return "about $minutes minutes left, done by $when" }
     $hours = [int][Math]::Floor($minutes / 60)
     $rest = $minutes - ($hours * 60)
@@ -499,14 +499,47 @@ function Get-BackupPartLabel {
     return $Id
 }
 
-function ConvertTo-BackupName {
-    # a folder name for a backup: which phone, and when it was taken
-    param([string]$Model, [string]$Serial, [datetime]$When = [datetime]::Now)
+function Format-BackupWhen {
+    # a time written for a person: 2026-10-02 03:22:36 PM. The manifest keeps
+    # the sortable form (2026-10-02T15:22:36) - this is only for showing, and
+    # anything it cannot read comes back as it was.
+    param([string]$Text)
 
-    $text = "$Model $Serial"
-    foreach ($bad in [System.IO.Path]::GetInvalidFileNameChars()) { $text = $text.Replace($bad, '-') }
-    $text = ($text -replace '\s+', '-').Trim('-')
+    $when = [datetime]::MinValue
+    if (-not [datetime]::TryParse("$Text", [ref]$when)) { return ("$Text" -replace 'T', ' ') }
+    return $when.ToString('yyyy-MM-dd hh:mm:ss tt', [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function ConvertTo-BackupWhen {
+    # the same text as a date, to sort by; the oldest possible when it is not one
+    param([string]$Text)
+
+    $when = [datetime]::MinValue
+    if ([datetime]::TryParse("$Text", [ref]$when)) { return $when }
+    return [datetime]::MinValue
+}
+
+function ConvertTo-BackupFileWord {
+    # anything a person typed, made safe for a file name and kept short
+    param([string]$Text, [int]$Limit = 40)
+
+    $word = "$Text"
+    foreach ($bad in [System.IO.Path]::GetInvalidFileNameChars()) { $word = $word.Replace($bad, '-') }
+    $word = ($word -replace '\s+', '-').Trim('-')
+    if ($word.Length -gt $Limit) { $word = $word.Substring(0, $Limit).Trim('-') }
+    return $word
+}
+
+function ConvertTo-BackupName {
+    # a folder name for a backup: what it was called, which phone, and when it
+    # was taken. The name a person gave comes first, because that is what they
+    # will look for in a folder of them.
+    param([string]$Model, [string]$Serial, [datetime]$When = [datetime]::Now, [string]$Name = '')
+
+    $text = ConvertTo-BackupFileWord -Text "$Model $Serial" -Limit 60
     if (-not $text) { $text = 'phone' }
+    $given = ConvertTo-BackupFileWord -Text $Name
+    if ($given) { $text = "$given-$text" }
     return ('AndroidDC-backup-{0}-{1}' -f $text, $When.ToString('yyyyMMdd-HHmmss'))
 }
 
@@ -667,6 +700,13 @@ function Backup-PhoneFiles {
         if ($result.ExitCode -ne 0) {
             $refused += $entry
             Write-Log ('  ' + $result.Text) $colorWarn
+            # adb gives up on a whole folder over one name it cannot write -
+            # measured on a folder named in Arabic-Indic digits, where it said
+            # "cannot create ... Not a directory" and left the rest behind. The
+            # files it missed are fetched one by one, into folders made here,
+            # which Windows has no trouble with.
+            $mended = Repair-BackupFolder -Serial $Serial -Remote "/sdcard/$entry" -Local $local -Caption "Files: $entry"
+            if ($mended.Pulled -gt 0) { $refused = @($refused | Where-Object { $_ -ne $entry }) }
         }
     }
     Stop-BackupClock
@@ -731,6 +771,8 @@ function Backup-PhoneCard {
             if ($result.ExitCode -ne 0) {
                 $refused += $entry
                 Write-Log ('  ' + $result.Text) $colorWarn
+                $mended = Repair-BackupFolder -Serial $Serial -Remote "$card/$entry" -Local $local -Caption "Card: $entry"
+                if ($mended.Pulled -gt 0) { $refused = @($refused | Where-Object { $_ -ne $entry }) }
             }
         }
         Stop-BackupClock
@@ -771,6 +813,9 @@ function Backup-PhoneApps {
         try { $labels = Get-AppLabels -Serial $Serial } catch { $labels = @{} }
     }
     Write-Log "Backup: $($packages.Count) app(s) ..." $colorStep
+    # where every app's files are, in a handful of calls instead of one per app:
+    # measured at 0.46 s each, which is over a minute of asking on this phone
+    $apkPaths = Get-BackupApkPaths -Serial $Serial
 
     $apps = @()
     $index = 0
@@ -784,8 +829,12 @@ function Backup-PhoneApps {
         Write-BackupProgress -Text "Apps: $package" -Done $index -Total $packages.Count
 
         $paths = @()
-        foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'path', $package)).Lines) {
-            if ("$line" -match '^package:(/\S+\.apk)$') { $paths += $Matches[1] }
+        if ($apkPaths.ContainsKey($package)) { $paths = @($apkPaths[$package]) }
+        if ($paths.Count -eq 0) {
+            # the quick way did not know this one: ask about it on its own
+            foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'path', $package)).Lines) {
+                if ("$line" -match '^package:(/\S+\.apk)$') { $paths += $Matches[1] }
+            }
         }
         if ($paths.Count -eq 0) { Write-Log "  $package : no readable APK" $colorWarn; continue }
 
@@ -827,6 +876,53 @@ function Backup-PhoneApps {
     Save-BackupText -Path (Join-Path $target 'apps.json') -Text (ConvertTo-Json -InputObject @($apps) -Depth 4)
     Write-Log ("  $($apps.Count) app(s), " + (Format-FileSize -Bytes (Get-BackupFolderSize -Path $target))) $colorGood
     return $apps
+}
+
+function Get-BackupApkPaths {
+    <#
+        Every installed app's APK files, base and splits, in a few calls rather
+        than two per app.
+
+        "pm list packages -f -3" names each app's base APK and the folder it
+        sits in; the splits are beside it, so one ls over all those folders at
+        once finds them. Anything this does not answer for is asked about on
+        its own by the caller.
+    #>
+    param([string]$Serial)
+
+    $paths = @{}
+    $folders = @{}
+    foreach ($line in (Invoke-DeviceShell -Serial $Serial -CommandArguments @('pm', 'list', 'packages', '-f', '-3')).Lines) {
+        if ("$line" -notmatch '^package:(/\S+\.apk)=(\S+)\s*$') { continue }
+        $apk = $Matches[1]
+        $package = $Matches[2]
+        $paths[$package] = @($apk)
+        $folder = (Split-Path -Parent $apk) -replace '\\', '/'
+        if ($folder) { $folders[$folder] = $package }
+    }
+    if ($folders.Count -eq 0) { return $paths }
+
+    # in handfuls: one command line with two hundred paths in it is asking for
+    # trouble on a phone with a small ARG_MAX
+    $names = @($folders.Keys)
+    for ($start = 0; $start -lt $names.Count; $start += 40) {
+        if (Test-BackupStopped) { break }
+        $chunk = @($names[$start..([Math]::Min($start + 39, $names.Count - 1))])
+        $quoted = (@($chunk | ForEach-Object { "'" + $_ + "'" }) -join ' ')
+        $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @("ls -1 $quoted 2>/dev/null")).Text
+        $current = ''
+        foreach ($line in ("$text" -split "`r?`n")) {
+            $name = "$line".Trim()
+            if (-not $name) { continue }
+            # "ls" of several folders names each one before its contents
+            if ($name.EndsWith(':')) { $current = $name.TrimEnd(':'); continue }
+            if (-not $current -or -not $folders.ContainsKey($current)) { continue }
+            if ($name -notlike 'split_*.apk') { continue }
+            $package = $folders[$current]
+            $paths[$package] = @($paths[$package]) + "$current/$name"
+        }
+    }
+    return $paths
 }
 
 function Backup-PhonePersonal {
@@ -934,7 +1030,8 @@ function Invoke-PhoneBackup {
         ends it where it is; the manifest is written either way, and Complete
         says whether everything asked for was taken.
     #>
-    param([string]$Serial, [string]$Destination, [string[]]$Parts, [string]$Model = '')
+    param([string]$Serial, [string]$Destination, [string[]]$Parts, [string]$Model = '', [string]$Name = '',
+        [bool]$Pack = $true)
 
     $wanted = @(@($Parts) | Where-Object { $_ })
     if ($wanted.Count -eq 0) { Write-Log 'Backup: nothing was ticked.' $colorWarn; return $null }
@@ -942,7 +1039,7 @@ function Invoke-PhoneBackup {
 
     $started = [datetime]::Now
     # the folder is where adb pulls; the .zip beside it is what is kept
-    $name = ConvertTo-BackupName -Model $Model -Serial $Serial -When $started
+    $name = ConvertTo-BackupName -Model $Model -Serial $Serial -When $started -Name $Name
     $folder = Join-Path $Destination $name
     $zipPath = Join-Path $Destination ($name + '.zip')
     $null = New-Item -ItemType Directory -Path $folder -Force
@@ -955,6 +1052,7 @@ function Invoke-PhoneBackup {
         Model    = $Model
         Android  = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('getprop', 'ro.build.version.release')).Text.Trim()
         Created  = $started.ToString('s')
+        Name     = "$Name".Trim()
         Parts    = @($wanted)
         Files    = $null
         Card     = $null
@@ -978,7 +1076,8 @@ function Invoke-PhoneBackup {
         } finally {
             Save-BackupManifest -Manifest $manifest -Folder $folder
         }
-        $result = Complete-PhoneBackup -Serial $Serial -Folder $folder -ZipPath $zipPath -Manifest $manifest -Started $started
+        $result = Complete-PhoneBackup -Serial $Serial -Folder $folder -ZipPath $zipPath -Manifest $manifest `
+            -Started $started -Pack $Pack
     } finally {
         Complete-BackupRun
     }
@@ -1007,12 +1106,16 @@ function Complete-PhoneBackup {
         stopped, the log and a notification say how it went, and the caller
         gets the manifest with the path it ended up at.
     #>
-    param([string]$Serial, [string]$Folder, [string]$ZipPath, $Manifest, [datetime]$Started, [string]$Verb = 'Backup')
+    param([string]$Serial, [string]$Folder, [string]$ZipPath, $Manifest, [datetime]$Started, [string]$Verb = 'Backup',
+        [bool]$Pack = $true)
 
     $path = $Folder
     $kind = 'folder'
     $packed = $null
-    if ($Manifest.Complete) {
+    if ($Manifest.Complete -and -not $Pack) {
+        Write-Log '  Left as a folder, because packing was not asked for: it opens and restores the same way.' $colorInfo
+    }
+    if ($Manifest.Complete -and $Pack) {
         $packed = Compress-BackupFolder -Folder $Folder -ZipPath $ZipPath
         if ($packed.Ok) {
             $path = $ZipPath
@@ -1177,6 +1280,18 @@ function Resume-BackupTree {
     return $result
 }
 
+function Repair-BackupFolder {
+    # what Resume-BackupTree does, said in the words of a backup that is still
+    # running: the files adb could not write are fetched one by one
+    param([string]$Serial, [string]$Remote, [string]$Local, [string]$Caption)
+
+    Write-Log "  adb left that folder unfinished; fetching what it missed ..." $colorWarn
+    $one = Resume-BackupTree -Serial $Serial -Remote $Remote -Local $Local -Caption "$Caption (mending)"
+    if ($one.Pulled -gt 0) { Write-Log "  $($one.Pulled) more file(s) came over." $colorGood }
+    if ($one.Failed -gt 0) { Write-Log "  $($one.Failed) still could not be read." $colorWarn }
+    return $one
+}
+
 function Resume-BackupFiles {
     # internal storage, carried on: the same folders a backup takes, compared
     # one at a time
@@ -1253,18 +1368,18 @@ function Resume-PhoneBackup {
         Nothing from the run that stopped is needed - no notes, no half state -
         so this works after the program has been closed and opened again.
     #>
-    param([string]$Serial, [string]$Folder, [string]$Model = '')
+    param([string]$Serial, [string]$Folder, [string]$Model = '', [bool]$Pack = $true)
 
     $source = Open-BackupSource -Path $Folder
     if ($null -eq $source) { Write-Log "That is not a backup: $Folder" $colorBad; return $null }
     if ($source.Kind -ne 'folder') {
-        Write-Log 'That backup is one packed file, so it finished: there is nothing to carry on.' $colorWarn
+        Write-Log 'That backup is one packed file. Only one kept as a folder can be carried on or brought up to date.' $colorWarn
+        Write-Log '  Take the next backup with "Pack it into one .zip" off, and it can be brought up to date later.' $colorInfo
         return $null
     }
-    if (-not (Test-BackupResumable -Source $source)) {
-        Write-Log 'That backup is complete: there is nothing to carry on.' $colorWarn
-        return $null
-    }
+    # a complete one is not carried on, it is brought up to date: the same
+    # comparing, and only what changed on the phone since comes over
+    $updating = -not (Test-BackupResumable -Source $source)
     $read = $source.Manifest
     if ("$($read.Serial)" -and "$($read.Serial)" -ne "$Serial") {
         Write-Log "That backup came off $($read.Serial), and the phone picked now is $Serial." $colorBad
@@ -1276,8 +1391,13 @@ function Resume-PhoneBackup {
     $zipPath = $folder + '.zip'
     $wanted = @(@($read.Parts) | Where-Object { $_ })
     $started = [datetime]::Now
-    Write-Log ("Carrying on the backup stopped on " + ("$($read.Finished)" -replace 'T', ' ') +
-        " ($($read.Stopped))") $colorStep
+    if ($updating) {
+        Write-Log ('Bringing this backup up to date (taken ' + (Format-BackupWhen -Text "$($read.Created)") +
+            '): only what changed on the phone since comes over.') $colorStep
+    } else {
+        Write-Log ('Carrying on the backup stopped at ' + (Format-BackupWhen -Text "$($read.Finished)") +
+            " ($($read.Stopped))") $colorStep
+    }
     Start-BackupRun
 
     $manifest = [ordered]@{
@@ -1286,6 +1406,7 @@ function Resume-PhoneBackup {
         Model    = $(if ("$($read.Model)") { "$($read.Model)" } else { $Model })
         Android  = "$($read.Android)"
         Created  = "$($read.Created)"
+        Name     = $(if ($read.PSObject.Properties['Name']) { "$($read.Name)" } else { '' })
         Parts    = @($wanted)
         Files    = $null
         Card     = $null
@@ -1311,7 +1432,7 @@ function Resume-PhoneBackup {
             Save-BackupManifest -Manifest $manifest -Folder $folder
         }
         return (Complete-PhoneBackup -Serial $Serial -Folder $folder -ZipPath $zipPath -Manifest $manifest `
-            -Started $started -Verb 'Carried on')
+            -Started $started -Verb $(if ($updating) { 'Brought up to date' } else { 'Carried on' }) -Pack $Pack)
     } finally {
         Complete-BackupRun
     }
@@ -1653,8 +1774,10 @@ function Get-BackupSummaryLines {
     param($Manifest, $Source = $null)
 
     if ($null -eq $Manifest) { return @('Not a backup: it holds no manifest.json.') }
-    $lines = @("$($Manifest.Model) ($($Manifest.Serial)), Android $($Manifest.Android), taken " +
-        (("$($Manifest.Created)" -replace 'T', ' ')))
+    $called = ''
+    if ($Manifest.PSObject.Properties['Name'] -and "$($Manifest.Name)".Trim()) { $called = "$($Manifest.Name)".Trim() + ': ' }
+    $lines = @("$called$($Manifest.Model) ($($Manifest.Serial)), Android $($Manifest.Android), taken " +
+        (Format-BackupWhen -Text "$($Manifest.Created)"))
     if ($Manifest.PSObject.Properties['Bytes']) { $lines += 'Size: ' + (Format-FileSize -Bytes ([long]$Manifest.Bytes)) }
     if ($Source -and $Source.Kind -eq 'zip') {
         $lines += 'Packed: ' + (Format-FileSize -Bytes ([long]$Source.Packed)) + ' in one .zip'
@@ -2207,6 +2330,31 @@ function Get-BackupPartWords {
     return ($words -join ', ')
 }
 
+function Remove-BackupAt {
+    <#
+        Deletes a backup, and only a backup: the path has to hold a
+        manifest.json before anything is touched, so a stray click cannot take
+        a folder of holiday photos with it. There is no undoing it, which is
+        why the window asks first.
+    #>
+    param([string]$Path)
+
+    $source = Open-BackupSource -Path $Path
+    if ($null -eq $source) {
+        Write-Log "That is not a backup, so nothing was deleted: $Path" $colorBad
+        return $false
+    }
+    try {
+        if ($source.Kind -eq 'folder') { Remove-Item -LiteralPath $source.Path -Recurse -Force }
+        else { Remove-Item -LiteralPath $source.Path -Force }
+    } catch {
+        Write-Log ('It could not be deleted: ' + $_.Exception.Message) $colorBad
+        return $false
+    }
+    Write-Log "Deleted the backup $($source.Name) ($(Format-FileSize -Bytes $source.Packed))." $colorInfo
+    return $true
+}
+
 function Get-BackupsInFolder {
     <#
         The backups in a folder, newest first: every .zip that holds a
@@ -2239,11 +2387,17 @@ function Get-BackupsInFolder {
         if ($source.Kind -eq 'folder') { $size = $source.Bytes }
         $complete = $true
         if ($manifest.PSObject.Properties['Complete']) { $complete = [bool]$manifest.Complete }
+        $given = ''
+        if ($manifest.PSObject.Properties['Name']) { $given = "$($manifest.Name)".Trim() }
         $null = $rows.Add([PSCustomObject]@{
             Path  = $source.Path
+            # Name is the file's name; Called is what the person called it, when
+            # they gave it one at all
             Name  = $source.Name
+            Called = $given
             Kind  = $source.Kind
-            When  = (("$($manifest.Created)") -replace 'T', ' ')
+            When  = (Format-BackupWhen -Text "$($manifest.Created)")
+            Taken = (ConvertTo-BackupWhen -Text "$($manifest.Created)")
             Phone = (("$($manifest.Model) ($($manifest.Serial))").Trim())
             Holds = (Get-BackupPartWords -Parts $manifest.Parts)
             Size  = (Format-FileSize -Bytes ([long]$size))
@@ -2251,5 +2405,7 @@ function Get-BackupsInFolder {
             State = $(if ($complete) { 'complete' } else { 'stopped part way' })
         })
     }
-    return @($rows | Sort-Object -Property When -Descending)
+    # by the time it was taken, not by the words: "03:22 PM" and "11:05 AM" do
+    # not sort by their letters
+    return @($rows | Sort-Object -Property Taken -Descending)
 }

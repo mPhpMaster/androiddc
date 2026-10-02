@@ -4,6 +4,28 @@
 
 ## Unreleased
 
+### A backup can be named, deleted, brought up to date - and takes less time
+
+* **Call it what you like**: a name box beside the parts. It goes into the file's name and into
+  the backup, so the list shows it later; without one, the phone and the time still name it.
+* **Delete ...** in *My backups* removes a backup from this PC after asking. It will only delete
+  something that really is a backup, so a mistyped folder of photos is safe.
+* **Pack into one .zip is now a choice** (on by default). Packing reads and writes everything a
+  second time - measured at about 40% on top of the pull - so turning it off is the quickest
+  way to a faster backup, and a backup kept as a folder can be brought up to date later.
+* **Continue / update**: the button that carries a stopped backup on now also refreshes a
+  finished one. Same work, same comparing - only what is new or changed on the phone comes
+  over, which on a second backup is minutes instead of an hour.
+* **A folder adb gave up on is mended.** adb abandons a whole folder when one name defeats it -
+  measured on a folder named in Arabic-Indic digits, where it wrote *cannot create ... Not a
+  directory* and left the rest behind, quietly. The files it missed are now fetched one at a
+  time into folders made here, and the log says so.
+* **Every app's APK is found in a few calls** instead of two per app: `pm list packages -f`
+  names them all at once, and one `ls` over their folders finds the splits. Measured at 0.46 s
+  per app before, 74 seconds of asking on a phone with 163 apps.
+* **Times are written the way a clock is read**: `2026-10-02 03:22:36 PM`, in the backups list,
+  in what a backup says about itself, in *done by 5:15 PM*, and in both windows' logs.
+
 ### A backup can hold the memory card, is carried on where it stopped, and says how long it needs
 
 * **How long is left, in words**: *Files: DCIM  -  about 17 minutes left, done by 15:16*. It is

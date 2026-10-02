@@ -29,6 +29,15 @@ Say '== the name it is given =='
 $when = [datetime]::new(2026, 9, 20, 14, 5, 9)
 $name = ConvertTo-BackupName -Model 'Redmi 13C' -Serial 'ABC123' -When $when
 Say ("  '{0}'   {1}" -f $name, (Mark ($name -eq 'AndroidDC-backup-Redmi-13C-ABC123-20260920-140509')))
+$called = ConvertTo-BackupName -Model 'Redmi 13C' -Serial 'ABC123' -When $when -Name 'before the update'
+Say ("  with a name of your own: '{0}'   {1}" -f $called,
+    (Mark ($called -eq 'AndroidDC-backup-before-the-update-Redmi-13C-ABC123-20260920-140509')))
+Say ("  a name with a slash in it cannot make a folder of its own   {0}" -f (Mark (
+    (ConvertTo-BackupName -Model 'M' -Serial 'S' -When $when -Name 'a/b\c') -notmatch '[\/:*?"<>|]')))
+Say ("  times are written the way a clock is read: '{0}'   {1}" -f (Format-BackupWhen -Text '2026-10-02T15:22:36'),
+    (Mark ((Format-BackupWhen -Text '2026-10-02T15:22:36') -eq '2026-10-02 03:22:36 PM')))
+Say ("  and something that is not a time comes back as it was   {0}" -f (Mark (
+    (Format-BackupWhen -Text 'no idea') -eq 'no idea')))
 $odd = ConvertTo-BackupName -Model 'a/b:c*?' -Serial '1"2' -When $when
 Say ("  a model with \ / : * ? in it: '{0}'   {1}" -f $odd,
     (Mark ($odd -notmatch '[\\/:*?"<>|]' -and $odd -like 'AndroidDC-backup-*-20260920-140509')))
@@ -333,7 +342,7 @@ Say '== how long is left =='
 Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-10))
 Add-BackupClockDone -Amount 100
 Say ("  a tenth of it in ten seconds: '{0}'   {1}" -f (Get-BackupLeftText),
-    (Mark ((Get-BackupLeftText) -match '^about 2 minutes left, done by \d\d:\d\d$')))
+    (Mark ((Get-BackupLeftText) -match '^about 2 minutes left, done by \d{1,2}:\d\d (AM|PM)$')))
 Add-BackupClockDone -Amount 800
 Say ("  nine tenths done: '{0}'   {1}" -f (Get-BackupLeftText),
     (Mark ((Get-BackupLeftText) -eq 'less than a minute left')))
@@ -341,7 +350,7 @@ Say ("  nine tenths done: '{0}'   {1}" -f (Get-BackupLeftText),
 Start-BackupClock -Total 100000 -Started ([datetime]::Now.AddSeconds(-10))
 Add-BackupClockDone -Amount 100
 Say ("  a long one says the hours and the time of day: '{0}'   {1}" -f (Get-BackupLeftText),
-    (Mark ((Get-BackupLeftText) -match '^about 2 hours \d+ min left, done by \d\d:\d\d$')))
+    (Mark ((Get-BackupLeftText) -match '^about 2 hours \d+ min left, done by \d{1,2}:\d\d (AM|PM)$')))
 
 # a folder being pulled counts while it fills, not only when it ends
 Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-10))
@@ -439,6 +448,31 @@ Say ("  it is one .zip now, the folder is gone, and the manifest says complete  
 Say ("  and what was already here was not fetched again   {0}" -f (Mark (
     (Open-BackupSource -Path $finished.Path).Manifest.Files.Kept -eq 1)))
 
+# the same work brings a finished one up to date: only what changed comes over
+$upToDate = Join-Path $work 'update\AndroidDC-backup-done'
+$null = New-Item -ItemType Directory -Path (Join-Path $upToDate 'files\DCIM') -Force
+[System.IO.File]::WriteAllBytes((Join-Path $upToDate 'files\DCIM\whole.jpg'), (New-Object byte[] 10))
+Save-BackupText -Path (Join-Path $upToDate 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-22T08:00:00'
+    Name = ''; Parts = @('files'); Files = [PSCustomObject]@{ Files = 1; Bytes = 10 }; Card = $null
+    Apps = @(); Personal = $null; Settings = @(); Bytes = 10; Complete = $true; Stopped = ''
+    Finished = '2026-09-22T08:30:00' }))
+$brought = & {
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    function Invoke-BackupAdb {
+        param($ArgumentList, $Caption, $Expected, $OnPoll)
+        $script:again += ,(@($ArgumentList)[4])
+        [System.IO.File]::WriteAllBytes((@($ArgumentList)[5]), (New-Object byte[] 4))
+        return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false }
+    }
+    $script:again = @()
+    $result = Resume-PhoneBackup -Serial 'ABC123' -Folder $upToDate -Pack $false
+    [PSCustomObject]@{ Result = $result; Fetched = @($script:again) }
+}
+Say ("  a finished backup brought up to date fetched: {0}" -f (($brought.Fetched | Sort-Object) -join ', '))
+Say ("  only the two the phone has now and it did not, and it stayed a folder   {0}" -f (Mark (
+    $brought.Fetched.Count -eq 2 -and $brought.Result.Kind -eq 'folder' -and $brought.Result.Complete)))
+
 Say ''
 Say '== the backups in a folder =='
 Say ("  the file the test writes is its own, not yours   {0}" -f (Mark ((Get-BackupListFile) -like '*backups-backup.json')))
@@ -454,6 +488,27 @@ Say ("  a folder that is not there lists nothing   {0}" -f (Mark (
     @(Get-BackupsInFolder -Folder (Join-Path $work 'no-such-folder')).Count -eq 0)))
 $null = Set-BackupFolderPath -Folder $work
 Say ("  the folder is remembered for both windows   {0}" -f (Mark ((Get-BackupFolderPath) -eq $work)))
+Say ("  the lines are newest first, by when they were taken   {0}" -f (Mark (
+    @($rows)[0].Taken -ge @($rows)[-1].Taken)))
+
+# deleting one, and only one that is a backup
+$spare = Join-Path $work 'spare\AndroidDC-backup-spare'
+$null = New-Item -ItemType Directory -Path (Join-Path $spare 'files') -Force
+Set-Content -LiteralPath (Join-Path $spare 'files\one.txt') -Value 'one' -Encoding Ascii
+Save-BackupText -Path (Join-Path $spare 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-09-22T11:00:00'
+    Name = 'the spare'; Parts = @('files'); Files = $null; Card = $null; Apps = @(); Personal = $null
+    Settings = @(); Bytes = 3; Complete = $true; Stopped = '' }))
+$spareRows = @(Get-BackupsInFolder -Folder (Split-Path -Parent $spare))
+Say ("  a backup with a name of its own says it: '{0}'   {1}" -f $spareRows[0].Called,
+    (Mark ($spareRows[0].Called -eq 'the spare')))
+Say ("  deleting it takes the folder with it   {0}" -f (Mark (
+    (Remove-BackupAt -Path $spare) -and -not (Test-Path -LiteralPath $spare))))
+$notBackup = Join-Path $work 'not-a-backup'
+$null = New-Item -ItemType Directory -Path $notBackup -Force
+Set-Content -LiteralPath (Join-Path $notBackup 'holiday.jpg') -Value 'mine' -Encoding Ascii
+Say ("  a folder that is not a backup is left alone   {0}" -f (Mark (
+    -not (Remove-BackupAt -Path $notBackup) -and (Test-Path -LiteralPath $notBackup))))
 
 Say ''
 Say '== the tab =='
@@ -582,10 +637,13 @@ Send-BackupNotice -Title 'Backup done' -Text '2 file(s) from a made-up phone.'
 $said = $txtLog.Text.Substring($logBefore)
 Say ("  finishing says so in the log   {0}" -f (Mark ($said -match 'Backup done' -and $said -match 'made-up phone')))
 
+Say ("  a name can be typed for a backup, and packing can be turned off   {0}" -f (Mark (
+    $txtBackupName.Text -eq '' -and $chkBackupPack.Checked)))
 Set-BackupBusyUi -Running $true
 Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
     $btnBackupCancel.Enabled -and -not $btnBackupRun.Enabled -and -not $btnRestoreFiles.Enabled -and
-    -not $btnBackupSaveCopy.Enabled -and -not $btnBackupListOpen.Enabled -and -not $btnBackupWhereBrowse.Enabled)))
+    -not $btnBackupSaveCopy.Enabled -and -not $btnBackupListOpen.Enabled -and -not $btnBackupWhereBrowse.Enabled -and
+    -not $btnBackupListDelete.Enabled)))
 Set-BackupBusyUi -Running $false
 Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $btnBackupCancel.Enabled) -and $btnBackupRun.Enabled -and $btnRestoreFiles.Enabled -and $prgBackup.Value -eq 0)))
