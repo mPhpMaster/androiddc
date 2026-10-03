@@ -30,7 +30,9 @@ anything added next.
 > box over the log, and a window that opens where it was left. 1.5.0 shares the clipboard with
 > the phone, formats a card or resets a phone, backs up any user on it, and says what the phone
 > is and what it is doing in both windows. 1.5.1 puts something on screen while either window is
-> still being built.
+> still being built, and 1.6.0 halves how long Nova takes to get there - and stops two buttons
+> saying things that were not so: the factory reset claiming a wipe that never happened, and
+> clipboard sharing crediting the phone's own copies to this PC.
 
 > **Corrections, measured on 2026-09-10.** Four of the "done" claims above did not hold when
 > they were checked against the code and the running window.

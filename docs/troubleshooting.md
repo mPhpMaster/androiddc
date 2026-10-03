@@ -272,6 +272,12 @@ reason.
 was already on a clipboard when you switched on is deliberately not carried over, so copy
 something new to test it.
 
+**With a mirroring window open, scrcpy is already doing half of it.** scrcpy carries whatever is
+copied on the phone to this PC by itself, within half a second - sooner than sharing's own turn
+comes round. The line still says `phone -> PC`, and the way says `mirror`, so what you see is
+what happened. Turning sharing off does not stop that half while the mirror is up; closing the
+mirroring window does.
+
 ## The picture is stale or black
 
 * Press **Capture** once by hand. If the log shows a timeout, the phone is busy or asleep.

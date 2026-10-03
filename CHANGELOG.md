@@ -2,7 +2,7 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.6.0
 
 ### "The phone took it" - when the phone had not
 
@@ -68,6 +68,39 @@ for the first time costs the 50-400 ms that page always cost.
 
 Measured back to back on the same machine, three times each: 7.2 s against
 3.9, 15.0 against 5.4, 7.4 against 3.4.
+
+### A copy the phone made, written down as a copy this PC sent
+
+Found by running the clipboard test against the phone with a mirroring window
+open, which is how anyone would really use the two together.
+
+**scrcpy carries the clipboard over by itself.** Measured: what was copied on
+the phone was on this PC within half a second, before the watch's turn came
+round at all - and with no sharing running at all, so it is scrcpy's doing and
+not this program's. The watch then found this PC holding something new, called
+the phone's own copy a thing this PC had sent, wrote it back onto the phone for
+nothing, and the monitor showed the wrong direction for it. Now a copy that is
+on this PC already when the phone's changes is written down as **phone -> PC**,
+marked `mirror`, and nothing goes back the other way.
+
+**And a copy is remembered only once it has really landed.** Another program
+can hold this PC's clipboard open for the moment we ask for it - the code says
+so in as many words a line above - and what the phone had copied was being
+remembered before the write was tried. When the write lost that race the text
+was remembered all the same, so the next turn saw nothing new and that copy
+never arrived: one lost in silence, which is exactly how sharing looks when it
+looks broken. The turn after now tries again, and the log says once that
+something else is holding the clipboard.
+
+**A test that passed was reported as not having finished.** `Get-Content` opens
+a file so that nobody may write to it while it reads, and the runner reads each
+test's report every half second for the whole of its life. The test's own `Say`
+gave up after a second on the line it could not add - and the line it dropped
+was `TEST DONE`. The encoding test, which had passed every check in 23 seconds,
+was called *did not finish*, and the runner then sat out its whole five-minute
+timeout waiting for a line that was never coming. Both sides now share the
+file: the report is appended through a stream that allows reading, and read
+through one that allows writing.
 
 ## 1.5.1
 

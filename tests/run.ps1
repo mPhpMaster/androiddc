@@ -97,6 +97,31 @@ $env:ANDROIDDC_NO_SPLASH = '1'
 $env:ANDROIDDC_RUN_KEY = 'HKCU:\Software\AndroidDC-tests\Run'
 $env:ANDROIDDC_AUTOMATION_MUTEX = 'Local\AndroidDC.Automation.tests'
 $program = Get-Content -LiteralPath $source -Raw
+function Read-Report {
+    <#
+        The report, read in a way that does not shut the test out of it.
+
+        Get-Content opens a file so that no one may write to it while it
+        reads, and this file is read every half second for the whole of a
+        test's life. A test's own Say gave up on the line it could not add -
+        and the line it dropped was TEST DONE, so a test that had passed
+        every check was called "did not finish", and the runner sat out its
+        whole five-minute timeout waiting for a line that was never coming.
+        Measured: that is what happened to the encoding test.
+    #>
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    try {
+        $stream = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+            return $reader.ReadToEnd()
+        } finally { $stream.Dispose() }
+    } catch { return '' }
+}
+
 $results = @()
 
 foreach ($name in $Test) {
@@ -128,7 +153,23 @@ foreach ($name in $Test) {
 `$TestSerial = $(ConvertTo-Quoted $Serial)
 `$TestReport = $(ConvertTo-Quoted $report)
 `$TestOutput = $(ConvertTo-Quoted $output)
-function Say { param([string]`$Text) for (`$i = 0; `$i -lt 20; `$i++) { try { Add-Content -LiteralPath `$TestReport -Value `$Text -Encoding UTF8 -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds 50 } } }
+function Say {
+    # appended through a stream that shares read and write, so the runner
+    # reading the report cannot shut this out - see Read-Report
+    param([string]`$Text)
+    for (`$i = 0; `$i -lt 100; `$i++) {
+        try {
+            `$stream = New-Object System.IO.FileStream(`$TestReport, [System.IO.FileMode]::Append,
+                [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+            try {
+                `$writer = New-Object System.IO.StreamWriter(`$stream, (New-Object System.Text.UTF8Encoding(`$false)))
+                `$writer.WriteLine(`$Text)
+                `$writer.Flush()
+            } finally { `$stream.Dispose() }
+            return
+        } catch { Start-Sleep -Milliseconds 50 }
+    }
+}
 function Mark { param([bool]`$Ok, [string]`$Bad = 'FAIL') if (`$Ok) { 'OK' } else { `$Bad } }
 function Select-TestPhone {
     # with several phones attached, only the one under test is ever selected
@@ -169,7 +210,7 @@ trap { Say ('TRAPPED: ' + `$_.Exception.Message); continue }
     $done = $false
     while ($watch.Elapsed.TotalSeconds -lt $Timeout -and -not $process.HasExited) {
         if (Test-Path -LiteralPath $report) {
-            try { $done = (Get-Content -LiteralPath $report -Raw -ErrorAction Stop) -match '(?m)^TEST DONE' } catch { $done = $false }
+            $done = (Read-Report -Path $report) -match '(?m)^TEST DONE'
         }
         if ($done) { break }
         Start-Sleep -Milliseconds 500
@@ -185,12 +226,13 @@ trap { Say ('TRAPPED: ' + `$_.Exception.Message); continue }
     # read once more: a test that wrote TEST DONE and closed the window inside
     # the same half-second the loop sleeps was called unfinished although it had
     # finished - the file is the truth, not the moment the process went
-    if (-not $done -and (Test-Path -LiteralPath $report)) {
-        try { $done = (Get-Content -LiteralPath $report -Raw -ErrorAction Stop) -match '(?m)^TEST DONE' } catch { }
-    }
+    if (-not $done) { $done = (Read-Report -Path $report) -match '(?m)^TEST DONE' }
     $after = if (Test-Path -LiteralPath $realSettings) { (Get-FileHash -LiteralPath $realSettings).Hash } else { '' }
 
-    $lines = if (Test-Path -LiteralPath $report) { @(Get-Content -LiteralPath $report -Encoding UTF8) } else { @() }
+    # every line written, and the blank ones between the headings are
+    # written on purpose, so only the newline at the very end is dropped
+    $reportText = (Read-Report -Path $report) -replace "`r?`n$", ''
+    $lines = @(if ("$reportText") { $reportText -split "`r?`n" } else { @() })
     # case-sensitive: -match ignores case, and a heading that said a check
     # "must be able to fail" was counted as a failed check
     $failures = @($lines | Where-Object { $_ -cmatch '\bFAIL\b|^TRAPPED' })

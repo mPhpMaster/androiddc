@@ -292,6 +292,48 @@ Say ("  and it is not sent straight back   {0}" -f (Mark (
     @(Invoke-WithFakePhone { Invoke-ClipboardTick -Quiet }).Count -eq 0)))
 
 Say ''
+Say '== this PC with its clipboard held shut =='
+# Another program may hold the clipboard open for the moment we ask for it,
+# and this is what came of remembering the phone's text before it had landed:
+# the turn after saw nothing new, and what was copied on the phone never
+# arrived at all. It is one lost copy, in silence, which is exactly how
+# sharing looks when it looks broken.
+$script:answers['cmd clipboard get-primary-clip'] = 'copied while the clipboard was held'
+$held = @(& {
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    function Set-Clipboard { [CmdletBinding()] param([string]$Value) throw 'another program has the clipboard open' }
+    Invoke-ClipboardTick -Quiet
+})
+Say ("  nothing is carried on a turn this PC refuses   {0}" -f (Mark ($held.Count -eq 0)))
+Say ("  and this PC was not told it already has it   {0}" -f (Mark (
+    (Get-ClipboardHere) -ne 'copied while the clipboard was held')))
+$letGo = @(Invoke-WithFakePhone { Invoke-ClipboardTick -Quiet })
+Say ("  the next turn carries it after all: {0}   {1}" -f ((@($letGo | ForEach-Object { $_.Way })) -join ', '), (Mark (
+    $letGo.Count -eq 1 -and $letGo[0].Way -eq 'phone -> PC' -and
+    (Get-ClipboardHere) -eq 'copied while the clipboard was held')))
+Say ("  and then it is done with, not carried twice   {0}" -f (Mark (
+    @(Invoke-WithFakePhone { Invoke-ClipboardTick -Quiet }).Count -eq 0)))
+
+Say ''
+Say '== a mirroring window that carries it over first =='
+# Measured with a mirroring window open on the real phone: what was copied
+# there was on this PC within half a second, before the watch's turn came
+# round at all - scrcpy carries the clipboard over by itself. The turn still
+# has to call it the phone's copy arriving, and must not write it back.
+$both = 'copied on the phone while it was mirrored'
+$script:answers['cmd clipboard get-primary-clip'] = $both
+$null = Set-Clipboard -Value $both          # what the mirroring window did
+$script:asked.Clear()
+$mirrored = @(Invoke-WithFakePhone { Invoke-ClipboardTick -Quiet })
+Say ("  it is the phone's copy arriving, not this PC's going: {0}   {1}" -f (
+    (@($mirrored | ForEach-Object { "$($_.Way) ($($_.How))" })) -join ', '), (Mark (
+    $mirrored.Count -eq 1 -and $mirrored[0].Way -eq 'phone -> PC' -and $mirrored[0].How -eq 'mirror')))
+Say ("  and it is not written back onto the phone   {0}" -f (Mark (
+    (Get-Asked -Like '*set-primary-clip*').Count -eq 0)))
+Say ("  nor carried again the turn after   {0}" -f (Mark (
+    @(Invoke-WithFakePhone { Invoke-ClipboardTick -Quiet }).Count -eq 0)))
+
+Say ''
 Say '== the page =='
 $tabs.SelectedTab = $tabAdvanced
 $tabsAdvanced.SelectedTab = $tabClipboard
@@ -304,9 +346,11 @@ Say ("  the list shows what moved: {0} line(s)   {1}" -f $lstClipboard.Items.Cou
     $lstClipboard.Items.Count -eq @(Get-ClipboardEvents).Count -and $lstClipboard.Items.Count -gt 0)))
 Say ("  newest at the top, with the phone and the way   {0}" -f (Mark (
     $lstClipboard.Items[0].SubItems[1].Text -eq 'B' -and $lstClipboard.Items[0].SubItems[2].Text -match 'phone|PC')))
+$newest = @(Get-ClipboardEvents)[0].Text
+$null = Set-Clipboard -Value 'something else of this PC''s'
 $lstClipboard.Items[0].Selected = $true
 Copy-ClipboardRow
-Say ("  a line can be put back on this PC   {0}" -f (Mark ((Get-ClipboardHere) -eq 'copied on the phone')))
+Say ("  a line can be put back on this PC   {0}" -f (Mark ((Get-ClipboardHere) -eq $newest)))
 
 # the log is told the length, never the text: a log can be saved to a file
 $secret = 'hunter2-not-in-any-log'

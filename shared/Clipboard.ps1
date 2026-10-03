@@ -79,13 +79,16 @@ function Get-ClipboardHere {
 }
 
 function Set-ClipboardHere {
-    param([string]$Text)
+    # -Quiet for the watch, which tries again by itself and says so once
+    param([string]$Text, [switch]$Quiet)
 
     try {
         Set-Clipboard -Value $Text -ErrorAction Stop
         return $true
     } catch {
-        Write-Log ('This PC would not take the clipboard: ' + $_.Exception.Message) $colorWarn
+        if (-not $Quiet) {
+            Write-Log ('This PC would not take the clipboard: ' + $_.Exception.Message) $colorWarn
+        }
         return $false
     }
 }
@@ -710,6 +713,7 @@ function Start-ClipboardShare {
         Offset    = [long]0
         LastPhone = $null
         Said      = ''
+        Held      = $false
         Since     = (Get-Date)
     }
 
@@ -915,12 +919,44 @@ function Invoke-ClipboardTick {
                 }
             }
             if ($null -ne $phoneText -and "$phoneText" -ne "$($share.LastPhone)") {
-                $share.LastPhone = $phoneText
                 if ("$phoneText" -and "$phoneText" -ne "$here") {
-                    if (Set-ClipboardHere -Text $phoneText) {
+                    # What the phone copied is remembered only once it is
+                    # really on this PC. Another program may hold the
+                    # clipboard open for the moment we ask for it - the
+                    # reader above says so in as many words - and remembering
+                    # it first threw that copy away for good: the next turn
+                    # saw nothing new, and what was copied on the phone never
+                    # arrived at all.
+                    if (Set-ClipboardHere -Text $phoneText -Quiet) {
+                        $share.LastPhone = $phoneText
+                        $share.Held = $false
                         $null = $added.Add((Add-ClipboardEvent -Phone $serial -Way 'phone -> PC' -Text $phoneText -How 'cmd'))
                         $here = $phoneText
                         $script:clipHere = $phoneText
+                    } elseif (-not $share.Held) {
+                        # said once, and again only after one has got through
+                        $share.Held = $true
+                        Write-Log ("Clipboard: this PC would not take what $serial copied - something else " +
+                            'is holding its clipboard. It will be tried again.') $colorWarn
+                    }
+                } else {
+                    $share.LastPhone = $phoneText
+                    if ("$phoneText" -and "$phoneText" -eq "$here" -and "$here" -ne "$($script:clipHere)") {
+                        <#
+                            The phone copied something and it is on this PC
+                            already, carried by something else: a mirroring
+                            window does that by itself - measured, within
+                            half a second of the phone's clipboard changing.
+
+                            It is still the phone's copy arriving, and saying
+                            so is the whole of the work here. Without it the
+                            turn below found this PC holding something new,
+                            called the phone's own copy a thing this PC had
+                            sent, and wrote it back onto the phone for
+                            nothing.
+                        #>
+                        $script:clipHere = $here
+                        $null = $added.Add((Add-ClipboardEvent -Phone $serial -Way 'phone -> PC' -Text $phoneText -How 'mirror'))
                     }
                 }
             }

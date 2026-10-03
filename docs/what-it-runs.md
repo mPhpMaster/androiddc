@@ -209,6 +209,7 @@ using adb - because nobody is waiting on them.
 | Reading the phone's clipboard | `adb shell service call clipboard 4 s16 com.android.shell s16 null i32 <user> i32 0` - `getPrimaryClip`, whose answer is a ClipData parcel, printed as words and read here |
 | Setting the phone's clipboard | `adb shell service call clipboard 1 <the parcel, word by word> s16 com.android.shell s16 null i32 <user> i32 0` - `setPrimaryClip`, then read back, because the service takes a parcel it cannot use without saying anything |
 | What kind of thing was copied | `adb shell service call clipboard 5 ...` - `getPrimaryClipDescription`, asked only when the clip is not plain text, so the page can say *image/png* instead of looking idle |
+| Nothing at all, when a mirror is up | scrcpy syncs the phone's clipboard to this PC on its own, measured at under half a second. Sharing notices that the text is here already, writes the line down as `phone -> PC` by way of `mirror`, and sends nothing back |
 | A ROM that has the shell command | `adb shell cmd clipboard get-primary-clip` / `set-primary-clip --text <text>`. Tried first and almost never there: the command is not in AOSP |
 | Typing it instead | `adb shell input text <text>`, into whatever has the cursor - offered only when nothing else will take it, and named `typed` in the list |
 | A clipboard too long for a command line | the same `service call`, written to `adb -s <serial> shell` down its own input instead of as arguments. Windows stops a command line at 32767 characters; eighty thousand went through this way |
