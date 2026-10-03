@@ -50,6 +50,9 @@ function Install-UpstreamPackage {
     # from the official release, and wait until it has finished
     param([ValidateSet('scrcpy', 'gnirehtet')][string]$Package)
 
+    # the splash is on top of everything while the window is being built, and
+    # a question behind it is a program that looks stuck
+    if (Get-Command Close-Splash -ErrorAction SilentlyContinue) { Close-Splash }
     $downloader = Join-Path $script:toolsRoot 'get-upstream.ps1'
     if (-not (Test-Path -LiteralPath $downloader -PathType Leaf)) {
         [void][System.Windows.MessageBox]::Show(

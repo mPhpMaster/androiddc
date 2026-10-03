@@ -2,6 +2,29 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### Something on screen while it opens
+
+Both windows take seconds to build and showed nothing at all until they were
+ready. Measured: the classic window 3.5 s before it appears (2.1 s of that is
+building its 530 controls), Nova 6.3 s, of which 5 s is reading its eighteen
+pages.
+
+A small window now appears about a third of a second in - the program's icon,
+its version, a bar and a line saying what is happening: *Building the
+mirroring page ...*, *Loading the contacts page ...*, *Looking for adb, scrcpy
+and gnirehtet ...*. Nova names every page as it reads it.
+
+* **The bar is moved along measured steps**, not spun. It says how far along
+  this really is, because the steps are the ones that were timed.
+* **It costs nothing worth measuring**: run against the same file with it
+  turned off, the difference is smaller than the difference between two runs.
+* **Nothing to wait for, no splash**: a window starting minimized with Windows
+  gets none, and neither do the test runners.
+* It is drawn with WinForms in both windows, because Nova loads WinForms
+  anyway and starting WPF is part of what is being waited for.
+
 ## 1.5.0
 
 ### What a backup can have done to it is on the right mouse button

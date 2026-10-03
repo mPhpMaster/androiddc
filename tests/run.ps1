@@ -91,6 +91,9 @@ public class TestWindow {
 $realSettings = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 # the window inherits these: its rules, its start-with-Windows entry and its
 # claim to run rules are the test's own, never the user's
+# no splash for a window nobody is watching: seventeen of them would flash
+# across the screen, and one would be on top of the window being measured
+$env:ANDROIDDC_NO_SPLASH = '1'
 $env:ANDROIDDC_RUN_KEY = 'HKCU:\Software\AndroidDC-tests\Run'
 $env:ANDROIDDC_AUTOMATION_MUTEX = 'Local\AndroidDC.Automation.tests'
 $program = Get-Content -LiteralPath $source -Raw

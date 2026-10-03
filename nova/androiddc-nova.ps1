@@ -67,6 +67,22 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . (Join-Path $scriptRoot 'lib\Core.ps1')
+# the little window that says this is coming: the six seconds it stands in for
+# start here. A test window, an off-screen one and one opening minimized have
+# nobody waiting on them.
+$splashScript = Join-Path $script:toolsRoot 'shared\Splash.ps1'
+if (Test-Path -LiteralPath $splashScript -PathType Leaf) {
+    . $splashScript
+    Show-Splash -Root $script:toolsRoot -Version $script:appVersion `
+        -Quiet:([bool]$TestScript -or [bool]$OffScreen -or [bool]$Minimized)
+    Update-Splash -Text 'Reading the parts ...' -Percent 10
+}
+if (-not (Get-Command Update-Splash -ErrorAction SilentlyContinue)) {
+    # Nova on its own, without the project folder: the calls below are still
+    # written plainly rather than guarded one by one
+    function Update-Splash { param([string]$Text, [int]$Percent = -1) }
+    function Close-Splash { }
+}
 . (Join-Path $scriptRoot 'lib\Ui.ps1')
 # starting with Windows and the rules per phone, shared with the classic window;
 # Nova on its own, without the project folder, simply has no Automation page
@@ -91,15 +107,22 @@ if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen
 
+Update-Splash -Text 'Building the window ...' -Percent 25
 Initialize-Ui
 
 # The pages, in the order the side navigation lists them within each section.
 # A page that is not written yet is simply not there.
-foreach ($pageName in @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Ftp', 'Clipboard', 'Media',
-        'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation', 'Backup')) {
+$pageList = @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Ftp', 'Clipboard', 'Media',
+    'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation', 'Backup')
+$pageCount = $pageList.Count
+$pageNumber = 0
+foreach ($pageName in $pageList) {
     # "-Pages a,b" through -File arrives as one string
     $onlyPages = @($PageNames | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     if ($onlyPages.Count -gt 0 -and $onlyPages -notcontains $pageName) { continue }
+    $pageNumber++
+    Update-Splash -Text "Loading the $($pageName.ToLowerInvariant()) page ..." `
+        -Percent (30 + [int](60.0 * $pageNumber / $pageCount))
     $pageFile = Join-Path $scriptRoot "pages\$pageName.ps1"
     if (Test-Path -LiteralPath $pageFile -PathType Leaf) { . $pageFile }
 }
@@ -123,6 +146,9 @@ if (-not $script:gnirehtetPath) {
     if (Install-UpstreamPackage -Package 'gnirehtet') { $script:gnirehtetPath = Resolve-Tool -FileName 'gnirehtet.exe' }
 }
 if (-not $script:adbPath) {
+    # nothing of this program is on screen yet except the splash, and it is on
+    # top of everything: a question behind it is a program that looks stuck
+    Close-Splash
     [void][System.Windows.MessageBox]::Show(
         "adb.exe was not found in`r`n$($script:toolsRoot)`r`nnor in PATH.`r`n`r`nRun get-upstream.ps1 in that folder to download it.",
         $script:appName, 'OK', 'Error')
@@ -169,6 +195,8 @@ $script:started = $false
 $script:window.Add_ContentRendered({
     if ($script:started) { return }
     $script:started = $true
+    # the splash stood in for this window; this window is here now
+    if (Get-Command Close-Splash -ErrorAction SilentlyContinue) { Close-Splash }
     # after the first render, not before: a window shown minimized may never render
     if ($Minimized) { $script:window.WindowState = 'Minimized' }
 

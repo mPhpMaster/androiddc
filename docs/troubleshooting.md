@@ -5,6 +5,19 @@
 The log at the bottom right is the first place to look: every action writes what it ran and
 what came back.
 
+## It takes seconds to open
+
+It does: the classic window builds 530 controls, and Nova reads eighteen pages,
+before either can be shown. The small window with the bar says where it has got
+to while that happens, and goes when the real window appears. If a phone is
+plugged in, the first device list takes another couple of seconds after that -
+the window is already usable, and the strip under the pages says what it is
+doing.
+
+Nothing appears at all for a second or two if PowerShell itself is starting
+cold. Starting AndroidDC with Windows (Advanced > Automation) gets that out of
+the way at log-in.
+
 ## The device list is empty
 
 | Check | How |

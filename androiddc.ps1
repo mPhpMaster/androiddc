@@ -39,6 +39,9 @@ Add-Type -AssemblyName Microsoft.VisualBasic   # InputBox for rename / new folde
     [System.Windows.Forms.UnhandledExceptionMode]::CatchException)
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# the little window that says this is coming: first, because the three and a
+# half seconds it stands in for start here
+. (Join-Path $scriptRoot 'shared\Splash.ps1')
 # the release this file is; CHANGELOG.md says what each one changed
 $appVersion = '1.5.0'
 $packageName = 'com.genymobile.gnirehtet'
@@ -47,6 +50,9 @@ $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
 
 # starting with Windows and the rules per phone, and the icon by the clock,
 # shared with the Nova window
+# nothing to wait for when it opens minimized into the tray
+Show-Splash -Root $scriptRoot -Version $appVersion -Quiet:$Minimized
+Update-Splash -Text 'Reading the shared parts ...' -Percent 10
 . (Join-Path $scriptRoot 'shared\Automation.ps1')
 . (Join-Path $scriptRoot 'shared\DeviceFacts.ps1')
 . (Join-Path $scriptRoot 'shared\Tray.ps1')
@@ -94,6 +100,10 @@ function Install-UpstreamPackage {
     # scrcpy or gnirehtet is not here: ask, then let get-upstream.ps1 fetch it
     # from the official release and wait until it has finished
     param([ValidateSet('scrcpy', 'gnirehtet')][string]$Package)
+
+    # the splash sits on top of everything while the window is being built, and
+    # a question behind it is a program that looks stuck
+    if (Get-Command Close-Splash -ErrorAction SilentlyContinue) { Close-Splash }
 
     $downloader = Join-Path $scriptRoot 'get-upstream.ps1'
     if (-not (Test-Path -LiteralPath $downloader -PathType Leaf)) {
@@ -371,6 +381,7 @@ function Get-AdbDevices {
 
 # -------------------------------------------------------------------- UI ----
 
+Update-Splash -Text 'Building the window ...' -Percent 25
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'AndroidDC - Android Device Control'
 $iconPath = Join-Path $scriptRoot (Join-Path 'assets' 'androiddc.ico')
@@ -528,6 +539,7 @@ $lblClipLink.Size = New-Object System.Drawing.Size(214, 20)
 $grpDevices.Controls.Add($lblClipLink)
 $toolTip.SetToolTip($lblClipLink, 'Click to open the Clipboard page. Right-click to start or stop sharing with the phones picked')
 
+Update-Splash -Text 'Building the pages ...' -Percent 35
 # --- tabs --------------------------------------------------------------------
 $tabs = New-Object System.Windows.Forms.TabControl
 $tabs.Location = New-Object System.Drawing.Point(12, 200)
@@ -1048,6 +1060,7 @@ foreach ($control in @($lblProxyPort, $numProxyPort, $btnProxyOn, $btnProxyOff, 
     $grpProxy.Controls.Add($control)
 }
 
+Update-Splash -Text 'Building the mirroring page ...' -Percent 45
 # --- tab 3: scrcpy -----------------------------------------------------------
 $script:scrcpyLabels = @{}
 
@@ -2439,6 +2452,7 @@ $lblScreenHint.Location = New-Object System.Drawing.Point(14, 424)
 $lblScreenHint.Size = New-Object System.Drawing.Size(854, 20)
 $grpScreen.Controls.Add($lblScreenHint)
 
+Update-Splash -Text 'Building the app and contact pages ...' -Percent 55
 # --- tab: installed apps -----------------------------------------------------
 $lstApps = New-Object System.Windows.Forms.ListView
 $lstApps.View = 'Details'
@@ -2895,6 +2909,7 @@ $btnListCameraSizes.Size = New-Object System.Drawing.Size(70, 26)
 $grpCamera.Controls.Add($btnListCameraSizes)
 $toolTip.SetToolTip($btnListCameraSizes, 'Ask the phone which camera sizes it supports')
 
+Update-Splash -Text 'Building the file pages ...' -Percent 62
 # --- tab: file browser / transfer --------------------------------------------
 $btnFileUp = New-Object System.Windows.Forms.Button
 $btnFileUp.Text = 'Up'
@@ -3521,6 +3536,7 @@ $btnRunningExport.Location = New-Object System.Drawing.Point(642, 294)
 $btnRunningExport.Size = New-Object System.Drawing.Size(100, 28)
 $tabRunning.Controls.Add($btnRunningExport)
 
+Update-Splash -Text 'Building the shell pages ...' -Percent 70
 # --- tab 6: live shell + logcat ----------------------------------------------
 # The tab holds two pages now. Everything below that says $tabShell still means
 # the shell page, so the existing layout code needs no changes.
@@ -3998,6 +4014,7 @@ foreach ($automationAction in @(Get-AutomationActionList)) {
     $script:automationActionIds += $automationAction.Id
 }
 
+Update-Splash -Text 'Building the backup page ...' -Percent 75
 # --- Advanced > Backup -------------------------------------------------------
 # A backup is a folder on this PC with manifest.json in it; shared\Backup.ps1
 # does the work and the Nova window has the same page. Docked, not laid out by
@@ -14221,6 +14238,8 @@ $form.Add_Shown({
     Update-ShellLayout
     Update-LogcatLayout
     Update-ToolsLayout
+    # the window is up and laid out: the splash has nothing left to stand in for
+    Close-Splash
     if ($Minimized) { $form.WindowState = 'Minimized' }
     $null = Invoke-Adb -CommandArguments @('start-server')
     # the rules set before, so they are known without opening their tab
@@ -14234,6 +14253,7 @@ $form.Add_Shown({
 
 # ------------------------------------------------------------------- main ----
 
+Update-Splash -Text 'Looking for adb, scrcpy and gnirehtet ...' -Percent 85
 $script:adbPath = Resolve-Tool -FileName 'adb.exe'
 $script:gnirehtetPath = Resolve-Tool -FileName 'gnirehtet.exe'
 $script:scrcpyPath = Resolve-Tool -FileName 'scrcpy.exe'
@@ -14257,6 +14277,7 @@ $missing = @()
 if (-not $script:adbPath) { $missing += 'adb.exe' }
 if (-not $script:gnirehtetPath) { $missing += 'gnirehtet.exe' }
 if ($missing.Count -gt 0) {
+    Close-Splash
     [void][System.Windows.Forms.MessageBox]::Show(
         ($missing -join ' and ') + " not found next to this script nor in PATH." +
         "`r`n`r`nRun get-upstream.ps1 in that folder to download them.",
@@ -14286,7 +14307,8 @@ Initialize-Tray -Title 'AndroidDC' -ProjectRoot $scriptRoot -GetHandle { $form.H
 Initialize-Backup -Progress { param($Text, $Done, $Total) Set-BackupProgressUi -Text $Text -Done $Done -Total $Total }
 
 try {
-    [void]$form.ShowDialog()
+    Update-Splash -Text 'Opening ...' -Percent 95
+[void]$form.ShowDialog()
 } finally {
     Stop-PhoneProxy -Quiet
     if ($script:relayProcess) { Stop-Sharing -Quiet }

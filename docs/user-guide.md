@@ -222,6 +222,17 @@ how long is left, with the time of day it should finish by: *4 min gone, about 9
 done by 6:52 AM*. A run that counts apps rather than bytes says *7 of 20, 13 to go*. The whole
 line is on the tooltip, so a narrow window loses the end of it and nothing else.
 
+### While it opens
+
+Both windows take seconds to build - the classic one about three and a half,
+Nova about six, most of which is reading its eighteen pages - so a small window
+appears about a third of a second in and says where it has got to: *Building
+the pages ...*, *Loading the contacts page ...*, *Looking for adb, scrcpy and
+gnirehtet ...*. The bar is moved along those steps, not spun, and the window
+goes the moment the real one is on screen and laid out.
+
+Starting minimized with Windows shows no splash: there is nothing to wait for.
+
 ### What the device box says
 
 Under the device list, two lines about the phone picked:

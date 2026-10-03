@@ -64,12 +64,18 @@ $shownLines = @($ui.ShellLogcatText.Text -split "`r?`n" | Where-Object { $_ })
 Say ("  new lines pass the filter too   {0}" -f (Mark ($shownLines[-1] -like '*new one' -and $shownLines.Count -eq 1201)))
 
 $ui.ShellLogcatFilter.Text = ''
-Wait-Pumped -Milliseconds 120
+# the timer is asked whether it is waiting, rather than the clock being asked
+# whether it has waited: pumping "120 ms" on a loaded machine can take longer
+# than the 350 ms the timer holds off for, and then a redraw that was late
+# looked early. Nothing can run between the line above and the two below, so
+# both are read without pumping at all.
+$waiting = $script:logcatFilterTimer.IsEnabled
 $early = @($ui.ShellLogcatText.Text -split "`r?`n" | Where-Object { $_ }).Count
 Wait-Pumped -Milliseconds 700
 $late = @($ui.ShellLogcatText.Text -split "`r?`n" | Where-Object { $_ })
-Say ("  clearing the filter redraws after the typing settles ({0} then {1})   {2}" -f $early, $late.Count,
-    (Mark ($early -eq 1201 -and $late.Count -eq 1200 -and $late[-1] -like '*new two' -and $ui.ShellLogcatState.Text -eq 'stopped')))
+Say ("  clearing the filter waits for the typing to settle, then redraws ({0} then {1})   {2}" -f $early, $late.Count,
+    (Mark ($waiting -and $early -eq 1201 -and $late.Count -eq 1200 -and $late[-1] -like '*new two' -and
+        $ui.ShellLogcatState.Text -eq 'stopped')))
 
 for ($i = 0; $i -lt 25000; $i++) { $script:logcatQueue.Enqueue("storm $i") }
 Update-LogcatView

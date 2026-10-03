@@ -45,6 +45,9 @@ foreach ($name in $Test) {
 
 # the program inherits these: its rules, its start-with-Windows entry and its
 # claim to run rules are the test's own, never the user's
+# a test window is off screen and has -TestScript, so the splash is already
+# quiet; this says so once more for anyone reading either runner
+$env:ANDROIDDC_NO_SPLASH = '1'
 $env:ANDROIDDC_RUN_KEY = 'HKCU:\Software\AndroidDC-tests\Run'
 $env:ANDROIDDC_AUTOMATION_MUTEX = 'Local\AndroidDC.Automation.tests'
 
