@@ -10,10 +10,11 @@
   sixteen this knows - Samsung, Xiaomi, Google, OnePlus, Huawei, Oppo, vivo, Motorola and the
   rest - and the plain phone glyph for a make nobody here knows. There are no brand marks to
   show: the icon font has none, and shipping somebody's logo with this is not a small thing.
-* **What the phone is doing with itself**, at the foot of the side bar and from every page: how
-  busy its processors are (`dumpsys cpuinfo`), how much of its memory is in use
-  (`/proc/meminfo`), and its GPU where Android lets adb read it at all - which on the phone this
-  was measured on it does not, so it says *not readable* rather than looking broken.
+* **What the phone is doing with itself**, at the foot of the side bar and from every page:
+  whether its screen is on and locked, how busy its processors are (`dumpsys cpuinfo`), how much
+  of its memory is in use (`/proc/meminfo`), and its GPU where Android lets adb read it at all -
+  which on the phone this was measured on it does not, so it says *not readable* rather than
+  looking broken. The screen line costs nothing: it is the reading the header pill already made.
 * **The clipboard has a pill in the header** beside the FTP one: click it for the page,
   right-click it to start or stop sharing.
 * **The logo is a button**: it opens Overview, and pressing it there again reads the page over.

@@ -55,7 +55,7 @@ window's `settings.json`, so switching never mixes them.
 | `lib\Core.ps1` | adb off the window's thread, quoting for the phone's shell, settings, device state |
 | `lib\Ui.ps1` | Pages and navigation, the log, the device card, dialogs, lists, the busy strip, keys |
 | `ui\Theme.xaml` | Every colour, font and control style |
-| `ui\Shell.xaml` | The window around the pages: the side navigation, the device header with its pills (FTP, clipboard, battery, signal, screen), and the counts at the foot - devices, and what the phone picked is doing with its processors and memory |
+| `ui\Shell.xaml` | The window around the pages: the side navigation, the device header with its pills (FTP, clipboard, battery, signal, screen), and the counts at the foot - devices, whether the phone's screen is on and locked, and what it is doing with its processors and memory |
 | `pages\` | One page each: `<Page>.ps1` and `<Page>.xaml` |
 | `..\shared\Automation.ps1` | Start with Windows and the rules per phone, loaded by both windows |
 | `..\shared\Tray.ps1` | The icon by the clock: a click hides or shows the window, minimizing hides it there, the menu has Exit |

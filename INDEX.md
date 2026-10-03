@@ -87,7 +87,7 @@ dad0ffaa5752226f  androiddc.ps1
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
 3d6170dd68549c6f  avutil-60.dll
-b563a2e33143d19c  CHANGELOG.md
+3aca57a8eb114b44  CHANGELOG.md
 e394873cd3e2cc3a  disconnected.png
 b5e5354ae222bd71  get-upstream.bat
 63f3fa6196d817aa  get-upstream.ps1

@@ -30,20 +30,26 @@
         <DockPanel>
           <!-- the program's own icon, and the way back to Overview; pressing it
                there again reads the page instead -->
-          <Button x:Name="SideBrand" DockPanel.Dock="Top" Style="{StaticResource Ghost}" Padding="4,2" Margin="0,0,0,18"
-                  HorizontalAlignment="Left" HorizontalContentAlignment="Left" Cursor="Hand"
+          <Button x:Name="SideBrand" DockPanel.Dock="Top" Style="{StaticResource Ghost}" Foreground="{StaticResource Ink}"
+                  Padding="4,2" Margin="0,0,0,18" HorizontalAlignment="Left" HorizontalContentAlignment="Left" Cursor="Hand"
                   ToolTip="Open the Overview page; press it again there to read the phone over">
             <StackPanel Orientation="Horizontal">
-              <Border Width="40" Height="40" CornerRadius="11" Background="{StaticResource Brand}" Effect="{StaticResource SoftShadow}">
+              <!-- the letter is what this looks like without the icon file beside
+                   the script; with it, the icon takes the whole square, because
+                   it carries its own rounded background and must not sit in a
+                   second one -->
+              <Border x:Name="SideBrandBox" Width="40" Height="40" CornerRadius="11"
+                      Background="{StaticResource Brand}" Effect="{StaticResource SoftShadow}">
                 <Grid>
                   <TextBlock x:Name="SideBrandLetter" Text="A" FontFamily="{StaticResource DisplayFont}" FontSize="17"
                              FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                  <Image x:Name="SideBrandImage" Width="28" Height="28" Visibility="Collapsed"
+                  <Image x:Name="SideBrandImage" Width="40" Height="40" Visibility="Collapsed"
                          RenderOptions.BitmapScalingMode="HighQuality"/>
                 </Grid>
               </Border>
               <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                <TextBlock Text="AndroidDC" FontFamily="{StaticResource DisplayFont}" FontSize="15" FontWeight="SemiBold"/>
+                <TextBlock Text="AndroidDC" FontFamily="{StaticResource DisplayFont}" FontSize="15" FontWeight="SemiBold"
+                           Foreground="{StaticResource Ink}"/>
                 <TextBlock Text="Device Control" FontSize="11" Foreground="{StaticResource MutedText}" Margin="0,1,0,0"/>
               </StackPanel>
             </StackPanel>
@@ -70,20 +76,47 @@
             </Grid>
             <!-- what the phone picked is doing with itself, read every few
                  seconds while this window is in front -->
+            <!-- two columns, not one: a value as long as "screen on, unlocked"
+                 ran straight into its own label in a single cell -->
+            <Grid x:Name="SideScreenRow" Margin="0,0,0,8" Visibility="Collapsed"
+                  ToolTip="Whether the phone's screen is on, and whether it is locked - half of what makes an action fail">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="Screen" FontSize="12" Foreground="{StaticResource MutedText}"/>
+              <TextBlock x:Name="SideScreen" Grid.Column="1" Text="-" FontSize="12" FontWeight="Medium"
+                         HorizontalAlignment="Right" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+            </Grid>
             <Grid x:Name="SideCpuRow" Margin="0,0,0,8" Visibility="Collapsed"
                   ToolTip="How busy the phone's processors are, from dumpsys cpuinfo">
-              <TextBlock Text="Phone CPU" FontSize="12" Foreground="{StaticResource MutedText}"/>
-              <TextBlock x:Name="SideCpu" Text="-" FontSize="12" FontWeight="Medium" HorizontalAlignment="Right"/>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="CPU" FontSize="12" Foreground="{StaticResource MutedText}"/>
+              <TextBlock x:Name="SideCpu" Grid.Column="1" Text="-" FontSize="12" FontWeight="Medium"
+                         HorizontalAlignment="Right" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
             </Grid>
             <Grid x:Name="SideRamRow" Margin="0,0,0,8" Visibility="Collapsed"
                   ToolTip="How much of the phone's memory is in use, from /proc/meminfo">
-              <TextBlock Text="Phone RAM" FontSize="12" Foreground="{StaticResource MutedText}"/>
-              <TextBlock x:Name="SideRam" Text="-" FontSize="12" FontWeight="Medium" HorizontalAlignment="Right"/>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="RAM" FontSize="12" Foreground="{StaticResource MutedText}"/>
+              <TextBlock x:Name="SideRam" Grid.Column="1" Text="-" FontSize="12" FontWeight="Medium"
+                         HorizontalAlignment="Right" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
             </Grid>
             <Grid x:Name="SideGpuRow" Margin="0,0,0,8" Visibility="Collapsed"
                   ToolTip="The phone's GPU, where Android lets adb read it at all">
-              <TextBlock Text="Phone GPU" FontSize="12" Foreground="{StaticResource MutedText}"/>
-              <TextBlock x:Name="SideGpu" Text="-" FontSize="12" FontWeight="Medium" HorizontalAlignment="Right"/>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="GPU" FontSize="12" Foreground="{StaticResource MutedText}"/>
+              <TextBlock x:Name="SideGpu" Grid.Column="1" Text="-" FontSize="12" FontWeight="Medium"
+                         HorizontalAlignment="Right" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
             </Grid>
             <Grid>
               <TextBlock Text="Version" FontSize="12" Foreground="{StaticResource MutedText}"/>

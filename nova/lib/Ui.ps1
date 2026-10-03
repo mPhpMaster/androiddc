@@ -24,6 +24,9 @@ $script:restorePage = ''
 # true once the window has opened its first page; from then on a page change is saved
 $script:pageSaveReady = $false
 $script:keepWindowPlace = $true
+# the phone the three numbers at the foot were read from; reading one that was
+# never assigned is an error under Set-StrictMode
+$script:loadSerial = $null
 $script:lastBattery = $null
 $script:lastSignal = $null
 $script:lastScreen = $null
@@ -487,9 +490,12 @@ function Get-DeviceLoad {
     #>
     param([string]$Serial)
 
-    $answer = [PSCustomObject]@{ Cpu = ''; Ram = ''; Gpu = ''; RamUsed = -1 }
+    $answer = [PSCustomObject]@{ Cpu = ''; Ram = ''; Gpu = ''; CpuUsed = -1; RamUsed = -1; GpuUsed = -1 }
     $cpu = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('dumpsys cpuinfo 2>/dev/null | tail -1')).Text
-    if ("$cpu" -match '([\d.]+)%\s+TOTAL') { $answer.Cpu = "$($Matches[1])%" }
+    if ("$cpu" -match '([\d.]+)%\s+TOTAL') {
+        $answer.Cpu = "$($Matches[1])%"
+        $answer.CpuUsed = [int][Math]::Round([double]$Matches[1])
+    }
 
     $mem = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
         "grep -E 'MemTotal|MemAvailable' /proc/meminfo 2>/dev/null")).Text
@@ -515,13 +521,31 @@ function Get-DeviceLoad {
             # kgsl: busy and total since the last read
             $busy = [double]$Matches[1]
             $all = [double]$Matches[2]
-            if ($all -gt 0) { $answer.Gpu = "$([int][Math]::Round(100 * $busy / $all))%" }
+            if ($all -gt 0) {
+                $answer.GpuUsed = [int][Math]::Round(100 * $busy / $all)
+                $answer.Gpu = "$($answer.GpuUsed)%"
+            }
             break
         }
-        if ($words -match '^(\d+)%?$') { $answer.Gpu = "$($Matches[1])%"; break }
+        if ($words -match '^(\d+)%?$') {
+            $answer.Gpu = "$($Matches[1])%"
+            $answer.GpuUsed = [int]$Matches[1]
+            break
+        }
     }
     if (-not $answer.Gpu) { $answer.Gpu = 'not readable' }
     return $answer
+}
+
+function Get-LoadBrush {
+    # what a number of that size should look like: quiet until it is worth
+    # looking at, orange when it is busy, red when it is nearly full
+    param([int]$Percent)
+
+    if ($Percent -lt 0) { return (Get-Resource 'MutedText') }
+    if ($Percent -ge 90) { return (Get-Resource 'Danger') }
+    if ($Percent -ge 70) { return (Get-Resource 'Warning') }
+    return (Get-Resource 'Ink')
 }
 
 function Update-DeviceLoad {
@@ -531,20 +555,24 @@ function Update-DeviceLoad {
     $first = (Get-SelectedDevice)
     if ($null -eq $first -or $first.State -ne 'device') {
         foreach ($row in @('SideCpuRow', 'SideRamRow', 'SideGpuRow')) { $ui[$row].Visibility = 'Collapsed' }
+        $script:loadSerial = $null
         return
     }
     if (-not $Force -and $script:busy -gt 0) { return }
     $serial = $first.Serial
     $load = Get-DeviceLoad -Serial $serial
     if ((Get-SelectedSerial) -ne $serial) { return }
+    $script:loadSerial = $serial
 
     $ui.SideCpu.Text = $(if ("$($load.Cpu)") { $load.Cpu } else { '-' })
     $ui.SideRam.Text = $(if ("$($load.Ram)") { $load.Ram } else { '-' })
     $ui.SideGpu.Text = $load.Gpu
     foreach ($row in @('SideCpuRow', 'SideRamRow', 'SideGpuRow')) { $ui[$row].Visibility = 'Visible' }
-    # a phone with almost no memory left explains a great deal, so it is coloured
-    if ($load.RamUsed -ge 90) { $ui.SideRam.Foreground = Get-Resource 'Warning' }
-    else { $ui.SideRam.Foreground = Get-Resource 'Ink' }
+    # the colour is the number: a phone with no memory left, or a processor at
+    # full stretch, explains half of what then goes slowly
+    $ui.SideCpu.Foreground = Get-LoadBrush -Percent $load.CpuUsed
+    $ui.SideRam.Foreground = Get-LoadBrush -Percent $load.RamUsed
+    $ui.SideGpu.Foreground = Get-LoadBrush -Percent $load.GpuUsed
 }
 
 function Update-DeviceStatus {
@@ -553,6 +581,7 @@ function Update-DeviceStatus {
     $first = (Get-SelectedDevice)
     if ($null -eq $first -or $first.State -ne 'device') {
         foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen', 'PillFtp', 'PillClipboard')) { $ui[$pill].Visibility = 'Collapsed' }
+        $ui.SideScreenRow.Visibility = 'Collapsed'
         $script:statusSerial = $null
         return
     }
@@ -583,8 +612,18 @@ function Update-DeviceStatus {
     # a phone that is locked or dark explains half the things that then fail
     $screenTone = if ($screen.Locked -or ($null -ne $screen.ScreenOn -and -not $screen.ScreenOn)) { 'warn' } else { 'ok' }
     Set-StatusPill $ui.PillScreen $ui.PillScreenText ($screenWords -join ', ') $screenTone
+    # and at the foot of the side bar, where it is read from every page
+    # "screen on, unlocked" beside a label that already says Screen is twice the
+    # same word, and twice the width the side bar has
+    $ui.SideScreen.Text = $(if ($screenWords.Count -gt 0) { ($screenWords -join ', ') -replace 'screen ', '' } else { '-' })
+    $ui.SideScreen.ToolTip = ($screenWords -join ', ')
+    $ui.SideScreen.Foreground = $(if ($screenTone -eq 'warn') { Get-Resource 'Warning' } else { Get-Resource 'Ink' })
+    $ui.SideScreenRow.Visibility = 'Visible'
     if (Get-Command Update-FtpHeader -ErrorAction SilentlyContinue) { Update-FtpHeader }
     if (Get-Command Update-ClipboardHeader -ErrorAction SilentlyContinue) { Update-ClipboardHeader }
+    # the three numbers under these, read now rather than when their own timer
+    # next comes round - a phone just picked should not show the last one's
+    if ($serial -ne $script:loadSerial) { Update-DeviceLoad }
 }
 
 # --------------------------------------------------------------- dialogs ----
@@ -1085,6 +1124,10 @@ function Initialize-ShellEvents {
             $ui.SideBrandImage.Source = $image
             $ui.SideBrandImage.Visibility = 'Visible'
             $ui.SideBrandLetter.Visibility = 'Collapsed'
+            # the icon has its own rounded background: a blue square behind it
+            # is a square inside a square, and a shadow under both
+            $ui.SideBrandBox.Background = [System.Windows.Media.Brushes]::Transparent
+            $ui.SideBrandBox.Effect = $null
         } catch { }
     }
 
