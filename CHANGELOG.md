@@ -2,6 +2,38 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### Nova opens about twice as fast
+
+The splash said what was happening; this makes there be less of it. Measured
+before anything was written: building the eighteen pages was three of the six
+seconds the window took, and it was not the XAML - 2 to 19 ms a page - but
+PowerShell reading each page's script and building its controls.
+
+**A page is now built when it is first opened.** What goes in the side
+navigation - a page's name, glyph and section - is read off its own
+`Register-Page` line as text, without running the file, so the navigation is
+whole from the start and nothing about using the window changes. Opening a page
+for the first time costs the 50-400 ms that page always cost.
+
+* **Pages call each other** - the Overview page's buttons alone reach into five
+  others - so a call to a name that belongs to a page nobody has opened builds
+  that page and goes through, rather than failing. Which name belongs to which
+  page is read at startup from the same files.
+* **Three pages are still built at the start**, because the window itself
+  reaches into them: the FTP and clipboard pills in the header, and the rule
+  count on the Automation item.
+* **The tests get every page at once**, the way it used to be for everyone,
+  because they call into pages without opening them. One test is run the way a
+  person gets it, and opens all eighteen one after another.
+* `audit.ps1` fails the build if a page stops saying what it is in a shape that
+  can be read without running it - otherwise it would quietly lose its place in
+  the navigation.
+
+Measured back to back on the same machine, three times each: 7.2 s against
+3.9, 15.0 against 5.4, 7.4 against 3.4.
+
 ## 1.5.1
 
 ### Something on screen while it opens

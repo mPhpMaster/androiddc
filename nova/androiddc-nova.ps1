@@ -116,15 +116,33 @@ $pageList = @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Ftp', 'Clipbo
     'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation', 'Backup')
 $pageCount = $pageList.Count
 $pageNumber = 0
-foreach ($pageName in $pageList) {
-    # "-Pages a,b" through -File arrives as one string
-    $onlyPages = @($PageNames | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    if ($onlyPages.Count -gt 0 -and $onlyPages -notcontains $pageName) { continue }
-    $pageNumber++
-    Update-Splash -Text "Loading the $($pageName.ToLowerInvariant()) page ..." `
-        -Percent (30 + [int](60.0 * $pageNumber / $pageCount))
-    $pageFile = Join-Path $scriptRoot "pages\$pageName.ps1"
-    if (Test-Path -LiteralPath $pageFile -PathType Leaf) { . $pageFile }
+# "-Pages a,b" through -File arrives as one string
+$onlyPages = @($PageNames | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+# Every page at once, or each one when it is first opened. Building all
+# eighteen was three of the six seconds this window took to open, so the
+# second is what a person gets; the first is for the tests, which call into
+# pages without opening them, and for a run told which pages to have.
+$eagerPages = ($onlyPages.Count -gt 0) -or [bool]$env:ANDROIDDC_EAGER_PAGES
+if ($eagerPages) {
+    foreach ($pageName in $pageList) {
+        if ($onlyPages.Count -gt 0 -and $onlyPages -notcontains $pageName) { continue }
+        $pageNumber++
+        Update-Splash -Text "Loading the $($pageName.ToLowerInvariant()) page ..." `
+            -Percent (30 + [int](60.0 * $pageNumber / $pageCount))
+        $pageFile = Join-Path $scriptRoot "pages\$pageName.ps1"
+        if (Test-Path -LiteralPath $pageFile -PathType Leaf) { . $pageFile }
+    }
+} else {
+    Update-Splash -Text 'Reading what the pages are ...' -Percent 60
+    Register-PageList -Folder (Join-Path $scriptRoot 'pages') -Names $pageList
+    Initialize-PageLookup
+    # The three the window itself reaches into: the header's FTP and clipboard
+    # pills, and the rule count on the Automation item. Everything else is
+    # built when it is opened - or when something calls into it.
+    foreach ($needed in @('ftp', 'clipboard', 'automation')) {
+        Update-Splash -Text 'Building the window ...' -Percent 80
+        $null = Request-Page -Key $needed
+    }
 }
 
 Complete-Shell

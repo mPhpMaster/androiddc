@@ -48,6 +48,13 @@ window's `settings.json`, so switching never mixes them.
 
 ## The parts
 
+A page is built the first time it is opened, not when the window starts - that
+was three of the six seconds. Its line in the side navigation is read from its
+own `Register-Page` line without running the file, so the navigation is whole
+from the start. See *Pages are built when they are opened* in
+`docs\architecture.md`.
+
+
 | Path | What it is |
 |---|---|
 | `androiddc-nova.ps1` | Starts everything: loads the parts, the pages, the tools and the settings |
@@ -74,3 +81,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run.ps1 -Test all
 ```
 
 With a phone attached, the tests only read from it.
+
+Every test gets all eighteen pages built at startup, because a test calls into
+a page without opening it. `pages-late` is the exception: it runs the way a
+person gets the window - pages built when they are opened - and opens all
+eighteen one after another.

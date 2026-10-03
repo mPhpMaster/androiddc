@@ -127,6 +127,33 @@ $lstFiles.Add_KeyDown({
 
 `$_` is not the event argument inside a WinForms handler in PowerShell.
 
+## Pages are built when they are opened
+
+Nova has eighteen pages and building them all took three of the six seconds the
+window needed to open. Each one now waits until it is first shown.
+
+* `Register-PageList` reads each page's own `Register-Page` line **as text** and
+  puts a stub - name, glyph, section - in the navigation. Reading source to
+  learn about it is worth saying out loud; the alternative is running all
+  eighteen files, which is the three seconds. `nova\tests\audit.ps1` fails the
+  build if a page's line stops being readable that way.
+* `Request-Page` dot-sources the file **inside a function**, so what it defines
+  is local to that function - and copies the new functions to the global scope
+  and the new unscoped variables to the window's scope, which is where a
+  dot-source at startup would have put them. Without the second half,
+  `$automationPage` and its like vanish and the window fails on the way up.
+* `Register-Page` fills the stub in place rather than adding a second entry: the
+  navigation item already points at that object.
+* `Initialize-PageLookup` sets `CommandNotFoundAction`. Ten of the eighteen
+  pages call another page's functions - Overview alone reaches into five - so a
+  call to a name belonging to an unbuilt page builds it and then goes through.
+* The FTP page, the Clipboard page and the Automation page are built at the
+  start, because the window itself calls into them for the header pills and the
+  rule count.
+* `ANDROIDDC_EAGER_PAGES` builds them all at startup. Both test runners set it,
+  because tests call into pages without opening them; `nova\tests\run.ps1`
+  leaves it off for `pages-late`, which is the test that sees what a person sees.
+
 ## Context menus
 
 `Add-ListContextMenu -List $lst -Buttons @($btnA, $btnB, $null, $btnC)` builds a menu whose

@@ -11,6 +11,12 @@ $script:ui = @{}
 $script:app = $null
 $script:window = $null
 $script:pages = New-Object System.Collections.ArrayList
+# A page is expensive to build - eighteen of them were three of the six seconds
+# this window took to open - so each one waits until it is opened. What it says
+# about itself is read from its own first lines, without running the file, so
+# the side navigation is whole from the start.
+$script:pageFiles = @{}          # key -> the file that builds that page
+$script:pageOfFunction = @{}     # a function's name -> the page that defines it
 $script:currentPage = $null
 $script:cleanups = New-Object System.Collections.ArrayList
 $script:logLines = New-Object 'System.Collections.ObjectModel.ObservableCollection[object]'
@@ -163,15 +169,151 @@ function Register-Page {
     $root.Visibility = 'Collapsed'
     $null = $ui.PageHost.Children.Add($root)
 
-    $page = [PSCustomObject]@{
-        Key = $Key; Title = $Title; Glyph = $Glyph; Section = $Section; Root = $root
-        OnShow = $OnShow; OnDeviceChanged = $OnDeviceChanged; Refresh = $Refresh; Nav = $null
+    $page = Get-Page -Key $Key
+    if ($null -eq $page) {
+        $page = [PSCustomObject]@{
+            Key = $Key; Title = $Title; Glyph = $Glyph; Section = $Section; Root = $root
+            OnShow = $OnShow; OnDeviceChanged = $OnDeviceChanged; Refresh = $Refresh; Nav = $null
+            Loaded = $true
+        }
+        $null = $script:pages.Add($page)
+        return $page
     }
-    $null = $script:pages.Add($page)
+    # a place was kept for it in the navigation before this file ran, and the
+    # navigation item points at that very object: it is filled, not replaced
+    $page.Root = $root
+    $page.OnShow = $OnShow
+    $page.OnDeviceChanged = $OnDeviceChanged
+    $page.Refresh = $Refresh
+    $page.Loaded = $true
     return $page
 }
 
 $script:sectionOrder = @('Workspace', 'Personal', 'Connect', 'System')
+
+function Register-PageList {
+    <#
+        Every page gets a place in the navigation before any of them is built.
+        What goes in that place - its name, its glyph, its section - is on the
+        page's own Register-Page line, and that line is read here as text.
+
+        Reading source to learn about it is worth saying out loud: it is done
+        because the alternative is running all eighteen files, which is the
+        three seconds this is here to save. audit.ps1 fails the build if a page
+        stops saying those things in a shape this can read.
+    #>
+    param([string]$Folder, [string[]]$Names)
+
+    foreach ($name in $Names) {
+        $file = Join-Path $Folder "$name.ps1"
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
+        $text = [IO.File]::ReadAllText($file, [Text.Encoding]::UTF8)
+        $said = Read-PageDeclaration -Text $text
+        if (-not $said) {
+            Write-Log "$name does not say what it is in a shape that can be read without running it." $colorWarn
+            continue
+        }
+        $page = [PSCustomObject]@{
+            Key = $said.Key; Title = $said.Title; Glyph = $said.Glyph; Section = $said.Section
+            Root = $null; OnShow = $null; OnDeviceChanged = $null; Refresh = $null; Nav = $null
+            Loaded = $false
+        }
+        $null = $script:pages.Add($page)
+        $script:pageFiles[$said.Key] = $file
+        # and which names it brings with it, so that a call to one of them from
+        # somewhere else builds this page instead of failing
+        foreach ($found in [regex]::Matches($text, '(?m)^function\s+([A-Za-z][A-Za-z0-9-]*)')) {
+            $script:pageOfFunction[$found.Groups[1].Value] = $said.Key
+        }
+    }
+}
+
+function Read-PageDeclaration {
+    # the four things the navigation needs, off a Register-Page line that may
+    # be wrapped over two lines with a backtick
+    param([string]$Text)
+
+    $flat = $Text -replace '`\r?\n\s*', ' '
+    $at = $flat.IndexOf('Register-Page')
+    if ($at -lt 0) { return $null }
+    $head = $flat.Substring($at, [Math]::Min(400, $flat.Length - $at))
+    # only as far as the first block: a page's own OnDeviceChanged says things
+    # like Test-PageShown -Key 'users', and that would answer for the
+    # declaration while the declaration itself said nothing
+    $block = $head.IndexOf('{')
+    if ($block -gt 0) { $head = $head.Substring(0, $block) }
+    $said = @{}
+    foreach ($what in @('Key', 'Title', 'Glyph', 'Section')) {
+        $found = [regex]::Match($head, "-$what\s+'([^']+)'")
+        if (-not $found.Success) { return $null }
+        $said[$what] = $found.Groups[1].Value
+    }
+    return [PSCustomObject]@{ Key = $said['Key']; Title = $said['Title']
+        Glyph = $said['Glyph']; Section = $said['Section'] }
+}
+
+function Request-Page {
+    <#
+        Builds a page that has not been built yet.
+
+        The file is dot-sourced here, so the functions it defines belong to
+        this function - and are copied out to the global scope, which is where
+        every other page and the window itself look for them. Its $script:
+        variables land in this window's own scope, which is where the file
+        would have put them had it been read at startup.
+    #>
+    param([string]$Key)
+
+    $page = Get-Page -Key $Key
+    if ($null -eq $page -or $page.Loaded) { return $page }
+    if (-not $script:pageFiles.ContainsKey($Key)) { return $page }
+
+    # marked before it is read, not after: a page whose file throws is said
+    # once and not tried again on every click
+    $page.Loaded = $true
+    $hadFunction = @{}
+    foreach ($one in Get-ChildItem function:) { $hadFunction[$one.Name] = $true }
+    $hadVariable = @{}
+    foreach ($one in Get-Variable -Scope 0) { $hadVariable[$one.Name] = $true }
+    try {
+        . $script:pageFiles[$Key]
+    } catch {
+        Write-Log ("The $($page.Title) page could not be built: " + $_.Exception.Message) $colorBad
+    }
+    foreach ($one in Get-ChildItem function:) {
+        if (-not $hadFunction.ContainsKey($one.Name)) {
+            Set-Item -Path "function:global:$($one.Name)" -Value $one.ScriptBlock
+        }
+    }
+    # and the variables it set without a scope, which at startup would have
+    # been the window's own: $automationPage and its like, which the window
+    # reads back later
+    foreach ($one in Get-Variable -Scope 0) {
+        if (-not $hadVariable.ContainsKey($one.Name)) {
+            Set-Variable -Name $one.Name -Value $one.Value -Scope Script
+        }
+    }
+    return $page
+}
+
+function Initialize-PageLookup {
+    <#
+        Pages call each other: the Overview page's buttons alone reach into
+        five others. When a name that belongs to a page that has not been built
+        is called, the page is built and the call goes through - rather than
+        the button saying the name is not recognized.
+    #>
+    $ExecutionContext.InvokeCommand.CommandNotFoundAction = {
+        param($CommandName, $lookup)
+        if (-not $script:pageOfFunction.ContainsKey($CommandName)) { return }
+        $null = Request-Page -Key $script:pageOfFunction[$CommandName]
+        $found = Get-Command -Name $CommandName -ErrorAction SilentlyContinue
+        if ($found) {
+            $lookup.Command = $found
+            $lookup.StopSearch = $true
+        }
+    }
+}
 
 function Get-PagesInNavOrder {
     # as the side navigation lists them: by section, then as registered
@@ -197,7 +339,11 @@ function Show-Page {
 
     if ($Page -is [string]) { $Page = Get-Page -Key $Page }
     if (-not $Page) { return }
+    if (-not $Page.Loaded) { $Page = Request-Page -Key $Page.Key }
+    if (-not $Page.Root) { return }
     foreach ($entry in $script:pages) {
+        # a page nobody has opened yet has nothing on screen to hide
+        if (-not $entry.Root) { continue }
         $entry.Root.Visibility = if ([object]::ReferenceEquals($entry, $Page)) { 'Visible' } else { 'Collapsed' }
     }
     $changed = -not [object]::ReferenceEquals($script:currentPage, $Page)
@@ -977,6 +1123,9 @@ function Initialize-ShellEvents {
         $script:deviceChangeTimer.Stop()
         Update-DeviceStatus
         foreach ($page in @($script:pages)) {
+            # one that has not been built has no rows to clear; it reads the
+            # phone that is picked when it is opened
+            if (-not $page.Loaded) { continue }
             if (-not $page.OnDeviceChanged) { continue }
             try { & $page.OnDeviceChanged } catch { Write-Log ("$($page.Title): " + $_.Exception.Message) $colorBad }
         }

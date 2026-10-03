@@ -79,6 +79,28 @@ foreach ($file in $xamls) {
     }
 }
 
+Write-Host '== every page says what it is, where that can be read without running it =='
+# The side navigation is built from these lines before any page is built, so a
+# page whose line stops matching would quietly lose its place in it.
+foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $root 'pages') -Filter *.ps1 -File)) {
+    $text = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
+    if ($text -notmatch 'Register-Page') { continue }
+    # a line wrapped with a backtick is joined back up first, the way
+    # Register-PageList joins it
+    $flat = $text -replace ([char]96 + '\r?\n\s*'), ' '
+    $at = $flat.IndexOf('Register-Page')
+    $head = $flat.Substring($at, [Math]::Min(400, $flat.Length - $at))
+    # as far as the first block only, the same as Read-PageDeclaration: a
+    # page's own OnDeviceChanged says -Key 'users' too
+    $block = $head.IndexOf('{')
+    if ($block -gt 0) { $head = $head.Substring(0, $block) }
+    foreach ($what in @('Key', 'Title', 'Glyph', 'Section')) {
+        if ($head -notmatch "-$what\s+'[^']+'") {
+            Report "pages\$($file.Name) does not give -$what as a plain quoted word on its Register-Page line"
+        }
+    }
+}
+
 Write-Host '== no absolute path of a PC =='
 $pattern = '[A-Za-z]:\\(Users|scrcpy|W\\|laragon)|\\AppData\\Local\\Temp\\claude'
 foreach ($file in @($scripts + $xamls + @(Get-ChildItem -LiteralPath $root -Filter *.md -File))) {

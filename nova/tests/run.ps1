@@ -53,6 +53,10 @@ $env:ANDROIDDC_AUTOMATION_MUTEX = 'Local\AndroidDC.Automation.tests'
 
 $results = @()
 foreach ($name in $Test) {
+    # The tests call into pages without opening them, so they get every page
+    # built at startup, the way it used to be for everyone. The one test that
+    # is about building them late is run without it.
+    $env:ANDROIDDC_EAGER_PAGES = $(if ($name -eq 'pages-late') { '' } else { '1' })
     $env:ANDROIDDC_AUTOMATION_FILE = Join-Path $work "automation-$name.json"
     if (Test-Path -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE) { Remove-Item -LiteralPath $env:ANDROIDDC_AUTOMATION_FILE -Force }
     # the list of backups the test writes is its own, never the user's
