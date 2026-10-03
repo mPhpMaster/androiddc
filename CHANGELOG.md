@@ -2,7 +2,42 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.5.0
+
+### What a backup can have done to it is on the right mouse button
+
+Two rows of buttons under the backups list, and two of them said *Show in Explorer* - one for
+the backup picked in the list, one for the backup that is open. Renaming the second one was not
+the answer.
+
+**Right-click a backup in the list** for *Open this one*, *Show in Explorer*, *Continue /
+update* and *Delete ...*; those three come off the row of buttons, in both windows. *Refresh*
+and *Open this one* stay as buttons, and a double-click still opens one. The menu is greyed
+while a backup or a restore is running, exactly as the buttons were.
+
+### The classic window says what the phone is, and what it is doing
+
+Every one of these was asked for against a picture of Nova, and the classic window had none of
+them. Both windows now read the same two things out of `shared\DeviceFacts.ps1`.
+
+* **The square beside the status line is the make of the phone**: a letter in the make's own
+  colour for the sixteen this knows, and the plain phone glyph for one it does not. It goes by
+  what the phone says it is made by, because a model code like `23108RN04Y` says nothing - that
+  answer comes back in the same trip as the Android version, so it costs nothing extra.
+* **A second line under it says what the phone is doing with itself**: CPU, RAM and GPU, each
+  coloured by its own number - quiet below 70%, orange from 70, red from 90. Read every six
+  seconds on a timer of its own, and never while something else is using adb. Most phones will
+  not let adb read the GPU at all, and then it says *not readable*.
+* **The clipboard is at the right of that line**: *clipboard off* or *clipboard on*. Click it
+  for the page, right-click it to start or stop sharing - the same two meanings Nova's pill has.
+
+### A backup says how much has come over, and how long it has taken
+
+The line under the bar guessed at what was left and said nothing else. It now carries the whole
+story: **1.2 GB of 4.0 GB, 2.8 GB to go  -  4 min gone, about 9 minutes left, done by 6:52 AM**.
+A run that counts apps rather than bytes says *7 of 20, 13 to go* instead of reading a count of
+apps out as if it were a number of bytes.
+
 
 ### The shared clipboard now actually crosses
 

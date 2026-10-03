@@ -187,6 +187,19 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 `adb backup` is **not** used: Android 12 and newer return almost nothing for it. What is inside
 an app cannot be read without root, by this or any other tool.
 
+## What the phone is, and what it is doing
+
+| Purpose | Command |
+|---|---|
+| Its Android version and its make | `adb shell getprop ro.build.version.release; getprop ro.product.manufacturer` - one trip for both, made while the device list is filled. The make is what the square beside the status line shows: a model code like `23108RN04Y` says nothing, and `ro.product.manufacturer` says *Xiaomi* |
+| The name people know it by | `adb shell getprop ro.product.marketname; getprop ro.product.vendor.marketname` (Nova's list) |
+| How busy its processors are | `adb shell dumpsys cpuinfo 2>/dev/null \| tail -1`, whose last line ends in `% TOTAL` |
+| How much memory is in use | `adb shell grep -E 'MemTotal\|MemAvailable' /proc/meminfo` |
+| Its GPU | `adb shell cat /sys/class/kgsl/kgsl-3d0/gpubusy`, then mali's `utilisation`, then devfreq's `load`. The phone this was written against refuses all three, so the answer is usually *not readable*, which is said rather than left looking broken |
+
+Those three are read on a timer of their own - six seconds, and never while something else is
+using adb - because nobody is waiting on them.
+
 ## The clipboard
 
 | Purpose | Command |

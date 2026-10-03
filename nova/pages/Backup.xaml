@@ -132,7 +132,24 @@
                       ToolTip="Pick the folder your backups are kept in"/>
             </Grid>
             <ListView x:Name="BackupList" Grid.Row="1" SelectionMode="Single"
-                      ToolTip="The backups in that folder, newest first - double-click one to open it">
+                      ToolTip="The backups in that folder, newest first - double-click one to open it, or right-click one for the rest">
+              <ListView.ContextMenu>
+                <!-- what a backup in this list can have done to it. On the menu
+                     rather than on buttons of their own: the row underneath had
+                     a second "Show in Explorer" on it, for the backup that is
+                     open rather than the one picked here. -->
+                <ContextMenu>
+                  <MenuItem x:Name="BackupMenuOpen" Header="Open this one"
+                            ToolTip="Opens the selected backup, so what is inside it can be read and put back"/>
+                  <MenuItem x:Name="BackupMenuShow" Header="Show in Explorer"
+                            ToolTip="Opens Explorer with the backup picked in this list picked out"/>
+                  <MenuItem x:Name="BackupMenuResume" Header="Continue / update"
+                            ToolTip="Carries a backup that stopped part way on from where it got to, or brings a finished one up to date - either way only what is missing or changed is fetched"/>
+                  <Separator/>
+                  <MenuItem x:Name="BackupMenuDelete" Header="Delete ..."
+                            ToolTip="Deletes the selected backup from this PC, after asking. There is no undoing it, and the phone is not touched"/>
+                </ContextMenu>
+              </ListView.ContextMenu>
               <ListView.View>
                 <GridView>
                     <GridViewColumn Header="NAME" Width="140" DisplayMemberBinding="{Binding Called}"/>
@@ -150,12 +167,8 @@
                       ToolTip="Reads that folder again, in case a backup was added to it or taken out"/>
               <Button x:Name="BackupListOpen" Style="{StaticResource Primary}" Content="Open this one" Margin="0,4,8,0"
                       ToolTip="Opens the selected backup, so what is inside it can be read and put back"/>
-              <Button x:Name="BackupListShow" Content="Show in Explorer" Margin="0,4,8,0"
-                      ToolTip="Opens Explorer with the backup picked in this list picked out"/>
-              <Button x:Name="BackupListResume" Content="Continue / update" Margin="0,4,8,0"
-                      ToolTip="Carries a backup that stopped part way on from where it got to, or brings a finished one up to date - either way only what is missing or changed is fetched. For a backup kept as a folder; it works after the program has been closed and opened again"/>
-              <Button x:Name="BackupListDelete" Style="{StaticResource DangerButton}" Content="Delete ..." Margin="0,4,8,0"
-                      ToolTip="Deletes the selected backup from this PC, after asking. There is no undoing it, and the phone is not touched"/>
+              <TextBlock Style="{StaticResource MutedLine}" VerticalAlignment="Center" Margin="4,4,0,0"
+                         Text="Right-click a backup to show it in Explorer, carry it on, or delete it."/>
             </WrapPanel>
           </Grid>
         </TabItem>

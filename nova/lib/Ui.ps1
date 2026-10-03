@@ -331,13 +331,18 @@ function Update-DeviceList {
         $installed = '-'
         $release = '-'
         $name = $device.Model -replace '_', ' '
+        $maker = ''
         if ($device.State -eq 'device') {
             # the name people know the phone by, when the ROM says it ("Redmi Note 13"
             # rather than "23108RN04Y"); the model code otherwise
-            $market = (Invoke-DeviceShell -Serial $device.Serial -CommandArguments @(
-                'getprop ro.product.marketname; getprop ro.product.vendor.marketname')).Lines |
-                ForEach-Object { "$_".Trim() } | Where-Object { $_ } | Select-Object -First 1
+            # the name and the make in one trip: a model code like 23108RN04Y
+            # says nothing about either
+            $said = @((Invoke-DeviceShell -Serial $device.Serial -CommandArguments @(
+                'getprop ro.product.marketname; getprop ro.product.vendor.marketname; ' +
+                'getprop ro.product.manufacturer')).Lines | ForEach-Object { "$_".Trim() })
+            $market = @(@($said)[0..1] | Where-Object { $_ }) | Select-Object -First 1
             if ($market) { $name = $market }
+            if (@($said).Count -gt 2) { $maker = "$(@($said)[2])" }
             $check = Invoke-DeviceShell -Serial $device.Serial -CommandArguments @('pm', 'list', 'packages', $script:packageName)
             $installed = if ($check.Text -match [regex]::Escape("package:$script:packageName")) { 'yes' } else { 'no' }
             $release = (Invoke-DeviceShell -Serial $device.Serial -CommandArguments @('getprop', 'ro.build.version.release')).Text.Trim()
@@ -345,7 +350,7 @@ function Update-DeviceList {
         }
         $rows += [PSCustomObject]@{
             Serial = $device.Serial; Link = $device.Link; Model = $name
-            Android = $release; State = $device.State; Client = $installed
+            Android = $release; State = $device.State; Client = $installed; Maker = $maker
         }
     }
 
@@ -383,49 +388,17 @@ function Set-StatusPill {
     }
 }
 
-function Get-DeviceMake {
-    <#
-        The make of a phone, from the model name the device list already has -
-        no trip to the phone for it.
-
-        A letter in the make's own colour, because there are no brand marks to
-        show: the icon font has none, and shipping somebody's logo with this is
-        not something to do lightly. A make nobody here knows keeps the plain
-        phone glyph, which is what every phone had before.
-    #>
-    param([string]$Model, [string]$Serial = '')
-
-    $text = "$Model $Serial".ToLowerInvariant()
-    foreach ($make in @(
-            @{ Name = 'Samsung';  Letter = 'S'; Color = '#1428A0'; Match = 'samsung|^sm-|galaxy' }
-            @{ Name = 'Xiaomi';   Letter = 'M'; Color = '#FF6900'; Match = 'xiaomi|redmi|poco|^mi\b|mi \d' }
-            @{ Name = 'Google';   Letter = 'G'; Color = '#1A73E8'; Match = 'pixel|google' }
-            @{ Name = 'OnePlus';  Letter = '1'; Color = '#EB0029'; Match = 'oneplus|^op\d' }
-            @{ Name = 'Huawei';   Letter = 'H'; Color = '#CF0A2C'; Match = 'huawei|honor' }
-            @{ Name = 'Oppo';     Letter = 'O'; Color = '#046A38'; Match = 'oppo|realme' }
-            @{ Name = 'vivo';     Letter = 'V'; Color = '#415FFF'; Match = 'vivo|iqoo' }
-            @{ Name = 'Motorola'; Letter = 'M'; Color = '#5C92FA'; Match = 'motorola|moto ' }
-            @{ Name = 'Nokia';    Letter = 'N'; Color = '#124191'; Match = 'nokia' }
-            @{ Name = 'Sony';     Letter = 'S'; Color = '#111111'; Match = 'sony|xperia' }
-            @{ Name = 'LG';       Letter = 'L'; Color = '#A50034'; Match = '^lg[- ]|lg electronics' }
-            @{ Name = 'Asus';     Letter = 'A'; Color = '#00539B'; Match = 'asus|zenfone|rog phone' }
-            @{ Name = 'Lenovo';   Letter = 'L'; Color = '#E1140A'; Match = 'lenovo' }
-            @{ Name = 'Nothing';  Letter = 'N'; Color = '#111111'; Match = 'nothing phone|^a06\d' }
-            @{ Name = 'Tecno';    Letter = 'T'; Color = '#0057FF'; Match = 'tecno|infinix|itel' }
-            @{ Name = 'Apple';    Letter = 'A'; Color = '#555555'; Match = 'iphone|ipad|apple' })) {
-        if ($text -match $make.Match) {
-            return [PSCustomObject]@{ Name = $make.Name; Letter = $make.Letter; Color = $make.Color }
-        }
-    }
-    return $null
-}
-
+# Get-DeviceMake and Get-DeviceLoad are in shared\DeviceFacts.ps1, because the
+# classic window shows the same two readings in its own way.
 function Update-DeviceMark {
     # the square beside the phone's name: its make, or the plain phone glyph
     param($Device)
 
     $make = $null
-    if ($Device) { $make = Get-DeviceMake -Model "$($Device.Model)" -Serial "$($Device.Serial)" }
+    if ($Device -and (Get-Command Get-DeviceMake -ErrorAction SilentlyContinue)) {
+        $maker = $(if ($Device.PSObject.Properties['Maker']) { "$($Device.Maker)" } else { '' })
+        $make = Get-DeviceMake -Model "$($Device.Model)" -Serial "$($Device.Serial)" -Maker $maker
+    }
     if (-not $make) {
         $ui.DeviceMarkLetter.Visibility = 'Collapsed'
         $ui.DeviceMarkGlyph.Visibility = 'Visible'
@@ -476,67 +449,6 @@ function Update-DeviceHeader {
     $ui.DeviceSubtitle.Text = $parts -join ('  ' + [char]0x00B7 + '  ')
 }
 
-function Get-DeviceLoad {
-    <#
-        What the phone is doing with itself: how busy its processors are, how
-        much of its memory is in use, and - where Android lets adb read it at
-        all - its GPU.
-
-        Measured on the phone this was written against: dumpsys cpuinfo ends
-        with a TOTAL line, /proc/meminfo is readable, and every GPU file a
-        phone might have (kgsl's gpubusy, mali's utilisation, devfreq's load)
-        was refused. So the GPU answer is often "not readable", which is said
-        rather than left looking broken.
-    #>
-    param([string]$Serial)
-
-    $answer = [PSCustomObject]@{ Cpu = ''; Ram = ''; Gpu = ''; CpuUsed = -1; RamUsed = -1; GpuUsed = -1 }
-    $cpu = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('dumpsys cpuinfo 2>/dev/null | tail -1')).Text
-    if ("$cpu" -match '([\d.]+)%\s+TOTAL') {
-        $answer.Cpu = "$($Matches[1])%"
-        $answer.CpuUsed = [int][Math]::Round([double]$Matches[1])
-    }
-
-    $mem = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        "grep -E 'MemTotal|MemAvailable' /proc/meminfo 2>/dev/null")).Text
-    $total = 0
-    $free = 0
-    if ("$mem" -match 'MemTotal:\s+(\d+)') { $total = [long]$Matches[1] }
-    if ("$mem" -match 'MemAvailable:\s+(\d+)') { $free = [long]$Matches[1] }
-    if ($total -gt 0) {
-        $used = $total - $free
-        $answer.RamUsed = [int][Math]::Round(100.0 * $used / $total)
-        $answer.Ram = "$($answer.RamUsed)% of " + (Format-FileSize -Bytes ([long]$total * 1024))
-    }
-
-    # the places a phone keeps its GPU load, tried in turn; most phones refuse
-    $gpu = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        'cat /sys/class/kgsl/kgsl-3d0/gpubusy 2>/dev/null; ' +
-        'cat /sys/class/misc/mali0/device/utilisation 2>/dev/null; ' +
-        'cat /sys/class/devfreq/*.mali/load 2>/dev/null')).Text
-    foreach ($line in ("$gpu" -split "`r?`n")) {
-        $words = "$line".Trim()
-        if (-not $words) { continue }
-        if ($words -match '^(\d+)\s+(\d+)$') {
-            # kgsl: busy and total since the last read
-            $busy = [double]$Matches[1]
-            $all = [double]$Matches[2]
-            if ($all -gt 0) {
-                $answer.GpuUsed = [int][Math]::Round(100 * $busy / $all)
-                $answer.Gpu = "$($answer.GpuUsed)%"
-            }
-            break
-        }
-        if ($words -match '^(\d+)%?$') {
-            $answer.Gpu = "$($Matches[1])%"
-            $answer.GpuUsed = [int]$Matches[1]
-            break
-        }
-    }
-    if (-not $answer.Gpu) { $answer.Gpu = 'not readable' }
-    return $answer
-}
-
 function Get-LoadBrush {
     # what a number of that size should look like: quiet until it is worth
     # looking at, orange when it is busy, red when it is nearly full
@@ -559,6 +471,7 @@ function Update-DeviceLoad {
         return
     }
     if (-not $Force -and $script:busy -gt 0) { return }
+    if (-not (Get-Command Get-DeviceLoad -ErrorAction SilentlyContinue)) { return }
     $serial = $first.Serial
     $load = Get-DeviceLoad -Serial $serial
     if ((Get-SelectedSerial) -ne $serial) { return }

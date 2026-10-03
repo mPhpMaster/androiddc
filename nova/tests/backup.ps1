@@ -118,6 +118,28 @@ $null = Wait-Idle
 Say ("  a folder that is not there lists nothing   {0}" -f (Mark ($script:backupListRows.Count -eq 0)))
 Set-BackupPageFolder -Folder $work
 
+# What a backup can have done to it is on the right mouse button, because the
+# two rows of buttons here had two of them saying "Show in Explorer"
+$menu = $ui.BackupList.ContextMenu
+$items = @($menu.Items | Where-Object { $_ -is [System.Windows.Controls.MenuItem] } |
+    ForEach-Object { "$($_.Header)" })
+Say ("  right-clicking a backup offers: {0}   {1}" -f ($items -join ', '), (Mark (
+    ($items -join ',') -match 'Open this one' -and ($items -join ',') -match 'Show in Explorer' -and
+    ($items -join ',') -match 'Continue / update' -and ($items -join ',') -match 'Delete')))
+Say ("  every entry on it does something   {0}" -f (Mark (
+    @('BackupMenuOpen', 'BackupMenuShow', 'BackupMenuResume', 'BackupMenuDelete' |
+        Where-Object { $script:ui.ContainsKey($_) }).Count -eq 4)))
+# the row underneath has one Explorer button, and it is about the opened backup
+$explorer = @(@($ui.BackupListRefresh, $ui.BackupListOpen, $ui.BackupShowFolder) |
+    Where-Object { "$($_.Content)" -match 'Explorer' })
+Say ("  and nothing says 'Show in Explorer' twice   {0}" -f (Mark (
+    $explorer.Count -eq 0 -and "$($ui.BackupShowFolder.Content)" -eq 'Show the open one')))
+Set-BackupPageBusy -Running $true
+Say ("  while a backup runs the menu is dead too   {0}" -f (Mark (
+    -not $ui.BackupMenuDelete.IsEnabled -and -not $ui.BackupMenuResume.IsEnabled)))
+Set-BackupPageBusy -Running $false
+Say ("  and afterwards it is back   {0}" -f (Mark ($ui.BackupMenuDelete.IsEnabled)))
+
 Say ''
 Say '== which files a phone already has =='
 $plan = Get-BackupFilePlan -Source $script:backupSource

@@ -72,6 +72,9 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # Nova on its own, without the project folder, simply has no Automation page
 $automationScript = Join-Path $script:toolsRoot 'shared\Automation.ps1'
 if (Test-Path -LiteralPath $automationScript -PathType Leaf) { . $automationScript }
+# the make of a phone, and how busy it is
+$factsScript = Join-Path $script:toolsRoot 'shared\DeviceFacts.ps1'
+if (Test-Path -LiteralPath $factsScript -PathType Leaf) { . $factsScript }
 # the icon by the clock, the same as the classic window's
 $trayScript = Join-Path $script:toolsRoot 'shared\Tray.ps1'
 if (Test-Path -LiteralPath $trayScript -PathType Leaf) { . $trayScript }

@@ -18,6 +18,10 @@ $script:mockReply = { param([string]$Line) '' }
 $script:mockOriginals = @{}
 
 function Enable-TestMocks {
+    # the watch that reads the attached phones every couple of seconds is a
+    # real phone's worth of adb calls landing in the middle of made-up ones,
+    # and this page's last check is that nothing reached a real phone
+    if ($script:deviceWatchTimer) { $script:deviceWatchTimer.Stop() }
     foreach ($name in @('Invoke-Adb', 'Invoke-DeviceShellText', 'Get-TargetSerial', 'Show-Confirm', 'Show-InputDialog')) {
         $script:mockOriginals[$name] = (Get-Item "function:$name").ScriptBlock
     }
@@ -61,6 +65,7 @@ function Enable-TestMocks {
 
 function Disable-TestMocks {
     foreach ($name in @($script:mockOriginals.Keys)) { Set-Item -Path "function:script:$name" -Value $script:mockOriginals[$name] }
+    if ($script:deviceWatchTimer) { $script:deviceWatchTimer.Start() }
 }
 
 function Reset-TestRecord {

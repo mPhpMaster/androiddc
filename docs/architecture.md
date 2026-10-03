@@ -18,6 +18,7 @@ The Nova window is WPF in PowerShell, one file per page; its own rules are in
 | `Automation.ps1` | Starting with Windows (one `AndroidDC` value under the user's Run key), the actions a rule can hold, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone that was just plugged in from one that was already there, and a named mutex so only one window runs the rules |
 | `Tray.ps1` | The icon by the clock: hiding and showing the window, its menu, and the list of rules in that menu |
 | `Backup.ps1` | A backup of the phone on this PC — pulling `/sdcard` folder by folder, the APK of each installed app, contacts, messages and the call log, a settings snapshot — packed into one `.zip` and read back out of it: what is inside (from the zip index, nothing unpacked), which files the phone already has (one `find` per folder, not one per file), installing an app with its splits, adding the contacts it lacks, and the list of backups this PC has taken. `adb backup` is not used; Android 12 and newer return almost nothing for it |
+| `DeviceFacts.ps1` | Two readings both windows want and neither owns: the make of a phone, from what it says it is made by (`ro.product.manufacturer`) and failing that its model name, as a letter in the make's own colour; and what it is doing with itself - `dumpsys cpuinfo`, `/proc/meminfo`, and the GPU files most phones refuse. Nothing here touches a control |
 | `Clipboard.ps1` | The clipboard shared with the phones: which way each one can go, reading and writing it through the phone's own clipboard service - a ClipData parcel built word by word, in a shape learnt from one the phone wrote - one turn of the watch in each direction, and the list of what moved. The text is kept in memory; the log is told the length only |
 | `Erase.ps1` | Formatting: the phone's storage volumes as `sm` lists them, a memory card formatted by the phone itself (`sm format`, allowed because adb's shell holds `MOUNT_FORMAT_FILESYSTEMS`), a folder on the phone emptied name by name behind a guard that refuses every root, and a factory reset - asked for with the `FACTORY_RESET` broadcast and, where Android refuses it for want of `MASTER_CLEAR`, by opening the phone's own reset screen. Each window asks its own questions first, including the word typed out; nothing here asks, and nothing claims success it has not read back |
 | `Ftp.ps1` | Starts and detects the phone FTP server, installs or removes its notification app, and keeps the login encrypted on this Windows account so either window can reconnect |
@@ -131,7 +132,15 @@ $lstFiles.Add_KeyDown({
 entries fire those buttons, so a menu can never drift from the buttons it mirrors. `$null`
 inserts a separator, and `Opening` copies each button's `Enabled` state.
 
-The entries raise `Click` directly through reflection rather than calling `PerformClick()`:
+`Add-ListActionMenu -List $lst -Actions @(@{ Text = '...'; Do = { ... } }, $null, ...) -When { ... }`
+is for the other case: actions that have no buttons to mirror because the menu is their only
+home. Each entry carries what it does, every entry is greyed when nothing is picked, and
+`-When` says what else has to be true - a menu is as able to delete a backup in the middle of a
+run as a button is. `Set-ListMenuState` is what `Opening` calls, so a test can ask for that
+state without opening a menu.
+
+The mirroring entries raise `Click` directly through reflection rather than calling
+`PerformClick()`:
 
 ```powershell
 $method = [System.Windows.Forms.Control].GetMethod('OnClick', 'Instance,NonPublic')

@@ -61,7 +61,7 @@ function Set-BackupPageBusy {
     $ui.BackupCancel.IsEnabled = $Running
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps',
         'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing',
-        'BackupListResume', 'BackupListDelete', 'BackupUsers')) {
+        'BackupMenuOpen', 'BackupMenuShow', 'BackupMenuResume', 'BackupMenuDelete', 'BackupUsers')) {
         $ui[$name].IsEnabled = -not $Running
     }
     if (-not $Running) {
@@ -562,9 +562,12 @@ $ui.BackupRestoreContacts.Add_Click({ Start-BackupPageContacts })
 $ui.BackupShowFolder.Add_Click({ Show-BackupPageFolder })
 $ui.BackupListRefresh.Add_Click({ Update-BackupPageList })
 $ui.BackupListOpen.Add_Click({ Open-BackupPagePicked })
-$ui.BackupListShow.Add_Click({ Show-BackupPagePicked })
-$ui.BackupListResume.Add_Click({ Resume-BackupPagePicked })
-$ui.BackupListDelete.Add_Click({ Remove-BackupPagePicked })
+# the rest of what a backup can have done to it is on the list's right-click
+# menu, where there is room for it to be said in words
+$ui.BackupMenuOpen.Add_Click({ Open-BackupPagePicked })
+$ui.BackupMenuShow.Add_Click({ Show-BackupPagePicked })
+$ui.BackupMenuResume.Add_Click({ Resume-BackupPagePicked })
+$ui.BackupMenuDelete.Add_Click({ Remove-BackupPagePicked })
 $ui.BackupSaveCopy.Add_Click({ Save-BackupPageCopy })
 $ui.BackupAppsMissing.Add_Click({ Select-BackupPageMissing })
 $ui.BackupAppFind.Add_TextChanged({ Set-BackupPageAppFilter })
@@ -599,8 +602,8 @@ if (Test-BackupShared) {
 } else {
     $ui.BackupInfo.Text = 'shared\Backup.ps1 is not in the project folder: no backups from here.'
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupBrowse', 'BackupRestoreFiles', 'BackupInstallApps',
-        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen', 'BackupListShow',
-        'BackupListResume', 'BackupListDelete', 'BackupUsers')) {
+        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListRefresh', 'BackupListOpen',
+        'BackupMenuOpen', 'BackupMenuShow', 'BackupMenuResume', 'BackupMenuDelete', 'BackupUsers')) {
         $ui[$name].IsEnabled = $false
     }
 }

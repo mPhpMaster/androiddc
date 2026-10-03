@@ -216,6 +216,32 @@ refusal.
 > Take a backup first. There is no undoing either of these, and the backup page is the other
 > half of this one: back up, erase, restore.
 
+**While a backup or a restore runs**, the line under the bar says what is being carried, then
+how much of it there is - *1.2 GB of 4.0 GB, 2.8 GB to go* - then how long it has been going and
+how long is left, with the time of day it should finish by: *4 min gone, about 9 minutes left,
+done by 6:52 AM*. A run that counts apps rather than bytes says *7 of 20, 13 to go*. The whole
+line is on the tooltip, so a narrow window loses the end of it and nothing else.
+
+### What the device box says
+
+Under the device list, two lines about the phone picked:
+
+* **The square** is its make - a letter in the make's own colour, from what the phone says it is
+  made by. A make this does not know keeps the plain phone glyph. Hovering it names the make.
+* **The first line** is its battery, its network and signal, and whether its screen is on and
+  unlocked. It turns orange when the phone is locked or dark, because that explains half of
+  what then fails.
+* **The second line** is what the phone is doing with itself: **CPU**, **RAM** and **GPU**. Each
+  one is coloured by its own number - quiet below 70%, orange from 70, red from 90 - so a phone
+  with nothing left is obvious without reading it. Most phones will not let adb read the GPU at
+  all, and then it says *not readable* rather than nothing. These are read every six seconds,
+  and never while something else is using adb.
+* **At the right of that line** is the clipboard: *clipboard off*, or *clipboard on*. Click it
+  to open the Clipboard page, right-click it to start or stop sharing with the phones picked.
+
+Nova shows the same things: the make beside the phone's name at the top, and the readings at the
+foot of the side bar, with the clipboard as a pill in the header.
+
 ### Clipboard
 
 What you copy on the phone and what you copy on this PC, kept together, with a list of
@@ -411,11 +437,15 @@ ones whose packing was cancelled - are listed beside the `.zip` files. Nothing i
 about them, so a backup moved into that folder appears and one taken out of it is simply gone.
 
 * Double-click a line, or press *Open this one*, to open it.
-* *Show in Explorer* opens the folder with that backup picked out.
-* **Delete ...** removes the selected backup from this PC, after asking. There is no undoing
-  it, and the phone is not touched. Only something that really is a backup can be deleted this
-  way - a folder with no `manifest.json` in it is left alone.
+* **Right-click a line** for the rest of what can be done to that backup:
+  * *Show in Explorer* opens the folder with it picked out.
+  * *Continue / update* carries it on, or brings it up to date.
+  * **Delete ...** removes it from this PC, after asking. There is no undoing it, and the phone
+    is not touched. Only something that really is a backup can be deleted this way - a folder
+    with no `manifest.json` in it is left alone.
 * *Refresh* reads the folder again.
+
+While a backup or a restore is running, that menu is greyed, the same as the buttons are.
 
 **Looking inside one.** *What is inside* lists every file in the opened backup - which part it
 belongs to, where it was on the phone, and how big it is - read from the zip's own index, so
@@ -460,8 +490,8 @@ unpacked whole: each file is taken out of the zip, sent, and dropped again.
 * **Restore contacts** adds the contacts the phone does not have, matched by name and number,
   so running it twice adds nothing twice. Messages and the call log are not put back: Android
   has no way for adb to write them.
-* **Show the open one** opens the folder with the backup that is open picked out. (The list has its
-  own *Show in Explorer* for the row picked there - the two buttons mean different backups.)
+* **Show the open one** opens the folder with the backup that is open picked out - the one you
+  opened, not whichever line is highlighted in the list. For that one, right-click the line.
 
 Nothing is written to the phone until you press one of those buttons.
 

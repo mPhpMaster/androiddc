@@ -337,7 +337,7 @@ Say ("  and looking for one of them takes {0} ms, off the index it kept   {1}" -
     (Mark ($bigFound.Total -eq 1 -and $findMs -lt 5000)))
 
 Say ''
-Say '== how long is left =='
+Say '== how long is left, and how much of it =='
 # the clock is told when it started, so these are the same every time
 Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-10))
 Add-BackupClockDone -Amount 100
@@ -362,11 +362,36 @@ Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-1))
 Add-BackupClockDone -Amount 10
 Say ("  the first seconds say nothing, rather than something wild   {0}" -f (Mark ((Get-BackupLeftText) -eq '')))
 
+# how much of it has come over, and how much has not
+Start-BackupClock -Total ([long]4294967296) -Started ([datetime]::Now.AddSeconds(-10))
+Add-BackupClockDone -Amount ([long]1073741824)
+Say ("  a quarter of four gigabytes: '{0}'   {1}" -f (Get-BackupSizeText),
+    (Mark ((Get-BackupSizeText) -eq '1.00 GB of 4.00 GB, 3.00 GB to go')))
+Say ("  and how long it has been going: '{0}'   {1}" -f (Get-BackupGoneText),
+    (Mark ((Get-BackupGoneText) -eq 'under a minute gone')))
+Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddMinutes(-7))
+Add-BackupClockDone -Amount 100
+Say ("  minutes: '{0}'   {1}" -f (Get-BackupGoneText), (Mark ((Get-BackupGoneText) -eq '7 min gone')))
+Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddMinutes(-64))
+Add-BackupClockDone -Amount 100
+Say ("  and hours: '{0}'   {1}" -f (Get-BackupGoneText), (Mark ((Get-BackupGoneText) -eq '1 hour 4 min gone')))
+
+# a run that counts apps, not bytes: 7 of 20, never 7 B of 20 B
+Start-BackupClock -Total 20 -Started ([datetime]::Now.AddSeconds(-10)) -Items
+Add-BackupClockDone -Amount 7
+Say ("  a run that counts things says so: '{0}'   {1}" -f (Get-BackupSizeText),
+    (Mark ((Get-BackupSizeText) -eq '7 of 20, 13 to go')))
+Say ("  a finished one has nothing to go   {0}" -f (Mark (
+    $(Add-BackupClockDone -Amount 13; (Get-BackupSizeText)) -eq '20 of 20, 0 to go')))
+
 Start-BackupClock -Total 1000 -Started ([datetime]::Now.AddSeconds(-10))
 Add-BackupClockDone -Amount 100
 Write-BackupProgress -Text 'Files: DCIM' -Done 1 -Total 2
-Say ("  and the line in the window carries it: '{0}'   {1}" -f $lblBackupProgress.Text,
-    (Mark ($lblBackupProgress.Text -match '^Files: DCIM  -  about 2 minutes left')))
+Say ("  and the line in the window carries all of it:")
+Say ("    '{0}'   {1}" -f $lblBackupProgress.Text, (Mark (
+    $lblBackupProgress.Text -match '^Files: DCIM  -  100 B of 1000 B, 900 B to go  -  under a minute gone, about 2 minutes left, done by \d{1,2}:\d\d (AM|PM)$')))
+Say ("  the whole of it is on the tooltip too   {0}" -f (Mark (
+    $toolTip.GetToolTip($lblBackupProgress) -eq $lblBackupProgress.Text)))
 Stop-BackupClock
 Write-BackupProgress -Text 'Files: DCIM' -Done 1 -Total 2
 Say ("  with nothing to go on it says the plain line   {0}" -f (Mark ($lblBackupProgress.Text -eq 'Files: DCIM')))
@@ -842,11 +867,33 @@ Say ("  a name can be typed for a backup, and packing can be turned off   {0}" -
 Set-BackupBusyUi -Running $true
 Say ("  while it runs, Cancel is the only button that works   {0}" -f (Mark (
     $btnBackupCancel.Enabled -and -not $btnBackupRun.Enabled -and -not $btnRestoreFiles.Enabled -and
-    -not $btnBackupSaveCopy.Enabled -and -not $btnBackupListOpen.Enabled -and -not $btnBackupWhereBrowse.Enabled -and
-    -not $btnBackupListDelete.Enabled)))
+    -not $btnBackupSaveCopy.Enabled -and -not $btnBackupListOpen.Enabled -and -not $btnBackupWhereBrowse.Enabled)))
 Set-BackupBusyUi -Running $false
 Say ("  and afterwards the buttons are back   {0}" -f (Mark (
     (-not $btnBackupCancel.Enabled) -and $btnBackupRun.Enabled -and $btnRestoreFiles.Enabled -and $prgBackup.Value -eq 0)))
+
+Say ''
+Say '== what a backup in the list can have done to it =='
+# Showing one in Explorer, carrying one on and deleting one are on the list's
+# right-click menu now: two rows of buttons here had two of them saying
+# "Show in Explorer".
+$entries = @($script:backupListMenu.Items | ForEach-Object { "$($_.Text)" })
+Say ("  the menu has: {0}   {1}" -f ($entries -join ', '), (Mark (
+    ($entries -join ',') -match 'Open this one' -and ($entries -join ',') -match 'Show in Explorer' -and
+    ($entries -join ',') -match 'Continue / update' -and ($entries -join ',') -match 'Delete')))
+Say ("  and nothing on the page says Show in Explorer twice   {0}" -f (Mark (
+    @($pnlBackupListButtons.Controls | Where-Object { "$($_.Text)" -match 'Explorer' }).Count -eq 0 -and
+    $btnBackupOpenFolder.Text -eq 'Show the open one')))
+# the list is empty in this test, so nothing is picked and nothing is offered
+Set-ListMenuState -Menu $script:backupListMenu
+Say ("  with nothing picked every entry is dead   {0}" -f (Mark (
+    @($script:backupListMenu.Items | Where-Object { $_.Tag -and $_.Enabled }).Count -eq 0)))
+$script:backupListMenu.Add_Opening({ })   # the handler is already on it; this is only a reach
+Start-BackupRun
+Set-ListMenuState -Menu $script:backupListMenu
+Say ("  and a backup that is running keeps them dead   {0}" -f (Mark (
+    @($script:backupListMenu.Items | Where-Object { $_.Tag -and $_.Enabled }).Count -eq 0)))
+Complete-BackupRun
 
 Say ''
 Say '== the box that picks the user =='

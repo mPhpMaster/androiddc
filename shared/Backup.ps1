@@ -72,15 +72,23 @@ $script:backupClockTotal = [long]0
 $script:backupClockDone = [long]0
 $script:backupClockBase = [long]0
 $script:backupClockStarted = $null
+# whether the numbers above are bytes or a count of things, which only matters
+# for saying them out loud: 1.2 GB of 4.0 GB, or 7 of 20
+$script:backupClockItems = $false
 
 function Start-BackupClock {
-    # Total is in whatever unit the caller counts in - bytes for files, items
-    # for apps - because only the ratio is used
-    param([long]$Total, [datetime]$Started = [datetime]::MinValue)
+    <#
+        Total is in whatever unit the caller counts in - bytes for files,
+        items for apps - because only the ratio is used for the guess. -Items
+        says which it is, so that a count of apps is not read out as if it
+        were a number of bytes.
+    #>
+    param([long]$Total, [datetime]$Started = [datetime]::MinValue, [switch]$Items)
 
     $script:backupClockTotal = $Total
     $script:backupClockDone = [long]0
     $script:backupClockBase = [long]0
+    $script:backupClockItems = [bool]$Items
     $script:backupClockStarted = $(if ($Started -eq [datetime]::MinValue) { [datetime]::Now } else { $Started })
 }
 
@@ -142,6 +150,52 @@ function Get-BackupLeftText {
     return (Format-BackupLeft -Seconds (Get-BackupLeftSeconds))
 }
 
+function Get-BackupGoneSeconds {
+    # how long this has been running; -1 when no clock is running
+    if ($null -eq $script:backupClockStarted) { return [double](-1) }
+    return [double]([datetime]::Now - $script:backupClockStarted).TotalSeconds
+}
+
+function Format-BackupGone {
+    # the words for how long something has been going. Short, because it sits
+    # in front of the guess at what is left, and that one has the time of day
+    param([double]$Seconds)
+
+    if ($Seconds -lt 0) { return '' }
+    if ($Seconds -lt 60) { return 'under a minute gone' }
+    $minutes = [int][Math]::Floor($Seconds / 60)
+    if ($minutes -lt 60) { return "$minutes min gone" }
+    $hours = [int][Math]::Floor($minutes / 60)
+    $rest = $minutes - ($hours * 60)
+    $word = $(if ($hours -eq 1) { '1 hour' } else { "$hours hours" })
+    if ($rest -eq 0) { return "$word gone" }
+    return "$word $rest min gone"
+}
+
+function Get-BackupGoneText {
+    return (Format-BackupGone -Seconds (Get-BackupGoneSeconds))
+}
+
+function Get-BackupSizeText {
+    <#
+        How much has come over, how much there is, and how much is still to
+        come - in bytes where the run counts bytes, and in plain numbers where
+        it counts things. The third number is the first two subtracted, but it
+        is the one being waited for, so it is said rather than left to be
+        worked out.
+    #>
+    if ($script:backupClockTotal -le 0 -or $null -eq $script:backupClockStarted) { return '' }
+    $done = $script:backupClockDone
+    if ($done -lt 0) { $done = [long]0 }
+    if ($done -gt $script:backupClockTotal) { $done = $script:backupClockTotal }
+    $left = $script:backupClockTotal - $done
+    if ($script:backupClockItems) {
+        return "$done of $($script:backupClockTotal), $left to go"
+    }
+    return ((Format-FileSize -Bytes $done) + ' of ' + (Format-FileSize -Bytes $script:backupClockTotal) +
+        ', ' + (Format-FileSize -Bytes $left) + ' to go')
+}
+
 function Initialize-Backup {
     # Progress: param($Text, $Done, $Total); $Done and $Total are -1 when unknown
     param([scriptblock]$Progress)
@@ -149,10 +203,25 @@ function Initialize-Backup {
 }
 
 function Write-BackupProgress {
+    <#
+        What the window shows while a run is going: what is being carried,
+        then how much of it there is, then how long it has taken and how long
+        is left. Both windows put the whole line in the tooltip as well, so a
+        narrow window loses the end of it and nothing else.
+    #>
     param([string]$Text, [int]$Done = -1, [int]$Total = -1)
 
+    $parts = New-Object System.Collections.Generic.List[string]
+    $null = $parts.Add("$Text")
+    $size = Get-BackupSizeText
+    if ($size) { $null = $parts.Add($size) }
+    $clock = New-Object System.Collections.Generic.List[string]
+    $gone = Get-BackupGoneText
+    if ($gone) { $null = $clock.Add($gone) }
     $left = Get-BackupLeftText
-    $line = $(if ($left) { "$Text  -  $left" } else { "$Text" })
+    if ($left) { $null = $clock.Add($left) }
+    if ($clock.Count -gt 0) { $null = $parts.Add(($clock -join ', ')) }
+    $line = ($parts -join '  -  ')
     if ($script:backupProgress) { try { & $script:backupProgress $line $Done $Total } catch { } }
 }
 
@@ -987,7 +1056,7 @@ function Backup-PhoneApps {
     $index = 0
     # apps are counted one by one: their sizes are only known once the phone has
     # been asked for each, which is the work itself
-    Start-BackupClock -Total $packages.Count
+    Start-BackupClock -Total $packages.Count -Items
     foreach ($package in $packages) {
         if (Test-BackupStopped) { break }
         $index++
@@ -2020,8 +2089,9 @@ function Get-BackupTempFolder {
 
 # ------------------------------------------------------ what is inside it ----
 
-# Inside a backup, the owner's things are at files\, apps\, card\, personal# and settings\, where they have always been, and anyone else's at
-# users\<id>iles\ and so on. The two below take a path apart with StartsWith
+# Inside a backup, the owner's things are at files\, apps\, card\, personal\
+# and settings\, where they have always been, and anyone else's at
+# users\<id>\files\ and so on. The two below take a path apart with StartsWith
 # and Substring rather than a regex, and do it themselves rather than calling a
 # helper that hands back an object: they run once or twice for every file in a
 # backup, and measured on six thousand, the regex with an object cost twelve

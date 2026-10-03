@@ -40,7 +40,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic   # InputBox for rename / new folde
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # the release this file is; CHANGELOG.md says what each one changed
-$appVersion = '1.4.0'
+$appVersion = '1.5.0'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
@@ -48,6 +48,7 @@ $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
 # starting with Windows and the rules per phone, and the icon by the clock,
 # shared with the Nova window
 . (Join-Path $scriptRoot 'shared\Automation.ps1')
+. (Join-Path $scriptRoot 'shared\DeviceFacts.ps1')
 . (Join-Path $scriptRoot 'shared\Tray.ps1')
 . (Join-Path $scriptRoot 'shared\Backup.ps1')
 . (Join-Path $scriptRoot 'shared\Erase.ps1')
@@ -143,6 +144,11 @@ $script:workRunspace = $null
 $script:busy = 0
 # what the busy strip under the pages names, and since when something runs
 $script:busyWhat = ''
+# the phone the load readings belong to, so a phone just picked is read at once
+# rather than showing the last one's numbers for six seconds
+$script:loadSerial = ''
+# serial -> what the phone says it is made by, read with its Android version
+$script:deviceMakers = @{}
 # the phone the erase hint was read for, and what it said; reading it costs two
 # adb calls, so it is not read again for the same phone
 $script:eraseFor = ''
@@ -465,6 +471,62 @@ $lblDeviceStatus.Size = New-Object System.Drawing.Size(750, 20)
 $lblDeviceStatus.AutoEllipsis = $true
 $lblDeviceStatus.Anchor = 'Top, Left, Right'
 $grpDevices.Controls.Add($lblDeviceStatus)
+
+
+# The square beside that line is the make of the phone picked: a letter in the
+# make's own colour, and the plain phone glyph for a make this does not know.
+# shared\DeviceFacts.ps1 works it out from the model name already in the list,
+# so it costs no trip to the phone.
+$script:markLetterFont = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+$script:markGlyphFont = New-Object System.Drawing.Font('Segoe MDL2 Assets', 10)
+$lblDeviceMark = New-Object System.Windows.Forms.Label
+$lblDeviceMark.Text = ''
+$lblDeviceMark.TextAlign = 'MiddleCenter'
+$lblDeviceMark.Font = $script:markGlyphFont
+$lblDeviceMark.Location = New-Object System.Drawing.Point(14, 142)
+$lblDeviceMark.Size = New-Object System.Drawing.Size(22, 22)
+$grpDevices.Controls.Add($lblDeviceMark)
+
+# What the phone is doing with itself, under its battery and signal. Read on a
+# slow timer of its own, because it costs three adb calls and nothing here is
+# worth making the window wait for.
+$lblDeviceCpu = New-Object System.Windows.Forms.Label
+$lblDeviceCpu.Text = ''
+$lblDeviceCpu.AutoEllipsis = $true
+$lblDeviceCpu.Location = New-Object System.Drawing.Point(40, 166)
+$lblDeviceCpu.Size = New-Object System.Drawing.Size(120, 20)
+$grpDevices.Controls.Add($lblDeviceCpu)
+$toolTip.SetToolTip($lblDeviceCpu, "How busy the phone's processors are, from dumpsys cpuinfo")
+
+$lblDeviceRam = New-Object System.Windows.Forms.Label
+$lblDeviceRam.Text = ''
+$lblDeviceRam.AutoEllipsis = $true
+$lblDeviceRam.Location = New-Object System.Drawing.Point(166, 166)
+$lblDeviceRam.Size = New-Object System.Drawing.Size(200, 20)
+$grpDevices.Controls.Add($lblDeviceRam)
+$toolTip.SetToolTip($lblDeviceRam, "How much of the phone's memory is in use, from /proc/meminfo")
+
+$lblDeviceGpu = New-Object System.Windows.Forms.Label
+$lblDeviceGpu.Text = ''
+$lblDeviceGpu.AutoEllipsis = $true
+$lblDeviceGpu.Location = New-Object System.Drawing.Point(372, 166)
+$lblDeviceGpu.Size = New-Object System.Drawing.Size(170, 20)
+$grpDevices.Controls.Add($lblDeviceGpu)
+$toolTip.SetToolTip($lblDeviceGpu, "The phone's GPU, where Android lets adb read it at all - most phones refuse, and then it says so")
+
+# The clipboard, at the right end of the same row: Nova has this in its header,
+# and this is the nearest thing to a header there is here. Clicking it opens
+# the page; right-clicking starts or stops sharing, the way its pill does.
+$lblClipLink = New-Object System.Windows.Forms.Label
+$lblClipLink.Text = 'clipboard off'
+$lblClipLink.TextAlign = 'MiddleRight'
+$lblClipLink.ForeColor = [System.Drawing.Color]::DimGray
+$lblClipLink.AutoEllipsis = $true
+$lblClipLink.Cursor = [System.Windows.Forms.Cursors]::Hand
+$lblClipLink.Location = New-Object System.Drawing.Point(548, 166)
+$lblClipLink.Size = New-Object System.Drawing.Size(214, 20)
+$grpDevices.Controls.Add($lblClipLink)
+$toolTip.SetToolTip($lblClipLink, 'Click to open the Clipboard page. Right-click to start or stop sharing with the phones picked')
 
 # --- tabs --------------------------------------------------------------------
 $tabs = New-Object System.Windows.Forms.TabControl
@@ -4151,28 +4213,9 @@ $btnBackupListOpen.Size = New-Object System.Drawing.Size(116, 26)
 $pnlBackupListButtons.Controls.Add($btnBackupListOpen)
 $toolTip.SetToolTip($btnBackupListOpen, 'Opens the selected backup, so what is inside it can be read and put back')
 
-$btnBackupListShow = New-Object System.Windows.Forms.Button
-$btnBackupListShow.Text = 'Show in Explorer'
-$btnBackupListShow.Location = New-Object System.Drawing.Point(212, 2)
-$btnBackupListShow.Size = New-Object System.Drawing.Size(126, 26)
-$pnlBackupListButtons.Controls.Add($btnBackupListShow)
-$toolTip.SetToolTip($btnBackupListShow, 'Opens Explorer with the backup picked in this list picked out')
-
-# a backup that stopped is a folder with a manifest saying so; carrying it on
-# fetches what is missing and packs it, however long ago it stopped
-$btnBackupListResume = New-Object System.Windows.Forms.Button
-$btnBackupListResume.Text = 'Continue / update'
-$btnBackupListResume.Location = New-Object System.Drawing.Point(342, 2)
-$btnBackupListResume.Size = New-Object System.Drawing.Size(134, 26)
-$pnlBackupListButtons.Controls.Add($btnBackupListResume)
-
-$btnBackupListDelete = New-Object System.Windows.Forms.Button
-$btnBackupListDelete.Text = 'Delete ...'
-$btnBackupListDelete.Location = New-Object System.Drawing.Point(480, 2)
-$btnBackupListDelete.Size = New-Object System.Drawing.Size(90, 26)
-$pnlBackupListButtons.Controls.Add($btnBackupListDelete)
-$toolTip.SetToolTip($btnBackupListDelete, 'Deletes the selected backup from this PC, after asking. There is no undoing it, and the phone is not touched')
-$toolTip.SetToolTip($btnBackupListResume, 'Carries a backup that stopped part way on from where it got to, or brings a finished one up to date - either way only what is missing or changed is fetched. For a backup kept as a folder; it works after the program has been closed and opened again')
+# Showing one in Explorer, carrying one on and deleting one are on the list's
+# own right-click menu, not on buttons: two rows of buttons here had two of
+# them saying "Show in Explorer", which is one row too many either way.
 
 $tabBackupInside = New-Object System.Windows.Forms.TabPage
 $tabBackupInside.Text = 'What is inside'
@@ -4428,8 +4471,15 @@ function Update-DeviceList {
                 if ($found.Count -gt 1) { $script:busyWhat = "reading phone $readIndex of $($found.Count)" }
                 $check = Invoke-DeviceShell -Serial $device.Serial -CommandArguments @('pm', 'list', 'packages', $packageName)
                 $installed = if ($check.Text -match [regex]::Escape("package:$packageName")) { 'yes' } else { 'no' }
-                $release = (Invoke-DeviceShell -Serial $device.Serial -CommandArguments @('getprop', 'ro.build.version.release')).Text.Trim()
+                # both answers in one trip: the make is for the square beside
+                # the status line, and a model code like 23108RN04Y says nothing
+                $props = @((Invoke-DeviceShell -Serial $device.Serial -CommandArguments @(
+                    'getprop ro.build.version.release; getprop ro.product.manufacturer')).Lines)
+                $release = "$($props[0])".Trim()
                 if (-not $release) { $release = '-' }
+                if ($props.Count -gt 1 -and "$($props[1])".Trim()) {
+                    $script:deviceMakers[$device.Serial] = "$($props[1])".Trim()
+                }
             }
 
             $item = New-Object System.Windows.Forms.ListViewItem($device.Serial)
@@ -6199,7 +6249,77 @@ function Get-SignalLine {
     return ($parts -join '  |  ')
 }
 
+function Update-DeviceMarkUi {
+    # the square beside the status line: the make of the phone picked
+    $make = $null
+    if ($lstDevices.SelectedItems.Count -gt 0) {
+        $row = $lstDevices.SelectedItems[0]
+        $maker = $(if ($script:deviceMakers.ContainsKey($row.Text)) { $script:deviceMakers[$row.Text] } else { '' })
+        $make = Get-DeviceMake -Model $row.SubItems[2].Text -Serial $row.Text -Maker $maker
+    }
+    if ($null -eq $make) {
+        $lblDeviceMark.Font = $script:markGlyphFont
+        $lblDeviceMark.Text = [string][char]0xE8EA
+        $lblDeviceMark.BackColor = [System.Drawing.SystemColors]::Control
+        $lblDeviceMark.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+        $toolTip.SetToolTip($lblDeviceMark, 'a make this does not know')
+        return
+    }
+    $lblDeviceMark.Font = $script:markLetterFont
+    $lblDeviceMark.Text = $make.Letter
+    try {
+        $lblDeviceMark.BackColor = [System.Drawing.ColorTranslator]::FromHtml($make.Color)
+        $lblDeviceMark.ForeColor = [System.Drawing.Color]::White
+    } catch {
+        $lblDeviceMark.BackColor = [System.Drawing.SystemColors]::Control
+        $lblDeviceMark.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+    }
+    $toolTip.SetToolTip($lblDeviceMark, $make.Name)
+}
+
+function Get-LoadColor {
+    # what a number of that size should look like: quiet until it is worth
+    # looking at, orange when it is busy, red when it is nearly full. The same
+    # two thresholds Nova uses, and the orange the locked-screen line uses
+    param([int]$Percent)
+
+    if ($Percent -lt 0) { return [System.Drawing.Color]::DimGray }
+    if ($Percent -ge 90) { return [System.Drawing.Color]::FromArgb(176, 0, 32) }
+    if ($Percent -ge 70) { return [System.Drawing.Color]::FromArgb(176, 96, 0) }
+    return [System.Drawing.Color]::FromArgb(60, 60, 60)
+}
+
+function Update-DeviceLoadUi {
+    # the second row under the device list, on its own slow timer
+    param([switch]$Force)
+
+    $serial = Get-SelectedSerial
+    if (-not $serial -or $lstDevices.SelectedItems.Count -eq 0 -or
+        $lstDevices.SelectedItems[0].SubItems[4].Text -ne 'device') {
+        foreach ($one in @($lblDeviceCpu, $lblDeviceRam, $lblDeviceGpu)) { $one.Text = '' }
+        $script:loadSerial = ''
+        return
+    }
+    if (-not $Force -and $script:busy -gt 0) { return }
+    $load = Get-DeviceLoad -Serial $serial
+    # the phone can be changed while those three calls are in the air
+    if ((Get-SelectedSerial) -ne $serial) { return }
+    $script:loadSerial = $serial
+
+    $lblDeviceCpu.Text = 'CPU ' + $(if ("$($load.Cpu)") { $load.Cpu } else { '-' })
+    $lblDeviceRam.Text = 'RAM ' + $(if ("$($load.Ram)") { $load.Ram } else { '-' })
+    $lblDeviceGpu.Text = 'GPU ' + $load.Gpu
+    $lblDeviceCpu.ForeColor = Get-LoadColor -Percent $load.CpuUsed
+    $lblDeviceRam.ForeColor = Get-LoadColor -Percent $load.RamUsed
+    $lblDeviceGpu.ForeColor = Get-LoadColor -Percent $load.GpuUsed
+    # the row is narrow, so what does not fit in it is on the tooltip
+    foreach ($one in @($lblDeviceCpu, $lblDeviceRam, $lblDeviceGpu)) {
+        $toolTip.SetToolTip($one, ($one.Text + '  -  on ' + $serial))
+    }
+}
+
 function Update-DeviceStatus {
+    Update-DeviceMarkUi
     $serial = Get-SelectedSerial
     if (-not $serial -or $lstDevices.SelectedItems.Count -eq 0 -or
         $lstDevices.SelectedItems[0].SubItems[4].Text -ne 'device') {
@@ -10238,10 +10358,26 @@ function Update-RightLayout {
     # a short window gives the device list two rows instead of four: one phone
     # is the usual case, and every pixel here is one the pages below lack
     $listHeight = if ($height -lt 760) { 70 } else { 115 }
-    $grpDevices.SetBounds(20, 6, ($width - 26), ($listHeight + 56))
+    # two rows under the list now: battery and signal, then what the phone is
+    # doing with itself. The second row costs 22 px of the pages below, which
+    # is why the box keeps no slack of its own any more.
+    $grpDevices.SetBounds(20, 6, ($width - 26), ($listHeight + 74))
     $lstDevices.Height = $listHeight
+    $statusTop = 22 + $listHeight + 6
+    $lblDeviceMark.SetBounds(14, ($statusTop - 1), 22, 22)
     # as wide as the list, so it never runs under the buttons beside it
-    $lblDeviceStatus.SetBounds(14, (22 + $listHeight + 6), ($lstDevices.Width - 2), 20)
+    $lblDeviceStatus.SetBounds(40, $statusTop, [Math]::Max(80, ($lstDevices.Width - 28)), 20)
+    # the readings share the row with the clipboard line, which keeps its place
+    # at the right end of the list and gives what is left over to the rest
+    $loadTop = $statusTop + 22
+    $clipWidth = [Math]::Min(214, [Math]::Max(90, [int]($lstDevices.Width / 4)))
+    $clipLeft = (12 + $lstDevices.Width) - $clipWidth
+    $lblClipLink.SetBounds($clipLeft, $loadTop, $clipWidth, 20)
+    $loadRoom = [Math]::Max(90, $clipLeft - 52)
+    $lblDeviceCpu.SetBounds(40, $loadTop, [int]($loadRoom * 0.26), 20)
+    $lblDeviceRam.SetBounds(($lblDeviceCpu.Bounds.Right + 6), $loadTop, [int]($loadRoom * 0.42), 20)
+    $lblDeviceGpu.SetBounds(($lblDeviceRam.Bounds.Right + 6), $loadTop,
+        [Math]::Max(60, ($clipLeft - 6) - ($lblDeviceRam.Bounds.Right + 6)), 20)
     Update-DeviceColumns
     $tabsTop = $grpDevices.Bottom + 6
 
@@ -10763,6 +10899,68 @@ function Invoke-ButtonClick {
     $box = [object[]]::new(1)
     $box[0] = [System.EventArgs]::Empty
     $null = $method.Invoke($Button, $box)
+}
+
+function Set-ListMenuState {
+    # what a right-click menu looks like when it opens: nothing picked, or
+    # something else going on, and every entry on it is dead
+    param($Menu)
+
+    $picked = ($Menu.SourceControl -and $Menu.SourceControl.SelectedItems.Count -gt 0)
+    $allowed = $true
+    if ($Menu.Tag) { $allowed = [bool](& $Menu.Tag) }
+    foreach ($entry in $Menu.Items) {
+        if ($entry.Tag) { $entry.Enabled = ($picked -and $allowed) }
+    }
+}
+
+function Add-ListActionMenu {
+    <#
+        A right-click menu for a list whose actions have no buttons of their
+        own. Add-ListContextMenu mirrors buttons, which is the right thing
+        where the buttons are there to be mirrored; this is for the actions
+        that live only on the menu, and each entry carries what it does.
+
+        Actions: @{ Text = 'Open this one'; Do = { ... } }, or $null for a
+        separator. Every entry is greyed when nothing is picked, and When -
+        if it is given - says what else has to be true: a menu is as able to
+        delete a backup in the middle of a run as a button is.
+    #>
+    param($List, $Actions, [scriptblock]$When)
+
+    $menu = New-Object System.Windows.Forms.ContextMenuStrip
+    foreach ($action in $Actions) {
+        if ($null -eq $action) {
+            $null = $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+            continue
+        }
+        $entry = $menu.Items.Add([string]$action.Text)
+        $entry.Tag = $action.Do
+        $entry.Add_Click({
+            param($sender, $eventArgs)
+            if ($sender.Tag) { & $sender.Tag }
+        })
+    }
+
+    $menu.Tag = $When
+    $menu.Add_Opening({
+        param($sender, $eventArgs)
+        Set-ListMenuState -Menu $sender
+    })
+
+    # right-clicking a row that is not selected should pick it first
+    $List.Add_MouseDown({
+        param($sender, $eventArgs)
+        if ($eventArgs.Button -ne [System.Windows.Forms.MouseButtons]::Right) { return }
+        $hit = $sender.HitTest($eventArgs.X, $eventArgs.Y)
+        if ($hit.Item -and -not $hit.Item.Selected) {
+            $sender.SelectedItems.Clear()
+            $hit.Item.Selected = $true
+        }
+    })
+
+    $List.ContextMenuStrip = $menu
+    return $menu
 }
 
 function Add-ListContextMenu {
@@ -11970,6 +12168,7 @@ $statusTimer.Add_Tick({
         else { Set-ToggleMarks $null; $script:toggleSerial = $null }
     }
     Update-DeviceStatus
+    if ($selected -and $selected -ne $script:loadSerial) { Update-DeviceLoadUi }
 })
 
 # --- timer: the busy strip under the pages -----------------------------------
@@ -12035,6 +12234,13 @@ $runningTimer.Add_Tick({
     $runningTimer.Stop()
     try { Update-RunningList } finally { if ($chkRunningAuto.Checked) { $runningTimer.Start() } }
 })
+
+# --- timer: what the phone is doing with itself ------------------------------
+# six seconds, because three adb calls for numbers nobody is waiting on should
+# not be made any more often than that
+$loadTimer = New-Object System.Windows.Forms.Timer
+$loadTimer.Interval = 6000
+$loadTimer.Add_Tick({ Update-DeviceLoadUi })
 
 $screenTimer = New-Object System.Windows.Forms.Timer
 $screenTimer.Interval = 2000
@@ -12418,6 +12624,15 @@ $clipboardTimer.Add_Tick({
 
 $btnClipStart.Add_Click({ Start-ClipboardSharing })
 $btnClipStop.Add_Click({ Stop-ClipboardSharing })
+# The line at the right of the device box: the page on a click, on or off on a
+# right-click. Both are read off the same MouseUp rather than one of them from
+# Click, because a Label raises Click for either button and the two gestures
+# would then run together on one press.
+$lblClipLink.Add_MouseUp({
+    param($sender, $click)
+    if ($click.Button -eq [System.Windows.Forms.MouseButtons]::Right) { Switch-ClipboardSharing; return }
+    if ($click.Button -eq [System.Windows.Forms.MouseButtons]::Left) { Show-ClipboardPage }
+})
 $btnClipSend.Add_Click({ Send-ClipboardNow })
 $btnClipTake.Add_Click({ Receive-ClipboardNow })
 $btnClipCopy.Add_Click({ Copy-ClipboardRow })
@@ -13079,7 +13294,7 @@ function Set-BackupBusyUi {
     $btnBackupCancel.Enabled = $Running
     foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps,
         $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse,
-        $btnBackupAppsAll, $btnBackupAppsNone, $btnBackupListResume, $btnBackupListDelete,
+        $btnBackupAppsAll, $btnBackupAppsNone,
         $cmbBackupUser)) {
         $control.Enabled = -not $Running
     }
@@ -13650,6 +13865,8 @@ function Update-ClipboardUi {
     $btnClipStop.Enabled = $on
     if (-not $on) {
         $lblClipState.Text = 'Not sharing.'
+        $lblClipLink.Text = 'clipboard off'
+        $lblClipLink.ForeColor = [System.Drawing.Color]::DimGray
         return
     }
     $words = @()
@@ -13658,6 +13875,8 @@ function Update-ClipboardUi {
         $words += "$who ($(Get-ClipboardRouteShort -Route $share.Route))"
     }
     $lblClipState.Text = 'Sharing with ' + ($words -join ', ')
+    $lblClipLink.Text = $(if ($shares.Count -eq 1) { 'clipboard on' } else { "clipboard on, $($shares.Count) phones" })
+    $lblClipLink.ForeColor = [System.Drawing.Color]::FromArgb(0, 120, 60)
 }
 
 function Add-ClipboardRows {
@@ -13719,6 +13938,19 @@ function Stop-ClipboardSharing {
     Update-ClipboardUi
 }
 
+function Show-ClipboardPage {
+    # what the line at the right of the device box does on a left click
+    $tabs.SelectedTab = $tabAdvanced
+    $tabsAdvanced.SelectedTab = $tabClipboard
+    Update-ClipboardUi
+    Update-ClipboardList
+}
+
+function Switch-ClipboardSharing {
+    # and on a right click: on if it is off, off if it is on
+    if (Test-ClipboardSharing) { Stop-ClipboardSharing } else { Start-ClipboardSharing }
+}
+
 function Send-ClipboardNow {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -13754,12 +13986,18 @@ $btnRestoreContacts.Add_Click({ Start-RestoreContacts })
 $btnBackupOpenFolder.Add_Click({ Show-BackupInExplorer })
 $btnBackupListRefresh.Add_Click({ Update-BackupList })
 $btnBackupListOpen.Add_Click({ Open-BackupFromList })
-$btnBackupListShow.Add_Click({ Show-BackupPickedInExplorer })
-$btnBackupListResume.Add_Click({ Resume-BackupFromList })
-$btnBackupListDelete.Add_Click({ Remove-BackupPicked })
+
 $btnBackupWhereBrowse.Add_Click({ Select-BackupFolder })
 $btnBackupSaveCopy.Add_Click({ Save-BackupPickedFiles })
 $lstBackupList.Add_DoubleClick({ Open-BackupFromList })
+# what a backup in the list can have done to it: on the right mouse button,
+# because a second row of buttons here said "Show in Explorer" twice over
+$script:backupListMenu = Add-ListActionMenu -List $lstBackupList -When { -not (Test-BackupRunning) } -Actions @(
+    @{ Text = 'Open this one';    Do = { Open-BackupFromList } }
+    @{ Text = 'Show in Explorer'; Do = { Show-BackupPickedInExplorer } }
+    @{ Text = 'Continue / update'; Do = { Resume-BackupFromList } }
+    $null
+    @{ Text = 'Delete ...';       Do = { Remove-BackupPicked } })
 $btnBackupAppsAll.Add_Click({ Set-BackupAppTicks -On $true })
 $btnBackupAppsNone.Add_Click({ Set-BackupAppTicks -On $false })
 # a tick is kept by package, so filtering the list does not move it to another app
@@ -13955,6 +14193,7 @@ $form.Add_FormClosing({
     }
     $screenTimer.Stop()
     $runningTimer.Stop()
+    $loadTimer.Stop()
     # the clipboard watch may be holding a scrcpy connection open
     $clipboardTimer.Stop()
     Stop-AllClipboardShares
@@ -13970,6 +14209,7 @@ $form.Add_Shown({
     Write-Log "AndroidDC $appVersion" $colorInfo
     $busyTimer.Start()
     $deviceWatchTimer.Start()
+    $loadTimer.Start()
     Write-Log "adb:       $($script:adbPath)" $colorInfo
     Write-Log "gnirehtet: $($script:gnirehtetPath)" $colorInfo
     Write-Log ("scrcpy:    " + $(if ($script:scrcpyPath) { $script:scrcpyPath } else { 'not found' })) $colorInfo

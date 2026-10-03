@@ -6,6 +6,14 @@
 $TestOut = Join-Path $env:TEMP 'androiddc-nova-tests'
 if (-not (Test-Path -LiteralPath $TestOut)) { $null = New-Item -ItemType Directory -Path $TestOut }
 
+# What the phone is doing with itself is read on a timer of its own, against
+# whichever phone is picked - which in a test is the real one plugged in. Three
+# pages mock adb and then check that nothing reached a real phone, and a tick
+# landing inside that stretch counted as a leak; one timing test was thrown by
+# it as well. No test is about that timer, so it is stopped for all of them;
+# the ones that want the readings call Update-DeviceLoad -Force themselves.
+if ($script:loadTimer) { $script:loadTimer.Stop() }
+
 function Say {
     param([string]$Text)
     Write-Host $Text
