@@ -58,6 +58,7 @@ Update-Splash -Text 'Reading the shared parts ...' -Percent 10
 . (Join-Path $scriptRoot 'shared\Tray.ps1')
 . (Join-Path $scriptRoot 'shared\Backup.ps1')
 . (Join-Path $scriptRoot 'shared\Erase.ps1')
+. (Join-Path $scriptRoot 'shared\Contacts.ps1')
 . (Join-Path $scriptRoot 'shared\Clipboard.ps1')
 . (Join-Path $scriptRoot 'shared\Ftp.ps1')
 . (Join-Path $scriptRoot 'shared\FtpClassicPage.ps1')
@@ -3800,6 +3801,15 @@ $lblBusy.Size = New-Object System.Drawing.Size(200, 20)
 $lblBusy.Visible = $false
 $splitMain.Panel2.Controls.Add($lblBusy)
 
+# Cancel belongs where the work is said to be running, not on one page: there
+# was no way at all to stop a contacts delete once it had started.
+$btnBusyCancel = New-Object System.Windows.Forms.Button
+$btnBusyCancel.Text = 'Cancel'
+$btnBusyCancel.Size = New-Object System.Drawing.Size(58, 22)
+$btnBusyCancel.Visible = $false
+$splitMain.Panel2.Controls.Add($btnBusyCancel)
+$toolTip.SetToolTip($btnBusyCancel, 'Stops the backup, restore or delete that is running, after the step it is on')
+
 $txtLog = New-Object System.Windows.Forms.RichTextBox
 $txtLog.ReadOnly = $true
 $txtLog.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 24)
@@ -4370,7 +4380,8 @@ $toolTip.SetToolTip($btnBackupOpen, 'Pick the .zip file a backup is')
 
 $pnlBackupButtons = New-Object System.Windows.Forms.Panel
 $pnlBackupButtons.Dock = 'Bottom'
-$pnlBackupButtons.Height = 34
+# two rows: what goes back on the first, the call log and messages on the second
+$pnlBackupButtons.Height = 66
 $grpBackupRestore.Controls.Add($pnlBackupButtons)
 
 $btnRestoreFiles = New-Object System.Windows.Forms.Button
@@ -4391,7 +4402,21 @@ $btnRestoreContacts.Text = 'Restore contacts'
 $btnRestoreContacts.Location = New-Object System.Drawing.Point(292, 4)
 $btnRestoreContacts.Size = New-Object System.Drawing.Size(130, 26)
 $pnlBackupButtons.Controls.Add($btnRestoreContacts)
-$toolTip.SetToolTip($btnRestoreContacts, 'Adds the contacts this phone does not have; messages and the call log cannot be written by adb')
+$toolTip.SetToolTip($btnRestoreContacts, "Adds the contacts this phone does not have, into the phone's own contacts; nothing to tap")
+
+$btnRestoreMessages = New-Object System.Windows.Forms.Button
+$btnRestoreMessages.Text = 'Restore messages'
+$btnRestoreMessages.Location = New-Object System.Drawing.Point(10, 36)
+$btnRestoreMessages.Size = New-Object System.Drawing.Size(130, 26)
+$pnlBackupButtons.Controls.Add($btnRestoreMessages)
+$toolTip.SetToolTip($btnRestoreMessages, 'Puts the text messages back; the ones the phone already has are left alone')
+
+$btnRestoreCalls = New-Object System.Windows.Forms.Button
+$btnRestoreCalls.Text = 'Restore calls'
+$btnRestoreCalls.Location = New-Object System.Drawing.Point(146, 36)
+$btnRestoreCalls.Size = New-Object System.Drawing.Size(140, 26)
+$pnlBackupButtons.Controls.Add($btnRestoreCalls)
+$toolTip.SetToolTip($btnRestoreCalls, 'Puts the call log back, read, so no old call shows up as missed')
 
 $btnBackupOpenFolder = New-Object System.Windows.Forms.Button
 $btnBackupOpenFolder.Text = 'Show the open one'
@@ -4546,11 +4571,15 @@ function Update-BusyIndicator {
             $lblBusy.Visible = $true
             $form.Cursor = [System.Windows.Forms.Cursors]::AppStarting
         }
+        # only a run that notices between its steps gets a button, because
+        # only that one can honour it
+        $btnBusyCancel.Visible = (Test-BackupRunning)
     } else {
         $script:busySince = $null
         if ($prgBusy.Visible) {
             $prgBusy.Visible = $false
             $lblBusy.Visible = $false
+            $btnBusyCancel.Visible = $false
             $form.Cursor = [System.Windows.Forms.Cursors]::Default
         }
     }
@@ -6955,16 +6984,26 @@ function Remove-Contact {
     $items = @($lstContacts.SelectedItems)
     if ($items.Count -eq 0) { Write-Log 'Pick a contact first.' $colorWarn; return }
 
-    $names = ($items | ForEach-Object { "$($_.Text)  $($_.SubItems[1].Text)" }) -join [Environment]::NewLine
+    $rows = @($items | ForEach-Object {
+        [PSCustomObject]@{ Name = $_.Text; Number = $_.SubItems[1].Text; RawId = $_.SubItems[3].Text } })
     $answer = [System.Windows.Forms.MessageBox]::Show(
-        "Delete these contacts from the phone?" + [Environment]::NewLine + $names, 'Delete', 'YesNo', 'Warning')
+        (Get-ContactDeleteQuestion -Items $rows), 'Delete', 'YesNo', 'Warning')
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
 
-    foreach ($item in $items) {
-        $rawId = $item.SubItems[3].Text
-        $null = Invoke-DeviceShellText -Serial $serial -Command (
-            "content delete --uri content://com.android.contacts/raw_contacts --where ""_id=$rawId""")
-        Write-Log "Deleted contact raw id $rawId." $colorWarn
+    $ids = @($rows | ForEach-Object { "$($_.RawId)" })
+    Write-Log "Deleting $($ids.Count) contact(s) from $serial ..." $colorStep
+    Start-BackupRun
+    try {
+        $gone = Remove-PhoneContacts -Serial $serial -RawIds $ids
+    } finally {
+        Complete-BackupRun
+    }
+    if ($gone.Stopped) {
+        Write-Log "Stopped: $($gone.Deleted) contact(s) went before it was cancelled." $colorWarn
+    } elseif ($gone.Failed -gt 0) {
+        Write-Log "Deleted $($gone.Deleted) contact(s) in $($gone.Calls) call(s); $($gone.Failed) call(s) were refused." $colorWarn
+    } else {
+        Write-Log "Deleted $($gone.Deleted) contact(s) in $($gone.Calls) call(s)." $colorGood
     }
     Update-ContactList
 }
@@ -10448,9 +10487,10 @@ function Update-RightLayout {
         $txtLogFind.SetBounds(($width - 232), $rowTop, 1, 1)
     }
     $prgBusy.SetBounds(266, ($rowTop + 8), 90, 12)
+    $btnBusyCancel.SetBounds(364, ($rowTop + 3), 58, 22)
     # what is running is named up to where the find box starts
     $busyRight = if ($txtLogFind.Visible) { $script:logFindLeft - 50 } else { $width - 234 }
-    $lblBusy.SetBounds(364, ($rowTop + 5), [Math]::Max(40, ($busyRight - 364)), 20)
+    $lblBusy.SetBounds(428, ($rowTop + 5), [Math]::Max(40, ($busyRight - 428)), 20)
     $pnlLogGrip.SetBounds(20, ($rowTop - 8), ($width - 26), 6)
     $tabs.SetBounds(20, $tabsTop, ($width - 26), ($rowTop - 8 - $tabsTop))
 
@@ -13310,7 +13350,7 @@ function Set-BackupBusyUi {
 
     $btnBackupCancel.Enabled = $Running
     foreach ($control in @($btnBackupRun, $btnBackupOpen, $btnRestoreFiles, $btnRestoreApps,
-        $btnRestoreContacts, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse,
+        $btnRestoreContacts, $btnRestoreMessages, $btnRestoreCalls, $btnBackupSaveCopy, $btnBackupListOpen, $btnBackupWhereBrowse,
         $btnBackupAppsAll, $btnBackupAppsNone,
         $cmbBackupUser)) {
         $control.Enabled = -not $Running
@@ -13850,6 +13890,22 @@ function Start-RestoreContacts {
     }
 }
 
+function Start-RestoreWriter {
+    # the messages or the call log out of the opened backup, back onto the phone
+    param([ValidateSet('messages', 'calls')][string]$Kind)
+
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
+    Set-BackupBusyUi -Running $true
+    try {
+        if ($Kind -eq 'messages') { $null = Restore-BackupMessages -Source $script:backupSource -Serial $serial }
+        else { $null = Restore-BackupCalls -Source $script:backupSource -Serial $serial }
+    } finally {
+        Set-BackupBusyUi -Running $false
+    }
+}
+
 function Show-BackupPathInExplorer {
     # a file is picked out in its folder; a folder is opened
     param([string]$Path)
@@ -13991,6 +14047,10 @@ function Copy-ClipboardRow {
     }
 }
 
+$btnBusyCancel.Add_Click({
+    Write-Log 'Stopping ...' $colorWarn
+    Stop-BackupRun -Reason 'you cancelled it'
+})
 $btnBackupRun.Add_Click({ Start-BackupNow })
 $btnBackupCancel.Add_Click({
     Write-Log 'Stopping ...' $colorWarn
@@ -14000,6 +14060,8 @@ $btnBackupOpen.Add_Click({ Open-BackupFile })
 $btnRestoreFiles.Add_Click({ Start-RestoreFiles })
 $btnRestoreApps.Add_Click({ Start-RestoreApps })
 $btnRestoreContacts.Add_Click({ Start-RestoreContacts })
+$btnRestoreMessages.Add_Click({ Start-RestoreWriter -Kind 'messages' })
+$btnRestoreCalls.Add_Click({ Start-RestoreWriter -Kind 'calls' })
 $btnBackupOpenFolder.Add_Click({ Show-BackupInExplorer })
 $btnBackupListRefresh.Add_Click({ Update-BackupList })
 $btnBackupListOpen.Add_Click({ Open-BackupFromList })

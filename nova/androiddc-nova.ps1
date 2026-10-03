@@ -103,6 +103,9 @@ if (Test-Path -LiteralPath $eraseScript -PathType Leaf) { . $eraseScript }
 # the clipboard shared between this PC and the phones
 $clipboardScript = Join-Path $script:toolsRoot 'shared\Clipboard.ps1'
 if (Test-Path -LiteralPath $clipboardScript -PathType Leaf) { . $clipboardScript }
+# deleting contacts in batches, and contacts as one vCard file the phone imports
+$contactsScript = Join-Path $script:toolsRoot 'shared\Contacts.ps1'
+if (Test-Path -LiteralPath $contactsScript -PathType Leaf) { . $contactsScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen

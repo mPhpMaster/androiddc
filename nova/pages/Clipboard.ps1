@@ -142,8 +142,6 @@ $ui.ClipboardTake.Add_Click({ Receive-ClipboardPageNow })
 $ui.ClipboardCopy.Add_Click({ Copy-ClipboardPageRow })
 $ui.ClipboardClear.Add_Click({ Clear-ClipboardEvents; Update-ClipboardPageList })
 $ui.ClipboardList.Add_MouseDoubleClick({ Copy-ClipboardPageRow })
-$ui.PillClipboard.Add_MouseLeftButtonUp({ Show-Page -Page 'clipboard' })
-$ui.PillClipboard.Add_MouseRightButtonUp({ Invoke-ClipboardHeaderToggle })
 
 # the watch may be holding a scrcpy connection open: it goes with the window
 Register-Cleanup {

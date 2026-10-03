@@ -173,7 +173,80 @@
           </Grid>
         </TabItem>
 
-        <TabItem x:Name="BackupTabInside" Header="What is inside">
+        <TabItem x:Name="BackupTabContacts" Header="Contacts">
+          <Grid Margin="0,4,0,0">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="BackupContactsWhat" Style="{StaticResource MutedLine}" TextWrapping="Wrap"
+                       Text="Open a backup to see the contacts in it."/>
+            <ListView x:Name="BackupContactsList" Grid.Row="1" Margin="0,8,0,0"
+                      ToolTip="The contacts this backup holds, as they will be put back">
+              <ListView.View>
+                <GridView>
+                  <GridViewColumn Header="NAME" Width="280" DisplayMemberBinding="{Binding Name}"/>
+                  <GridViewColumn Header="NUMBER" Width="220" DisplayMemberBinding="{Binding Number}"/>
+                  <GridViewColumn Header="WHERE IT WAS" Width="260" DisplayMemberBinding="{Binding From}"/>
+                </GridView>
+              </ListView.View>
+            </ListView>
+            <Grid Grid.Row="2" Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock x:Name="BackupContactsHow" VerticalAlignment="Center" Style="{StaticResource MutedLine}"
+                         TextWrapping="Wrap" Margin="0,0,14,0"
+                         Text="Into the phone's own contacts with nothing to tap, or into an account through the phone's import screen, which takes a tap there. Both take seconds."/>
+              <Button x:Name="BackupRestoreContacts" Grid.Column="1" Style="{StaticResource Primary}"
+                      Content="Restore contacts" VerticalAlignment="Center"
+                      ToolTip="Puts the contacts back; it asks which way first"/>
+            </Grid>
+          </Grid>
+        </TabItem>
+
+        <TabItem x:Name="BackupTabMessages" Header="Messages and calls">
+          <Grid Margin="0,4,0,0">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="BackupMessagesWhat" Style="{StaticResource MutedLine}" TextWrapping="Wrap"
+                       Text="Open a backup to see the messages and calls in it."/>
+            <ListView x:Name="BackupMessagesList" Grid.Row="1" Margin="0,8,0,0"
+                      ToolTip="What this backup holds of the messages and the call log">
+              <ListView.View>
+                <GridView>
+                  <GridViewColumn Header="WHAT" Width="140" DisplayMemberBinding="{Binding What}"/>
+                  <GridViewColumn Header="HOW MANY" Width="120" DisplayMemberBinding="{Binding Count}"/>
+                  <GridViewColumn Header="WHERE IT WAS" Width="300" DisplayMemberBinding="{Binding Path}"/>
+                </GridView>
+              </ListView.View>
+            </ListView>
+            <Grid Grid.Row="2" Margin="0,8,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock x:Name="BackupMessagesHow" VerticalAlignment="Center" Style="{StaticResource MutedLine}"
+                         TextWrapping="Wrap" Margin="0,0,14,0"
+                         Text="What the phone already has is left alone. The call log goes back read, so no old call shows up as missed."/>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="BackupSaveMessages" Content="Save to a file ..." Margin="0,0,8,0"
+                        ToolTip="Writes the messages and the call log out of the backup to a folder on this PC"/>
+                <Button x:Name="BackupRestoreCalls" Content="Restore calls" Margin="0,0,8,0"
+                        ToolTip="Puts the call log back on the phone; about 40 calls a second"/>
+                <Button x:Name="BackupRestoreMessages" Style="{StaticResource Primary}" Content="Restore messages"
+                        ToolTip="Puts the text messages back on the phone; about 13 a second"/>
+              </StackPanel>
+            </Grid>
+          </Grid>
+        </TabItem>
+
+        <TabItem x:Name="BackupTabInside" Header="Files">
           <Grid>
             <Grid.RowDefinitions>
               <RowDefinition Height="*"/>
@@ -201,13 +274,17 @@
                        ToolTip="Shows only the files whose path holds this text; empty it to see them all"/>
               <TextBlock x:Name="BackupInsideCount" Grid.Column="2" Margin="14,0,8,0" VerticalAlignment="Center"
                          Style="{StaticResource MutedLine}" TextTrimming="CharacterEllipsis" Text="Nothing open."/>
-              <Button x:Name="BackupSaveCopy" Grid.Column="3" Content="Save a copy ..."
-                      ToolTip="Writes the picked files out of the backup into a folder on this PC; no phone is needed"/>
+              <StackPanel Grid.Column="3" Orientation="Horizontal">
+                <Button x:Name="BackupSaveCopy" Content="Save a copy ..." Margin="0,0,8,0"
+                        ToolTip="Writes the picked files out of the backup into a folder on this PC; no phone is needed"/>
+                <Button x:Name="BackupRestoreFiles" Style="{StaticResource Primary}" Content="Restore files ..."
+                        ToolTip="Sends the files back to the phone; it asks first about the ones the phone already has"/>
+              </StackPanel>
             </Grid>
           </Grid>
         </TabItem>
 
-        <TabItem x:Name="BackupTabApps" Header="Apps to install">
+        <TabItem x:Name="BackupTabApps" Header="Apps">
           <Grid>
             <Grid.RowDefinitions>
               <RowDefinition Height="*"/>
@@ -231,29 +308,33 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
               </Grid.ColumnDefinitions>
               <TextBlock Text="Find:" VerticalAlignment="Center" Style="{StaticResource MutedLine}"/>
               <TextBox x:Name="BackupAppFind" Grid.Column="1" Width="180" Margin="8,0,0,0"
                        ToolTip="Shows only the apps whose name or package holds this text"/>
               <Button x:Name="BackupAppsMissing" Grid.Column="2" Margin="8,0,0,0" Content="Pick the missing ones"
                       ToolTip="Picks out every app in the backup that this phone does not have"/>
-              <TextBlock x:Name="BackupAppsCount" Grid.Column="3" Margin="14,0,0,0" VerticalAlignment="Center"
+              <TextBlock x:Name="BackupAppsCount" Grid.Column="3" Margin="14,0,14,0" VerticalAlignment="Center"
                          Style="{StaticResource MutedLine}" TextTrimming="CharacterEllipsis"
                          Text="Open a backup to see the apps in it."/>
+              <Button x:Name="BackupInstallApps" Grid.Column="4" Style="{StaticResource Primary}"
+                      Content="Install picked apps"
+                      ToolTip="Installs the apps ticked above; a split app goes in one call"/>
             </Grid>
           </Grid>
         </TabItem>
       </TabControl>
 
       <WrapPanel Grid.Row="3" Margin="0,8,0,0">
-        <Button x:Name="BackupRestoreFiles" Style="{StaticResource Primary}" Content="Restore files ..." Margin="0,4,8,0"
-                ToolTip="Sends the files back; it asks first about the ones the phone already has"/>
-        <Button x:Name="BackupInstallApps" Content="Install picked apps" Margin="0,4,8,0"
-                ToolTip="Installs the apps picked out under Apps to install; a split app goes in one call"/>
-        <Button x:Name="BackupRestoreContacts" Content="Restore contacts" Margin="0,4,8,0"
-                ToolTip="Adds the contacts this phone does not have; messages and the call log cannot be written by adb"/>
+        <Button x:Name="BackupRestoreAll" Style="{StaticResource Primary}" Content="Restore everything" Margin="0,4,8,0"
+                Visibility="Collapsed"
+                ToolTip="Puts back everything in the opened backup, one kind after another: contacts, then apps, then files. It says what it is about to do first"/>
         <Button x:Name="BackupShowFolder" Content="Show the open one" Margin="0,4,8,0"
-                ToolTip="Opens Explorer with the backup that is open above picked out - the one these buttons put back. The list has its own button for the row picked there"/>
+                ToolTip="Opens Explorer with the backup that is open above picked out. The list has its own button for the row picked there"/>
+        <TextBlock x:Name="BackupRestoreAllWhat" Margin="6,8,0,0" Style="{StaticResource MutedLine}"
+                   TextTrimming="CharacterEllipsis"
+                   Text="Open a backup, and each tab above puts its own part back."/>
       </WrapPanel>
     </Grid>
   </Border>

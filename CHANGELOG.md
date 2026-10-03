@@ -2,6 +2,58 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### A backup now goes back whole
+
+A backup took contacts, messages and the call log, and only the contacts went
+back: the messages and calls were "read-only, because adb cannot write them".
+That was said without being tried. Tried on the test phone, adb's shell **can**
+write the call log, and it can write messages once it allows itself to (the
+shell's `WRITE_SMS` app-op is `ignore`, and the shell may change its own). Both
+now go back, from both windows, and *Restore everything* includes them.
+
+The second problem was time. `content insert` is a shell script that starts a
+whole Java runtime for each row, about 1.5 s, which is nine hours for a phone's
+call log. So the rows go through a small writer instead (`android\restore`),
+run once by `app_process` the way the FTP server is, which hands the provider
+the whole file. Measured on a phone with 16,414 calls and 5,329 messages: 417 s
+and 416 s. A run twice adds nothing the second time - what the phone has (same
+number, time and kind) is left alone - and the calls go back read, so no old
+call rings a missed-call notice. The message permission is put back as it was
+after the run, whatever happens.
+
+Contacts go through the same writer: into the phone's own contacts in seconds,
+with nothing to tap. The other way stays, for contacts meant for a Google
+account: one vCard file and the phone's own import screen. On the test phone the
+writer found three contacts that import had merged away.
+
+### The backup page, one tab per kind
+
+Nova's backup page has a tab for each kind - *Contacts*, *Messages and calls*,
+*Files*, *Apps* - each showing what the backup holds and carrying its own
+button. Opening a backup brings up **Restore everything**, which says what it
+will put back before it does. A backup of a second space keeps its contacts
+under `users\<id>\`, and the restore looked only in `personal\`: a backup whose
+own header said 927 contacts was answered "this backup holds no contacts".
+
+### Smaller things
+
+* **Deleting contacts is one call per hundred, and can be stopped.** Deleting
+  every contact was one `content delete` - a Java runtime - per contact. Now
+  the ids go in batches (`_id IN (...)`), and the busy strip has a **Cancel**.
+* **A dialog no taller than the screen.** The delete question listed every
+  contact picked, and grew past the bottom of the screen with its buttons. The
+  list now scrolls inside a box at most 60% of the screen high.
+* **The right-click menu said `System.Windows.Controls.StackPanel`.** Its first
+  entry was named from a button whose content is an icon and words; the words
+  are read out of it now.
+* **Mirror in the header works from the start.** It was wired by the Mirroring
+  page, which is built when first opened, so until then it did nothing. The
+  window wires its own controls now, and an audit fails any page that does.
+* **The version is checked in both windows** against this file's newest
+  heading: the title, the log line, the splash and Nova's side panel.
+
 ## 1.6.1
 
 **Nothing in either window changes.** What this ships is 1.6.0 with its version

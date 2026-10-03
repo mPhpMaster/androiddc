@@ -145,15 +145,23 @@ function Remove-Contact {
     $items = @($ui.ContactsList.SelectedItems)
     if ($items.Count -eq 0) { Write-Log 'Pick a contact first.' $colorWarn; return }
 
-    $names = ($items | ForEach-Object { "$($_.Name)  $($_.Number)" }) -join [Environment]::NewLine
-    $sure = Show-Confirm -Title 'Delete' -Text ("Delete these contacts from the phone?" + [Environment]::NewLine + $names) -Yes 'Delete' -Danger
+    $sure = Show-Confirm -Title 'Delete' -Text (Get-ContactDeleteQuestion -Items $items) -Yes 'Delete' -Danger
     if (-not $sure) { return }
 
-    foreach ($item in $items) {
-        $rawId = $item.RawId
-        $null = Invoke-DeviceShellText -Serial $serial -Command (
-            "content delete --uri content://com.android.contacts/raw_contacts --where ""_id=$rawId""")
-        Write-Log "Deleted contact raw id $rawId." $colorWarn
+    $ids = @($items | ForEach-Object { "$($_.RawId)" })
+    Write-Log "Deleting $($ids.Count) contact(s) from $serial ..." $colorStep
+    Start-BackupRun
+    try {
+        $gone = Remove-PhoneContacts -Serial $serial -RawIds $ids
+    } finally {
+        Complete-BackupRun
+    }
+    if ($gone.Stopped) {
+        Write-Log "Stopped: $($gone.Deleted) contact(s) went before it was cancelled." $colorWarn
+    } elseif ($gone.Failed -gt 0) {
+        Write-Log "Deleted $($gone.Deleted) contact(s) in $($gone.Calls) call(s); $($gone.Failed) call(s) were refused." $colorWarn
+    } else {
+        Write-Log "Deleted $($gone.Deleted) contact(s) in $($gone.Calls) call(s)." $colorGood
     }
     Update-ContactList
 }

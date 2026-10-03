@@ -79,7 +79,31 @@ foreach ($file in $xamls) {
     }
 }
 
+Write-Host '== no page wires a control that belongs to the window =='
+# A page is built when it is opened. A handler a page puts on one of the
+# window's own controls therefore does not exist until someone has opened that
+# page by hand - and the header's Mirror button did nothing at all until they
+# had. Those controls are wired in lib\Ui.ps1, where they live.
+$shellNames = @{}
+$shellXaml = [IO.File]::ReadAllText((Join-Path $root 'ui\Shell.xaml'), [Text.Encoding]::UTF8)
+foreach ($match in [regex]::Matches($shellXaml, '\bx:Name="([A-Za-z_][A-Za-z0-9_]*)"')) {
+    $shellNames[$match.Groups[1].Value] = $true
+}
+foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $root 'pages') -Filter *.ps1 -File)) {
+    $relative = 'pages\' + $file.Name
+    $text = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
+    foreach ($match in [regex]::Matches($text, '\$ui\.([A-Za-z_][A-Za-z0-9_]*)\.Add_([A-Za-z]+)')) {
+        $control = $match.Groups[1].Value
+        if (-not $shellNames.ContainsKey($control)) { continue }
+        $line = ($text.Substring(0, $match.Index) -split "`n").Count
+        # -f binds tighter than +, so the sentence is joined before it is filled
+        Report ((("{0}:{1} wires {2}, which is the window's own control - " +
+            'wire it in lib\Ui.ps1, or it is dead until this page is opened')) -f $relative, $line, $control)
+    }
+}
+
 Write-Host '== every page says what it is, where that can be read without running it =='
+
 # The side navigation is built from these lines before any page is built, so a
 # page whose line stops matching would quietly lose its place in it.
 foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $root 'pages') -Filter *.ps1 -File)) {

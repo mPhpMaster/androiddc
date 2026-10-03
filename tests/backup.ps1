@@ -271,12 +271,25 @@ Say ("  an app out of the zip is installed from its unpacked APKs   {0}" -f (Mar
     $fromZipApps.Result.Installed -eq 1 -and $fromZipApps.Ran -match 'install-multiple -r' -and
     $fromZipApps.Read -eq 'not really an apk')))
 $contactsFromZip = & {
-    function Invoke-DeviceShell { param($Serial, $CommandArguments) return [PSCustomObject]@{ Lines = @(); Text = ''; ExitCode = 0 } }
-    function Invoke-DeviceCommand { param($Serial, $Arguments) return [PSCustomObject]@{ Lines = @(); Text = ''; ExitCode = 0 } }
-    Restore-BackupContacts -Source $zip -Serial 'ABC123'
+    function Invoke-DeviceShell { param($Serial, $CommandArguments) return [PSCustomObject]@{ Lines = @(); Text = '0'; ExitCode = 0 } }
+    function Invoke-BackupAdb {
+        param($ArgumentList, $Caption, $Expected, $OnPoll)
+        $given = @($ArgumentList)
+        if ($given[2] -eq 'push' -and $given[4] -like '*.json') { $script:sentJson = Get-Content -LiteralPath $given[3] -Raw }
+        if ($given[2] -eq 'shell') {
+            $script:ran = $given[3]
+            return [PSCustomObject]@{ ExitCode = 0; Text = "TOTAL 1`nDONE 1 0"; Stopped = $false }
+        }
+        return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pushed'; Stopped = $false }
+    }
+    $script:sentJson = ''
+    $script:ran = ''
+    $result = Restore-BackupContacts -Source $zip -Serial 'ABC123'
+    [PSCustomObject]@{ Result = $result; Json = $script:sentJson; Ran = $script:ran }
 }
-Say ("  the contacts in the zip are read: {0} tried   {1}" -f ($contactsFromZip.Added + $contactsFromZip.Failed),
-    (Mark (($contactsFromZip.Added + $contactsFromZip.Failed) -eq 1)))
+Say ("  the contacts in the zip go to the phone in one run of the writer: {0} added   {1}" -f $contactsFromZip.Result.Added,
+    (Mark ($contactsFromZip.Result.Added -eq 1 -and $contactsFromZip.Json -match 'Ada' -and
+        $contactsFromZip.Ran -match 'app_process /system/bin com\.androiddc\.RestoreWriter contacts ')))
 
 Say ''
 Say '== installing an app from a backup =='
@@ -288,6 +301,88 @@ $installed = & {
 }
 Say ("  a split app goes in one install-multiple: '{0}'   {1}" -f $installed.Ran,
     (Mark ($installed.Result.Installed -eq 1 -and $installed.Ran -match 'install-multiple -r' -and $installed.Ran -match 'base\.apk')))
+
+Say ''
+Say '== messages and the call log, put back =='
+# The writer (android\restore) is one Java run on the phone for the whole file:
+# "content insert" starts a Java runtime for every row, which measured nine
+# hours for a phone's call log. These check what it is handed and what is put
+# back around it, with a made-up phone.
+Say ("  the writer is there to be sent: {0}   {1}" -f (Split-Path (Get-RestoreWriterDex) -Leaf),
+    (Mark ((Get-RestoreWriterDex) -and (Test-Path -LiteralPath (Get-RestoreWriterDex)))))
+# a folder of its own: the list checks further down count what is in $work
+$talk = Join-Path $work 'talk\AndroidDC-backup-talk'
+Save-BackupText -Path (Join-Path $talk 'personal\messages.json') -Text (ConvertTo-Json -Depth 3 -InputObject @(
+    [PSCustomObject]@{ Number = '+1 555 0100'; When = '1790970346969'; Kind = '1'; Text = 'one' },
+    [PSCustomObject]@{ Number = '+1 555 0100'; When = '1790970346970'; Kind = '2'; Text = 'two' }))
+Save-BackupText -Path (Join-Path $talk 'personal\calls.json') -Text (ConvertTo-Json -Depth 3 -InputObject @(
+    [PSCustomObject]@{ Number = '+1 555 0100'; When = '1701881282192'; Seconds = '19'; Kind = '2' }))
+Save-BackupText -Path (Join-Path $talk 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+    Format = 2; Serial = 'ABC123'; Model = 'Redmi 13C'; Android = '15'; Created = '2026-10-03T11:07:51'
+    Parts = @('personal'); Personal = [PSCustomObject]@{ Contacts = 0; Messages = 2; Calls = 1 }
+    Apps = @(); Settings = @(); Bytes = 10; Complete = $true; Stopped = ''
+}))
+
+function Invoke-TalkRestore {
+    # one restore against a made-up phone, and everything it said to it
+    param([string]$Kind, [string]$Says = '', [string]$Source = $talk)
+    & {
+        function Invoke-DeviceShell {
+            param($Serial, $CommandArguments)
+            $line = "$CommandArguments"
+            $script:shell += ,$line
+            $text = ''
+            if ($line -match 'appops get') { $text = 'WRITE_SMS: ignore; rejectTime=+1s ago' }
+            elseif ($line -match 'get-current-user') { $text = '10' }
+            return [PSCustomObject]@{ Lines = @(); Text = $text; ExitCode = 0 }
+        }
+        function Invoke-BackupAdb {
+            param($ArgumentList, $Caption, $Expected, $OnPoll)
+            $given = @($ArgumentList)
+            if ($given[2] -eq 'push') {
+                $script:pushed += ,$given[4]
+                if ($given[4] -like '*.json') { $script:sentJson = Get-Content -LiteralPath $given[3] -Raw }
+                return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pushed'; Stopped = $false }
+            }
+            $script:shell += ,('writer: ' + $given[3])
+            return [PSCustomObject]@{ ExitCode = 0; Text = $Says; Stopped = $false }
+        }
+        $script:shell = @()
+        $script:pushed = @()
+        $script:sentJson = ''
+        $result = $(if ($Kind -eq 'messages') { Restore-BackupMessages -Source $Source -Serial 'ABC123' }
+            else { Restore-BackupCalls -Source $Source -Serial 'ABC123' })
+        [PSCustomObject]@{ Result = $result; Shell = @($script:shell); Pushed = @($script:pushed); Json = $script:sentJson }
+    }
+}
+
+$sms = Invoke-TalkRestore -Kind 'messages' -Says "TOTAL 2`nDONE 2 0"
+$order = @($sms.Shell | ForEach-Object { if ($_ -match '^appops (get|set com\.android\.shell WRITE_SMS \w+)') { $Matches[0] } elseif ($_ -like 'writer:*') { 'writer' } })
+Say ("  messages: {0} added, around the writer: {1}" -f $sms.Result.Added, ($order -join ' > '))
+Say ("  the shell may write messages for the run, and is put back as it was after   {0}" -f (Mark (
+    $sms.Result.Added -eq 2 -and
+    ($order -join '|') -eq 'appops get|appops set com.android.shell WRITE_SMS allow|writer|appops set com.android.shell WRITE_SMS ignore')))
+Say ("  the writer is handed both messages, for the user on the phone now (10)   {0}" -f (Mark (
+    $sms.Json -match '"one"' -and $sms.Json -match '"two"' -and
+    (@($sms.Shell | Where-Object { $_ -like 'writer:*' }) -join '') -match 'RestoreWriter messages /data/local/tmp/androiddc-restore-messages\.json 10 ')))
+Say ("  the writer and the file are taken off the phone after   {0}" -f (Mark (
+    @($sms.Shell | Where-Object { $_ -match '^rm -f .*androiddc-restore-messages\.json .*androiddc-restore\.dex' }).Count -eq 1)))
+
+$calls = Invoke-TalkRestore -Kind 'calls' -Says "TOTAL 1`nDONE 0 1"
+Say ("  calls: {0} added, {1} already there, and messages' permission is not touched   {2}" -f $calls.Result.Added,
+    $calls.Result.Skipped, (Mark (
+        $calls.Result.Added -eq 0 -and $calls.Result.Skipped -eq 1 -and -not $calls.Result.Error -and
+        @($calls.Shell | Where-Object { $_ -match 'appops' }).Count -eq 0)))
+
+$refused = Invoke-TalkRestore -Kind 'messages' -Says 'java.lang.SecurityException: Permission Denial: writing sms'
+Say ("  a writer that is refused says why: '{0}'   {1}" -f $refused.Result.Error, (Mark (
+    $refused.Result.Added -eq 0 -and $refused.Result.Error -match 'SecurityException')))
+Say ("  and the permission is still put back   {0}" -f (Mark (
+    @($refused.Shell | Where-Object { $_ -eq 'appops set com.android.shell WRITE_SMS ignore' }).Count -eq 1)))
+
+$none = Invoke-TalkRestore -Kind 'calls' -Says 'never asked' -Source $folder
+Say ("  a backup with no call log sends nothing to the phone   {0}" -f (Mark (
+    $none.Result.Added -eq 0 -and $none.Pushed.Count -eq 0 -and $none.Shell.Count -eq 0)))
 
 Say ''
 Say '== a backup of six thousand files, opened =='

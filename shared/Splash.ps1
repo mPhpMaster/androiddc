@@ -24,6 +24,7 @@
 $script:splashForm = $null
 $script:splashLabel = $null
 $script:splashBar = $null
+$script:splashWhat = $null
 
 function Show-Splash {
     <#
@@ -118,6 +119,7 @@ function Show-Splash {
         $script:splashForm = $form
         $script:splashLabel = $line
         $script:splashBar = $bar
+        $script:splashWhat = $what
         $form.Show()
         $form.Refresh()
         [System.Windows.Forms.Application]::DoEvents()
@@ -125,6 +127,7 @@ function Show-Splash {
         $script:splashForm = $null
         $script:splashLabel = $null
         $script:splashBar = $null
+        $script:splashWhat = $null
     }
 }
 
@@ -160,6 +163,7 @@ function Close-Splash {
     $script:splashForm = $null
     $script:splashLabel = $null
     $script:splashBar = $null
+    $script:splashWhat = $null
 }
 
 function Test-SplashShown {
@@ -167,11 +171,21 @@ function Test-SplashShown {
 }
 
 function Get-SplashState {
-    # for a test: what it says, and how far along the bar is, in percent
+    <#
+        For a test: what it says, how far along the bar is in percent, and the
+        line above it, which carries the version. That line was on screen
+        before either window drew anything and nothing checked it, so a
+        release with the number raised in one window and not the other would
+        have shown the wrong one here and gone unnoticed.
+    #>
     if (-not $script:splashForm) { return $null }
     $far = 0
     if ($script:splashBar -and $script:splashBar.Parent.Width -gt 0) {
         $far = [int](100.0 * $script:splashBar.Width / $script:splashBar.Parent.Width)
     }
-    return [PSCustomObject]@{ Text = "$($script:splashLabel.Text)"; Percent = $far }
+    return [PSCustomObject]@{
+        Text    = "$($script:splashLabel.Text)"
+        Percent = $far
+        Title   = $(if ($script:splashWhat) { "$($script:splashWhat.Text)" } else { '' })
+    }
 }

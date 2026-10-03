@@ -86,3 +86,10 @@ Every test gets all eighteen pages built at startup, because a test calls into
 a page without opening it. `pages-late` is the exception: it runs the way a
 person gets the window - pages built when they are opened - and opens all
 eighteen one after another.
+
+`version` is the one test that is the same question in both windows: the number
+on screen, read off the running window and compared against the newest heading
+in `CHANGELOG.md`, in all three places this window shows it - the splash, the
+side navigation and the activity log. The classic window has its own copy of it.
+There is a release behind that test: 1.6.1 moved the number in both windows, and
+nothing would have caught it had only one of them moved.

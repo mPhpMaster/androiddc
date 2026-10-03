@@ -168,6 +168,4 @@ $ui.FtpTest.Add_Click({ Invoke-NovaFtpAction -Action Test })
 $ui.FtpExplorer.Add_Click({ Invoke-NovaFtpAction -Action Explorer })
 $ui.FtpCopy.Add_Click({ Invoke-NovaFtpAction -Action Copy })
 $ui.FtpRemoveCompanion.Add_Click({ Invoke-NovaFtpAction -Action Remove })
-$ui.PillFtp.Add_MouseLeftButtonUp({ Show-Page -Page 'ftp' })
-$ui.PillFtp.Add_MouseRightButtonUp({ Invoke-FtpHeaderToggle })
 Update-FtpPage

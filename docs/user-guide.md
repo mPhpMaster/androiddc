@@ -507,8 +507,10 @@ unpacked whole: each file is taken out of the zip, sent, and dropped again.
   app, so a backup read a year later says *WhatsApp*, not `com.whatsapp`, even for an app that
   phone no longer has. Backups taken before this hold no names, and show packages.
 * **Restore contacts** adds the contacts the phone does not have, matched by name and number,
-  so running it twice adds nothing twice. Messages and the call log are not put back: Android
-  has no way for adb to write them.
+  into the phone's own contacts, with nothing to tap; running it twice adds nothing twice.
+* **Restore messages** and **Restore calls** put the text messages and the call log back, leaving
+  alone what the phone already has. The calls go back read, so none shows up as missed. Both take
+  minutes for a full phone - about 13 messages and 40 calls a second.
 * **Show the open one** opens the folder with the backup that is open picked out - the one you
   opened, not whichever line is highlighted in the list. For that one, right-click the line.
 

@@ -225,9 +225,15 @@ remove the app on the phone first if you want the backup's version. `INSTALL_FAI
 means the app on the phone was signed by someone else - a different build of the same app -
 and removing it takes its data with it.
 
-**Contacts came back but messages did not.** Android has no way for adb to write messages or
-the call log. They are saved in the backup (`personal\messages.json`, `calls.json`) to read and
-to keep, and contacts are the only part that goes back on a phone.
+**Messages say they went back, but the messages app shows none.** Android lets only the
+default messaging app write a message, and drops anyone else's without a word. The restore
+allows adb's shell to write them for the run and puts that back after; if a ROM refuses even
+that, the log says *the messages did not go back* with the phone's own reason. Some messaging
+apps read the list once and need to be closed and opened again to show what was added.
+
+**Restoring messages or calls takes minutes.** About 40 calls and 13 messages a second, measured:
+a phone's worth is several minutes, not seconds. It is still one run on the phone - the
+phone's own `content` command would take hours. Cancel stops it.
 
 **The pictures are not in the gallery.** The gallery shows what it has scanned. AndroidDC asks
 it to look again after a restore, but some ROMs take their time; opening the gallery once

@@ -302,6 +302,9 @@
                 <ProgressBar IsIndeterminate="True" Width="80" VerticalAlignment="Center"/>
                 <TextBlock x:Name="BusyText" Margin="10,0,0,0" FontSize="12" Foreground="{StaticResource MutedText}"
                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                <Button x:Name="BusyCancel" Style="{StaticResource Ghost}" Content="Cancel" Margin="10,0,0,0"
+                        MinHeight="22" Padding="10,0" FontSize="11.5" Visibility="Collapsed"
+                        ToolTip="Stop what is running - it stops between steps, not in the middle of one"/>
               </StackPanel>
               <Border x:Name="SharingPill" Grid.Column="2" Style="{StaticResource Pill}" Background="{StaticResource Muted}"
                       Margin="0,0,10,0" VerticalAlignment="Center" ToolTip="Internet sharing from this PC to the phone (Tethering)">

@@ -442,7 +442,6 @@ function Update-VideoCodecList {
 # ------------------------------------------------------------------ events ----
 
 $ui.MirroringLaunch.Add_Click({ Start-Scrcpy })
-$ui.HeaderMirror.Add_Click({ Start-Scrcpy })
 $ui.MirroringShare.Add_Click({
     if (-not (Get-MirroringSharing).Relay) {
         if (Get-Command Start-Sharing -ErrorAction SilentlyContinue) { Start-Sharing }

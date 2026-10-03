@@ -699,7 +699,9 @@ function New-DialogWindow {
   <Border Margin="20" Style="{StaticResource CardPanel}" Padding="22,20" Effect="{StaticResource PanelShadow}">
     <StackPanel>
       <TextBlock x:Name="DialogTitle" Style="{StaticResource H1}" FontSize="16" Margin="0,0,0,12" TextWrapping="Wrap"/>
-      <StackPanel x:Name="DialogBody"/>
+      <ScrollViewer x:Name="DialogScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="DialogBody"/>
+      </ScrollViewer>
       <StackPanel x:Name="DialogButtons" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0"/>
     </StackPanel>
   </Border>
@@ -707,6 +709,11 @@ function New-DialogWindow {
 '@
     $dialog = [Windows.Markup.XamlReader]::Parse($xaml)
     $dialog.Width = $Width + 40
+    # A dialog is as tall as what is in it, and what is in it may be a list of
+    # fourteen hundred contacts: it grew past the screen and took its own
+    # buttons with it, so the question could not be answered at all. The body
+    # scrolls instead, which keeps the title and the buttons where they are.
+    $dialog.FindName('DialogScroll').MaxHeight = [int]([System.Windows.SystemParameters]::WorkArea.Height * 0.6)
     $dialog.FindName('DialogTitle').Text = $Title
     if ($script:window -and $script:window.IsVisible) { $dialog.Owner = $script:window } else { $dialog.WindowStartupLocation = 'CenterScreen' }
     $dialog.Add_MouseLeftButtonDown({ param($sender, $eventArgs) try { $sender.DragMove() } catch { } })
@@ -854,10 +861,32 @@ function Invoke-ButtonClick {
 }
 
 function Get-ButtonCaption {
-    # the words for a button: its text, or its tooltip when it shows a glyph
+    <#
+        The words for a button: its text, or its tooltip when it shows a glyph.
+
+        A button may carry a panel instead of a word - a glyph beside a label,
+        which is how the primary button on several pages is built - and
+        "$($Button.Content)" on one of those is the name of its type. The
+        Contacts menu opened with 'System.Windows.Controls.StackPanel' where
+        'Call' belonged.
+    #>
     param($Button)
-    $content = "$($Button.Content)"
-    if ($content -and [int][char]$content[0] -lt 0xE000) { return $content.Replace('...', '').Trim() }
+
+    $content = $Button.Content
+    if ($content -is [System.Windows.Controls.Panel]) {
+        # the label beside the glyph, which is the first piece of text on it
+        # that is not from the icon font's private range
+        foreach ($child in $content.Children) {
+            if (-not ($child -is [System.Windows.Controls.TextBlock])) { continue }
+            $said = "$($child.Text)"
+            if (-not $said) { continue }
+            if ([int][char]$said[0] -ge 0xE000) { continue }
+            return $said.Replace('...', '').Trim()
+        }
+        return "$($Button.ToolTip)"
+    }
+    $words = "$content"
+    if ($words -and [int][char]$words[0] -lt 0xE000) { return $words.Replace('...', '').Trim() }
     return "$($Button.ToolTip)"
 }
 
@@ -992,10 +1021,17 @@ function Update-BusyIndicator {
             $ui.BusyStrip.Visibility = 'Visible'
             $script:window.Cursor = [System.Windows.Input.Cursors]::AppStarting
         }
+        # Cancel belongs to a run that can be stopped between its steps, which
+        # is what Start-BackupRun marks. A single adb call is not one of those
+        # and gets no button it could not honour: deleting a phone's worth of
+        # contacts went on for minutes with no way to stop it.
+        $canStop = $(if (Get-Command Test-BackupRunning -ErrorAction SilentlyContinue) { Test-BackupRunning } else { $false })
+        $ui.BusyCancel.Visibility = $(if ($canStop) { 'Visible' } else { 'Collapsed' })
     } else {
         $script:busySince = $null
         if ($ui.BusyStrip.Visibility -eq 'Visible') {
             $ui.BusyStrip.Visibility = 'Hidden'
+            $ui.BusyCancel.Visibility = 'Collapsed'
             $script:window.Cursor = $null
         }
     }
@@ -1201,6 +1237,30 @@ function Initialize-ShellEvents {
     $ui.SideClassic.Add_Click({ Switch-ToClassic })
     $ui.DeviceRefresh.Add_Click({ Update-DeviceList })
 
+    <#
+        The header's own controls are wired here, where they live.
+
+        They used to be wired by the page each one leads to, which held while
+        every page was built at startup. From 1.6.0 a page is built when it is
+        opened, and the Mirror button then did nothing at all until someone
+        had opened the Mirroring page by hand - there was no handler on it to
+        do anything. The pills survived only because their two pages are built
+        at startup anyway, for the words on the pills.
+
+        Each handler calls a function that belongs to a page. That is safe
+        from anywhere: CommandNotFoundAction builds the page that owns the
+        name and the call goes through. audit.ps1 fails the build if a page
+        wires one of these again.
+    #>
+    $ui.HeaderMirror.Add_Click({ Start-Scrcpy })
+    $ui.PillClipboard.Add_MouseLeftButtonUp({ Show-Page -Page 'clipboard' })
+    $ui.PillClipboard.Add_MouseRightButtonUp({ Invoke-ClipboardHeaderToggle })
+    $ui.PillFtp.Add_MouseLeftButtonUp({ Show-Page -Page 'ftp' })
+    $ui.PillFtp.Add_MouseRightButtonUp({ Invoke-FtpHeaderToggle })
+    $ui.BusyCancel.Add_Click({
+        Write-Log 'Stopping ...' $colorWarn
+        if (Get-Command Stop-BackupRun -ErrorAction SilentlyContinue) { Stop-BackupRun -Reason 'you cancelled it' }
+    })
     $ui.LogClear.Add_Click({ $script:logLines.Clear() })
     $ui.LogSave.Add_Click({
         $dialog = New-Object Microsoft.Win32.SaveFileDialog

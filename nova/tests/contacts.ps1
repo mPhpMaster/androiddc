@@ -206,8 +206,10 @@ try {
     Reset-TestRecord
     Remove-Contact
     $words = if ($script:mockText.Count -ge 1) { Split-TestShellWords $script:mockText[0] } else { @() }
-    Say ("  Yes deletes that raw contact   {0}" -f (Mark (Test-SameWords $words @('content', 'delete', '--uri',
-        'content://com.android.contacts/raw_contacts', '--where', '_id=8'))))
+    # the delete goes as one where clause for every contact picked (a
+    # hundred to a call), so one contact is a list of one
+    Say ("  Yes deletes that raw contact   {0}" -f (Mark (Test-SameWords @($words | Select-Object -First 6) @('content', 'delete', '--uri',
+        'content://com.android.contacts/raw_contacts', '--where', '_id IN (8)'))))
 
     $ui.ContactsList.SelectedItems.Clear()
     $ui.ContactsDial.Text = $number

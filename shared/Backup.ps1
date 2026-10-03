@@ -2665,87 +2665,303 @@ function Restore-BackupApps {
     return [PSCustomObject]@{ Installed = $installed; Failed = $failed; Stopped = $stopped }
 }
 
-function Restore-BackupContacts {
-    # the contacts in the backup this phone does not have, by name and number
-    param([Alias('Folder')]$Source, [string]$Serial)
+function Get-BackupCount {
+    <#
+        A count out of a manifest, where the section may not be there at all.
 
-    $source = ConvertTo-BackupSource -Source $Source
-    $text = Get-BackupEntryText -Source $source -Entry 'personal/contacts.json'
-    if (-not $text) {
-        Write-Log 'Restore: this backup holds no contacts.' $colorWarn
-        return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0; Stopped = '' }
+        Under Set-StrictMode a manifest with no Personal section throws on
+        $manifest.Personal.Contacts rather than answering nothing, and a
+        backup of files alone has no Personal section.
+    #>
+    param($Manifest, [string]$Section, [string]$Name)
+
+    if ($null -eq $Manifest) { return 0 }
+    if (-not $Manifest.PSObject.Properties[$Section]) { return 0 }
+    $part = $Manifest.$Section
+    if ($null -eq $part) { return 0 }
+    if (-not $part.PSObject.Properties[$Name]) { return 0 }
+    $value = 0
+    [void][int]::TryParse("$($part.$Name)", [ref]$value)
+    return $value
+}
+
+function Get-BackupAppCount {
+    # how many apps a manifest names, where it may name none at all
+    param($Manifest)
+
+    if ($null -eq $Manifest) { return 0 }
+    if (-not $Manifest.PSObject.Properties['Apps']) { return 0 }
+    return @($Manifest.Apps).Count
+}
+
+function Get-BackupContactEntries {
+    <#
+        Where a backup keeps its contacts.
+
+        The owner's are in personal\contacts.json, and every other user's are
+        in users\<id>\personal\contacts.json. A backup of a second space has
+        only the second kind - and the restore looked for the first kind only,
+        so a backup whose own header said "Contacts: 927" was answered with
+        "this backup holds no contacts".
+    #>
+    param($Source)
+
+    $entries = New-Object System.Collections.Generic.List[string]
+    $null = $entries.Add('personal/contacts.json')
+    # a backup from before users were a choice has no Users at all, and under
+    # StrictMode asking for it throws rather than answering nothing
+    $users = @()
+    if ($Source.Manifest -and $Source.Manifest.PSObject.Properties['Users']) { $users = @($Source.Manifest.Users) }
+    foreach ($user in $users) {
+        $id = "$($user.Id)"
+        if (-not $id) { continue }
+        if ($id -eq '0') { continue }          # the owner is the one above
+        $null = $entries.Add("users/$id/personal/contacts.json")
     }
+    return ,$entries.ToArray()
+}
+
+function Get-BackupContacts {
+    <#
+        Every contact in a backup, wherever it keeps them.
+
+        A contact that is in the backup twice is put back twice: a phone that
+        held the same name and number twice is what was backed up, and a
+        restore is not the place to decide that was a mistake. Only a file
+        read a second time is skipped, which is what would happen if the owner
+        and a user kept the same list.
+    #>
+    param($Source)
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    $done = @{}
+    foreach ($entry in (Get-BackupContactEntries -Source $Source)) {
+        if ($done.ContainsKey($entry)) { continue }
+        $done[$entry] = $true
+        $text = Get-BackupEntryText -Source $Source -Entry $entry
+        if (-not $text) { continue }
+        try {
+            # assigned first, wrapped after: ConvertFrom-Json hands a list back
+            # as one array object, and @(a pipe of it) is a list holding that
+            # one array - which would make every contact into a single row
+            $read = ($text | ConvertFrom-Json)
+            $some = @($read)
+        } catch {
+            Write-Log ("Restore: $entry could not be read: " + $_.Exception.Message) $colorWarn
+            continue
+        }
+        foreach ($one in $some) { $null = $rows.Add($one) }
+        if ($some.Count -gt 0) { Write-Log "  $($some.Count) contact(s) from $entry" $colorInfo }
+    }
+    # no leading comma: that returns the array inside another one, and a caller
+    # writing @(Get-BackupContacts ...) then holds a single row which is itself
+    # the whole list - measured, as "found 1 contact: System.Object[]"
+    return $rows.ToArray()
+}
+
+# ----------------------------------------- what goes back through the writer ----
+# Contacts, messages and the call log go back through android\restore: one
+# small Java program run by app_process, the way the FTP server is. The phone's
+# own "content" command does the same one row at a time, and it is a shell
+# script that starts a whole Java runtime for every row - about 1.5 s each,
+# measured, which made a phone's call log nine hours. The writer is one
+# runtime for the whole file: 16,414 calls in 417 s and 5,329 messages in
+# 416 s on the test phone. It leaves alone what the phone already has, so a
+# restore run twice adds nothing the second time.
+
+function Get-RestoreWriterDex {
+    <#
+        The writer, built from its source when this PC has the Android SDK,
+        and otherwise the copy that ships beside the source - so a restore
+        does not depend on a PC that can build Java.
+    #>
+    $root = Join-Path (Split-Path $PSScriptRoot -Parent) 'android\restore'
+    $shipped = Join-Path $root 'RestoreWriter.dex'
+    $built = Join-Path $root 'out\classes.dex'
+    $source = Get-Item -LiteralPath (Join-Path $root 'src\com\androiddc\RestoreWriter.java') -ErrorAction SilentlyContinue
+    if ((Test-Path -LiteralPath $built) -and $source -and
+        (Get-Item -LiteralPath $built).LastWriteTimeUtc -ge $source.LastWriteTimeUtc) { return $built }
+    if ((Test-Path -LiteralPath $shipped) -and -not $source) { return $shipped }
     try {
-        # assigned first, wrapped after: ConvertFrom-Json hands a list back as
-        # one array object, and @(a pipe of it) is a list holding that array
-        $read = ($text | ConvertFrom-Json)
-        $contacts = @($read)
-    } catch {
-        Write-Log ('Restore: the contacts file could not be read: ' + $_.Exception.Message) $colorBad
-        return [PSCustomObject]@{ Added = 0; Failed = 0; Skipped = 0; Stopped = '' }
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'build.ps1') 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $built)) { return $built }
+    } catch { }
+    if (Test-Path -LiteralPath $shipped) { return $shipped }
+    return ''
+}
+
+function Get-BackupWriterRows {
+    # the rows of one kind out of a backup, as JSON text the writer reads
+    param($Source, [string[]]$Entries, [string]$What)
+
+    $texts = New-Object System.Collections.Generic.List[string]
+    $count = 0
+    $done = @{}
+    foreach ($entry in $Entries) {
+        if ($done.ContainsKey($entry)) { continue }
+        $done[$entry] = $true
+        $text = Get-BackupEntryText -Source $Source -Entry $entry
+        if (-not "$text".Trim()) { continue }
+        try {
+            # assigned first, wrapped after: see Get-BackupContacts
+            $read = ($text | ConvertFrom-Json)
+            $some = @($read)
+        } catch {
+            Write-Log ("Restore: $entry could not be read: " + $_.Exception.Message) $colorWarn
+            continue
+        }
+        if ($some.Count -eq 0) { continue }
+        $count += $some.Count
+        $null = $texts.Add($text.Trim())
+        Write-Log "  $($some.Count) $What from $entry" $colorInfo
+    }
+    if ($texts.Count -eq 0) { return [PSCustomObject]@{ Count = 0; Text = '' } }
+    if ($texts.Count -eq 1) { return [PSCustomObject]@{ Count = $count; Text = $texts[0] } }
+    # more than one file: each is a list, or one object if it held one row
+    $parts = foreach ($one in $texts) {
+        if ($one.StartsWith('[')) { $one.Substring(1, $one.Length - 2).Trim() } else { $one }
+    }
+    return [PSCustomObject]@{ Count = $count; Text = ('[' + (($parts | Where-Object { $_ }) -join ',') + ']') }
+}
+
+function Invoke-BackupWriter {
+    <#
+        One kind put back through the writer: calls, messages or contacts.
+        Returns Added, Skipped, Total, Stopped and Error.
+
+        Messages need one thing more. Android lets only the default messaging
+        app write a message, and from anyone else an insert is dropped without
+        a word (WRITE_SMS is "ignore" for the shell). adb's shell may change
+        its own app-op, so it is allowed for the run and put back after,
+        whatever happens.
+    #>
+    param($Source, [string]$Serial, [ValidateSet('calls', 'messages', 'contacts')][string]$Kind,
+        [string[]]$Entries, [string]$What)
+
+    $empty = [PSCustomObject]@{ Added = 0; Skipped = 0; Total = 0; Stopped = ''; Error = '' }
+    $rows = Get-BackupWriterRows -Source $Source -Entries $Entries -What $What
+    if ($rows.Count -eq 0) { Write-Log "Restore: this backup holds no $What." $colorWarn; return $empty }
+
+    $dex = Get-RestoreWriterDex
+    if (-not $dex) {
+        Write-Log 'Restore: the writer that puts these back could not be found or built.' $colorBad
+        $empty.Error = 'no writer'
+        return $empty
     }
 
-    # what the phone has now, so no contact is added twice
-    $have = @{}
-    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        'content query --uri content://com.android.contacts/data/phones --projection display_name:data1')).Text
-    foreach ($row in (Split-BackupRows -Text $text)) {
-        $key = ((Get-BackupRowValue -Row $row -Column 'display_name') + '|' +
-            ((Get-BackupRowValue -Row $row -Column 'data1') -replace '[\s\-()]', ''))
-        $have[$key.ToLowerInvariant()] = $true
-    }
+    $local = Join-Path (Get-BackupTempFolder) ("restore-$Kind.json")
+    $remoteJson = "/data/local/tmp/androiddc-restore-$Kind.json"
+    $remoteDex = '/data/local/tmp/androiddc-restore.dex'
+    [IO.File]::WriteAllText($local, $rows.Text, (New-Object System.Text.UTF8Encoding($false)))
 
-    Write-Log "Restore: $($contacts.Count) contact(s) in the backup ..." $colorStep
+    $user = '0'
+    $current = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('am get-current-user')).Text
+    if ("$current" -match '(\d+)') { $user = $Matches[1] }
+
+    # measured on the test phone: calls 39 a second, messages 13 (each one finds its conversation)
+    $perSecond = $(switch ($Kind) { 'calls' { 39 } 'messages' { 13 } default { 40 } })
+    $minutes = [math]::Ceiling($rows.Count / $perSecond / 60)
+    Write-Log "Restore: $($rows.Count) $What to put back, about $minutes minute(s) ..." $colorStep
     Start-BackupRun
-    $added = 0
-    $failed = 0
-    $skipped = 0
-    $index = 0
+    $smsMode = ''
+    $result = $null
     try {
-        foreach ($contact in $contacts) {
-            if (Test-BackupStopped) { break }
-            $index++
-            $name = "$($contact.Name)".Trim()
-            $number = "$($contact.Number)".Trim()
-            if (-not $number) { continue }
-            $key = ($name + '|' + ($number -replace '[\s\-()]', '')).ToLowerInvariant()
-            if ($have.ContainsKey($key)) { $skipped++; continue }
-            Write-BackupProgress -Text "Contacts: $name" -Done $index -Total $contacts.Count
-
-            $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-                'content insert --uri content://com.android.contacts/raw_contacts --bind account_name:s:null --bind account_type:s:null')
-            if (Test-BackupDeviceGone -Text $result.Text) { Stop-BackupRun -Reason 'the phone was disconnected'; break }
-            if ($result.Text -match 'Error|Exception') { $failed++; continue }
-            # the row just made is the one with the highest id
-            $newest = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-                "content query --uri content://com.android.contacts/raw_contacts --projection _id --sort '_id DESC' | head -1")).Text
-            if ($newest -notmatch '_id=(\d+)') { $failed++; continue }
-            $rawId = $Matches[1]
-
-            # one argument each: a name has spaces, and may hold an apostrophe
-            $null = Invoke-DeviceCommand -Serial $Serial -Arguments @('content', 'insert', '--uri',
-                'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
-                '--bind', 'mimetype:s:vnd.android.cursor.item/name', '--bind', "data1:s:$name")
-            $null = Invoke-DeviceCommand -Serial $Serial -Arguments @('content', 'insert', '--uri',
-                'content://com.android.contacts/data', '--bind', "raw_contact_id:i:$rawId",
-                '--bind', 'mimetype:s:vnd.android.cursor.item/phone_v2', '--bind', "data1:s:$number")
-            $added++
-            $have[$key] = $true
+        Write-BackupProgress -Text "$What`: sending them to the phone" -Done 0 -Total $rows.Count
+        foreach ($push in @(@($dex, $remoteDex), @($local, $remoteJson))) {
+            $sent = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'push', $push[0], $push[1]) -Caption "$What`: sending"
+            if ($sent.Stopped) { break }
+            if ($sent.ExitCode -ne 0) {
+                if (Test-BackupDeviceGone -Text $sent.Text) { Stop-BackupRun -Reason 'the phone was disconnected' }
+                else { $empty.Error = "$($sent.Text)".Trim() }
+                break
+            }
+        }
+        if (-not (Test-BackupStopped) -and -not $empty.Error) {
+            if ($Kind -eq 'messages') {
+                $mode = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('appops get com.android.shell WRITE_SMS')).Text
+                $smsMode = $(if ("$mode" -match 'WRITE_SMS:\s*(\w+)') { $Matches[1] } else { 'default' })
+                $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @('appops set com.android.shell WRITE_SMS allow')
+            }
+            Write-BackupProgress -Text "$What`: the phone is writing them" -Done 0 -Total $rows.Count
+            $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'shell',
+                "CLASSPATH=$remoteDex app_process /system/bin com.androiddc.RestoreWriter $Kind $remoteJson $user 2>&1") `
+                -Caption "$What`: the phone is writing them"
         }
     } finally {
+        if ($smsMode) {
+            $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @("appops set com.android.shell WRITE_SMS $smsMode")
+        }
+        # a stop ends adb on this side; the writer on the phone is ended too
+        if (Test-BackupStopped) { $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @('pkill -f com.androiddc.RestoreWriter') }
+        $null = Invoke-DeviceShell -Serial $Serial -CommandArguments @("rm -f $remoteJson $remoteDex")
+        Remove-Item -LiteralPath $local -Force -ErrorAction SilentlyContinue
         Complete-BackupRun
     }
 
-    $stopped = Get-BackupStopReason
-    if ($stopped) {
-        Write-Log "Contacts stopped ($stopped): $added contact(s) added." $colorWarn
-        Send-BackupNotice -Title 'Contacts stopped' -Text "$stopped. $added contact(s) were added."
-    } else {
-        Write-Log "  $added added, $skipped already there, $failed refused." $(if ($failed -gt 0) { $colorWarn } else { $colorGood })
-        Send-BackupNotice -Title 'Contacts restored' -Text "$added added to $Serial, $skipped were already there."
+    $out = [PSCustomObject]@{ Added = 0; Skipped = 0; Total = $rows.Count; Stopped = (Get-BackupStopReason); Error = $empty.Error }
+    if (-not $result -and -not $out.Stopped -and -not $out.Error) { $out.Error = 'the writer did not start on the phone' }
+    if ($result) {
+        if ("$($result.Text)" -match 'DONE (\d+) (\d+)') {
+            $out.Added = [int]$Matches[1]
+            $out.Skipped = [int]$Matches[2]
+        } elseif (-not $out.Stopped) {
+            if (Test-BackupDeviceGone -Text $result.Text) { $out.Stopped = 'the phone was disconnected' }
+            else {
+                $lines = @("$($result.Text)" -split "`r?`n" | Where-Object { $_.Trim() })
+                $out.Error = $(if ($lines.Count -gt 0) { $lines[0].Trim() } else { 'the writer said nothing' })
+            }
+            # how far it got before it was stopped, from the last ADDED line
+            $last = @([regex]::Matches("$($result.Text)", 'ADDED (\d+)'))
+            if ($last.Count -gt 0) { $out.Added = [int]$last[$last.Count - 1].Groups[1].Value }
+        }
     }
-    Write-BackupProgress -Text $(if ($stopped) { "Contacts stopped: $stopped" } else { 'Contacts restored' }) -Done 1 -Total 1
-    return [PSCustomObject]@{ Added = $added; Failed = $failed; Skipped = $skipped; Stopped = $stopped }
+
+    $title = (Get-Culture).TextInfo.ToTitleCase($What)
+    if ($out.Stopped) {
+        Write-Log "$title stopped ($($out.Stopped)): $($out.Added) put back." $colorWarn
+        Send-BackupNotice -Title "$title stopped" -Text "$($out.Stopped). $($out.Added) were put back."
+    } elseif ($out.Error) {
+        Write-Log "Restore: the $What did not go back - $($out.Error)" $colorBad
+    } else {
+        Write-Log "  $($out.Added) $What put back, $($out.Skipped) were already there." $colorGood
+        Send-BackupNotice -Title "$title restored" -Text "$($out.Added) put back on $Serial, $($out.Skipped) were already there."
+    }
+    $said = $(if ($out.Stopped) { "$title stopped: $($out.Stopped)" } elseif ($out.Error) { "$title did not go back" } else { "$title restored" })
+    Write-BackupProgress -Text $said -Done 1 -Total 1
+    return $out
+}
+
+function Restore-BackupContacts {
+    <#
+        The contacts in the backup, into the phone's own contacts (not an
+        account): seconds, and no tap on the phone. The ones it already has,
+        by name and number, are left alone.
+    #>
+    param([Alias('Folder')]$Source, [string]$Serial)
+
+    $source = ConvertTo-BackupSource -Source $Source
+    $result = Invoke-BackupWriter -Source $source -Serial $Serial -Kind 'contacts' `
+        -Entries (Get-BackupContactEntries -Source $source) -What 'contacts'
+    return [PSCustomObject]@{ Added = $result.Added; Failed = $(if ($result.Error) { 1 } else { 0 })
+        Skipped = $result.Skipped; Stopped = $result.Stopped; Error = $result.Error }
+}
+
+function Restore-BackupMessages {
+    # the text messages in the backup, into the phone's messages
+    param([Alias('Folder')]$Source, [string]$Serial)
+
+    $source = ConvertTo-BackupSource -Source $Source
+    return Invoke-BackupWriter -Source $source -Serial $Serial -Kind 'messages' `
+        -Entries @('personal/messages.json') -What 'messages'
+}
+
+function Restore-BackupCalls {
+    # the call log in the backup, read and not new: no missed-call notices
+    param([Alias('Folder')]$Source, [string]$Serial)
+
+    $source = ConvertTo-BackupSource -Source $Source
+    return Invoke-BackupWriter -Source $source -Serial $Serial -Kind 'calls' `
+        -Entries @('personal/calls.json') -What 'calls'
 }
 
 # -------------------------------------------------- where your backups are ----

@@ -15,6 +15,9 @@ $script:backupListRows = @()
 # whose phone it is
 $script:backupInsideStale = $true
 $script:backupAppsStale = $true
+$script:backupContactsStale = $true
+$script:backupMessagesStale = $true
+$script:backupContactRows = @()
 # the phone the user list was read from, and what each line of the box means:
 # a line is a set of ids, so "everyone" and "just this one" are one question
 $script:backupUsersFor = ''
@@ -60,7 +63,8 @@ function Set-BackupPageBusy {
 
     $ui.BackupCancel.IsEnabled = $Running
     foreach ($name in @('BackupRun', 'BackupOpen', 'BackupRestoreFiles', 'BackupInstallApps',
-        'BackupRestoreContacts', 'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing',
+        'BackupRestoreContacts', 'BackupRestoreAll', 'BackupSaveMessages', 'BackupRestoreMessages', 'BackupRestoreCalls',
+        'BackupSaveCopy', 'BackupListOpen', 'BackupBrowse', 'BackupAppsMissing',
         'BackupMenuOpen', 'BackupMenuShow', 'BackupMenuResume', 'BackupMenuDelete', 'BackupUsers')) {
         $ui[$name].IsEnabled = -not $Running
     }
@@ -99,6 +103,128 @@ function Update-BackupPageShownTab {
     # fills the tab that is on screen, once, and leaves the others alone
     if ($ui.BackupTabs.SelectedItem -eq $ui.BackupTabInside -and $script:backupInsideStale) { Update-BackupPageInside }
     elseif ($ui.BackupTabs.SelectedItem -eq $ui.BackupTabApps -and $script:backupAppsStale) { Update-BackupPageApps }
+    elseif ($ui.BackupTabs.SelectedItem -eq $ui.BackupTabContacts -and $script:backupContactsStale) { Update-BackupPageContactsTab }
+    elseif ($ui.BackupTabs.SelectedItem -eq $ui.BackupTabMessages -and $script:backupMessagesStale) { Update-BackupPageMessagesTab }
+}
+
+function Update-BackupPageRestoreAll {
+    <#
+        The one button that appears when a backup is opened, and what it says
+        it will do. Each kind also has its own button on its own tab; this is
+        for the common case, which is a phone that has lost everything.
+    #>
+    if (-not $script:backupSource) {
+        $ui.BackupRestoreAll.Visibility = 'Collapsed'
+        $ui.BackupRestoreAllWhat.Text = 'Open a backup, and each tab above puts its own part back.'
+        return
+    }
+    $manifest = $script:backupSource.Manifest
+    $parts = @()
+    $contacts = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Contacts'
+    if ($contacts -gt 0) { $parts += "$contacts contact(s)" }
+    $apps = Get-BackupAppCount -Manifest $manifest
+    if ($apps -gt 0) { $parts += "$apps app(s)" }
+    $files = Get-BackupCount -Manifest $manifest -Section 'Files' -Name 'Files'
+    if ($files -gt 0) { $parts += "$files file(s)" }
+    $messages = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Messages'
+    if ($messages -gt 0) { $parts += "$messages message(s)" }
+    $calls = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Calls'
+    if ($calls -gt 0) { $parts += "$calls call(s)" }
+
+    $ui.BackupRestoreAll.Visibility = 'Visible'
+    if ($parts.Count -eq 0) {
+        $ui.BackupRestoreAll.IsEnabled = $false
+        $ui.BackupRestoreAllWhat.Text = 'There is nothing in this backup that can be put back.'
+    } else {
+        $ui.BackupRestoreAll.IsEnabled = $true
+        $ui.BackupRestoreAllWhat.Text = ('Puts back: ' + ($parts -join ', ') + '.')
+    }
+    $ui.BackupRestoreAllWhat.ToolTip = $ui.BackupRestoreAllWhat.Text
+}
+
+function Get-BackupContactWay {
+    <#
+        Where the contacts go, asked once each time. Both ways take seconds:
+        the writer puts them in the phone's own contacts with no tap, and a
+        vCard file goes through the phone's import screen, which asks on the
+        phone which account - a Google account, say - they belong to.
+    #>
+    param([int]$Count)
+
+    $answer = Show-Choice -Title 'Restore contacts' -Text (
+        "$Count contact(s) to put back." + [Environment]::NewLine + [Environment]::NewLine +
+        'On this phone: written straight into the phone''s own contacts, with nothing to tap. ' +
+        'The ones it already has are left alone.' + [Environment]::NewLine + [Environment]::NewLine +
+        'Into an account: one file the phone''s import screen reads, which takes a tap on the ' +
+        'phone to say which account they go into.') `
+        -Choices @('On this phone', 'Into an account')
+    return $answer
+}
+
+function Update-BackupPageContactsTab {
+    # the contacts in the opened backup, and where in it they were kept
+    $script:backupContactsStale = $false
+    $script:backupContactRows = @()
+    if (-not $script:backupSource) {
+        $ui.BackupContactsList.ItemsSource = $null
+        $ui.BackupContactsWhat.Text = 'Open a backup to see the contacts in it.'
+        return
+    }
+
+    Set-BackupPageReading -Running $true
+    try {
+        $rows = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in (Get-BackupContactEntries -Source $script:backupSource)) {
+            $text = Get-BackupEntryText -Source $script:backupSource -Entry $entry
+            if (-not $text) { continue }
+            try { $read = ($text | ConvertFrom-Json) } catch { continue }
+            foreach ($one in @($read)) {
+                $null = $rows.Add([PSCustomObject]@{
+                    Name = "$($one.Name)"; Number = "$($one.Number)"; From = $entry })
+            }
+        }
+        $script:backupContactRows = $rows.ToArray()
+    } finally {
+        Set-BackupPageReading -Running $false
+    }
+
+    $ui.BackupContactsList.ItemsSource = $script:backupContactRows
+    if ($script:backupContactRows.Count -eq 0) {
+        $ui.BackupContactsWhat.Text = 'This backup holds no contacts.'
+    } else {
+        $where = @($script:backupContactRows | ForEach-Object { $_.From } | Sort-Object -Unique)
+        $ui.BackupContactsWhat.Text = ('{0} contact(s), from {1}' -f $script:backupContactRows.Count, ($where -join ', '))
+    }
+    $ui.BackupContactsWhat.ToolTip = $ui.BackupContactsWhat.Text
+    $ui.BackupRestoreContacts.IsEnabled = ($script:backupContactRows.Count -gt 0)
+}
+
+function Update-BackupPageMessagesTab {
+    <#
+        What the backup holds of the messages and the call log, each with
+        its own button to put it back, and one to save both to this PC.
+    #>
+    $script:backupMessagesStale = $false
+    if (-not $script:backupSource) {
+        $ui.BackupMessagesList.ItemsSource = $null
+        $ui.BackupMessagesWhat.Text = 'Open a backup to see the messages and calls in it.'
+        return
+    }
+
+    $manifest = $script:backupSource.Manifest
+    $messages = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Messages'
+    $calls = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Calls'
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($kind in @(
+        @{ What = 'Messages'; Count = $messages; Path = 'personal/messages.json' },
+        @{ What = 'Calls'; Count = $calls; Path = 'personal/calls.json' })) {
+        $null = $rows.Add([PSCustomObject]@{
+            What = $kind.What; Count = ('{0:n0}' -f $kind.Count); Path = $kind.Path })
+    }
+    $ui.BackupMessagesList.ItemsSource = $rows.ToArray()
+    $ui.BackupMessagesWhat.Text = ('{0:n0} message(s) and {1:n0} call(s) are kept in this backup.' -f
+        $messages, $calls)
+    $ui.BackupMessagesWhat.ToolTip = $ui.BackupMessagesWhat.Text
 }
 
 function Update-BackupPageApps {
@@ -237,11 +363,19 @@ function Show-BackupPageAt {
     # backup itself, and only when they are looked at
     $script:backupInsideStale = $true
     $script:backupAppsStale = $true
+    $script:backupContactsStale = $true
+    $script:backupMessagesStale = $true
     $ui.BackupInside.ItemsSource = $null
     $ui.BackupAppList.ItemsSource = $null
+    $ui.BackupContactsList.ItemsSource = $null
+    $ui.BackupMessagesList.ItemsSource = $null
     $script:backupAppRows = @()
+    $script:backupContactRows = @()
     $ui.BackupInsideCount.Text = 'Open the tab to read what is inside.'
     $ui.BackupAppsCount.Text = 'Open the tab to see the apps in it.'
+    $ui.BackupContactsWhat.Text = 'Open the tab to see the contacts in it.'
+    $ui.BackupMessagesWhat.Text = 'Open the tab to see the messages and calls in it.'
+    Update-BackupPageRestoreAll
     Update-BackupPageShownTab
     Write-Log "Backup opened: $($source.Path)" $colorInfo
     return $true
@@ -436,6 +570,47 @@ function Show-BackupPagePicked {
     Show-BackupPagePath -Path $row.Path
 }
 
+function Start-BackupPageWriter {
+    # the messages or the call log out of the opened backup, back onto the phone
+    param([ValidateSet('messages', 'calls')][string]$Kind)
+
+    $serial = Get-TargetSerial
+    if (-not $serial) { return $null }
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return $null }
+    Set-BackupPageBusy -Running $true
+    try {
+        if ($Kind -eq 'messages') { $result = Restore-BackupMessages -Source $script:backupSource -Serial $serial }
+        else { $result = Restore-BackupCalls -Source $script:backupSource -Serial $serial }
+    } finally {
+        Set-BackupPageBusy -Running $false
+    }
+    if ($result.Stopped) { Show-Toast -Text "$Kind stopped: $($result.Stopped)" -Color 'warn' }
+    elseif ($result.Error) { Show-Toast -Text "The $Kind did not go back" -Color 'bad' }
+    else { Show-Toast -Text "$($result.Added) $Kind put back, $($result.Skipped) already there" -Color 'good' }
+    return $result
+}
+
+function Save-BackupPageMessages {
+    <#
+        The messages and the call log out of the backup onto this PC, to be
+        read there; putting them back on the phone is Start-BackupPageWriter.
+    #>
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
+    $entries = @('personal/messages.json', 'personal/calls.json')
+    $there = @($entries | Where-Object { Get-BackupEntryText -Source $script:backupSource -Entry $_ })
+    if ($there.Count -eq 0) { Write-Log 'This backup holds no messages and no call log.' $colorWarn; return }
+
+    $where = Select-Folder -Description "Where should these $($there.Count) file(s) be written?"
+    if (-not $where) { return }
+    Set-BackupPageBusy -Running $true
+    try {
+        $result = Save-BackupCopy -Source $script:backupSource -Entries $there -Destination $where
+    } finally {
+        Set-BackupPageBusy -Running $false
+    }
+    Show-Toast -Text "$($result.Saved) file(s) saved" -Color $(if ($result.Failed -gt 0) { 'warn' } else { 'good' })
+}
+
 function Save-BackupPageCopy {
     # files out of the backup onto this PC, without a phone in it at all
     if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
@@ -529,17 +704,81 @@ function Update-BackupPageFind {
 }
 
 function Start-BackupPageContacts {
+    param([switch]$Quiet)
+
     $serial = Get-TargetSerial
-    if (-not $serial) { return }
-    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
+    if (-not $serial) { return $null }
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return $null }
+
+    $contacts = @(Get-BackupContacts -Source $script:backupSource)
+    if ($contacts.Count -eq 0) { Write-Log 'Restore: this backup holds no contacts.' $colorWarn; return $null }
+
+    $way = $(if ($Quiet) { 'On this phone' } else { Get-BackupContactWay -Count $contacts.Count })
+    if (-not $way) { return $null }
+
     Set-BackupPageBusy -Running $true
     try {
+        if ($way -like 'Into*') {
+            $sent = Send-ContactsAsVcard -Serial $serial -Contacts $contacts
+            if (-not $sent.Ok) {
+                Write-Log ("Restore: the contacts file did not get there - " + $sent.Text) $colorBad
+                return $null
+            }
+            Write-Log "Restore: $($sent.Count) contact(s) written to $($sent.Path) on the phone." $colorGood
+            Write-Log '  The phone has its import screen open: say yes there, and pick which account they go into.' $colorInfo
+            Show-Toast -Text "$($sent.Count) contact(s) are waiting on the phone" -Color 'good'
+            return [PSCustomObject]@{ Added = 0; Sent = $sent.Count; Way = 'vcard' }
+        }
         $result = Restore-BackupContacts -Source $script:backupSource -Serial $serial
     } finally {
         Set-BackupPageBusy -Running $false
     }
     if ($result.Stopped) { Show-Toast -Text "Contacts stopped: $($result.Stopped)" -Color 'warn' }
     else { Show-Toast -Text "$($result.Added) contact(s) added" -Color 'good' }
+    return $result
+}
+
+function Start-BackupPageEverything {
+    <#
+        Everything in the opened backup, one kind after another: the contacts,
+        the messages, the call log, then the apps, then the files. Each one is
+        the same work its own tab does; this only saves pressing five buttons
+        in order. The contacts go into the phone's own contacts without asking,
+        so nothing here waits on a tap until the apps.
+    #>
+    if (-not $script:backupSource) { Write-Log 'Open a backup first.' $colorWarn; return }
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $manifest = $script:backupSource.Manifest
+    $contacts = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Contacts'
+    $apps = Get-BackupAppCount -Manifest $manifest
+    $files = Get-BackupCount -Manifest $manifest -Section 'Files' -Name 'Files'
+    $messages = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Messages'
+    $calls = Get-BackupCount -Manifest $manifest -Section 'Personal' -Name 'Calls'
+
+    $lines = @()
+    if ($contacts -gt 0) { $lines += "$contacts contact(s), into the phone's own contacts" }
+    if ($messages -gt 0) { $lines += "$messages message(s)" }
+    if ($calls -gt 0) { $lines += "$calls call(s) in the call log" }
+    if ($apps -gt 0) { $lines += "$apps app(s)" }
+    if ($files -gt 0) { $lines += "$files file(s)" }
+    if ($lines.Count -eq 0) { Write-Log 'Restore: there is nothing in this backup to put back.' $colorWarn; return }
+
+    $sure = Show-Confirm -Title 'Restore everything' -Text (
+        "Put all of this back onto $serial?" + [Environment]::NewLine + [Environment]::NewLine +
+        ($lines -join [Environment]::NewLine) + [Environment]::NewLine + [Environment]::NewLine +
+        'What the phone already has is left alone. The apps and files ask for anything they need ' +
+        'as they come to it.') -Yes 'Restore'
+    if (-not $sure) { return }
+
+    Write-Log "Restore: putting everything back onto $serial ..." $colorStep
+    if ($contacts -gt 0) { $null = Start-BackupPageContacts -Quiet }
+    if ($messages -gt 0 -and -not (Test-BackupStopped)) { $null = Start-BackupPageWriter -Kind 'messages' }
+    if ($calls -gt 0 -and -not (Test-BackupStopped)) { $null = Start-BackupPageWriter -Kind 'calls' }
+    if ($apps -gt 0 -and -not (Test-BackupStopped)) { Start-BackupPageApps }
+    if ($files -gt 0 -and -not (Test-BackupStopped)) { Start-BackupPageFiles }
+    Write-Log 'Restore: that is everything this backup could put back.' $colorGood
 }
 
 function Show-BackupPageFolder {
@@ -558,7 +797,11 @@ $ui.BackupOpen.Add_Click({ Open-BackupPageFile })
 $ui.BackupBrowse.Add_Click({ Select-BackupPageFolder })
 $ui.BackupRestoreFiles.Add_Click({ Start-BackupPageFiles })
 $ui.BackupInstallApps.Add_Click({ Start-BackupPageApps })
-$ui.BackupRestoreContacts.Add_Click({ Start-BackupPageContacts })
+$ui.BackupRestoreContacts.Add_Click({ $null = Start-BackupPageContacts })
+$ui.BackupRestoreAll.Add_Click({ Start-BackupPageEverything })
+$ui.BackupSaveMessages.Add_Click({ Save-BackupPageMessages })
+$ui.BackupRestoreMessages.Add_Click({ $null = Start-BackupPageWriter -Kind 'messages' })
+$ui.BackupRestoreCalls.Add_Click({ $null = Start-BackupPageWriter -Kind 'calls' })
 $ui.BackupShowFolder.Add_Click({ Show-BackupPageFolder })
 $ui.BackupListRefresh.Add_Click({ Update-BackupPageList })
 $ui.BackupListOpen.Add_Click({ Open-BackupPagePicked })
