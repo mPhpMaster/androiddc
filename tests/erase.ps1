@@ -237,6 +237,49 @@ Say ("  a phone with no reset screen either says so instead of claiming it worke
     -not $neither.Wiping -and -not $neither.Opened)))
 
 Say ''
+Say '== the reset screen a phone will not open =='
+# What this phone really does: the reset screen is there, and opening it is
+# refused for the same permission the reset itself wants. Stopping at the
+# first screen left the button doing nothing at all.
+$denial = "Exception occurred while executing 'start':`njava.lang.SecurityException: Permission Denial: " +
+    "starting Intent { act=com.android.settings.action.FACTORY_RESET } from null (pid=7265, uid=2000) " +
+    "requires android.permission.MASTER_CLEAR`n`tat com.android.server.wm.ActivityTaskSupervisor." +
+    "checkStartAnyActivityPermission(ActivityTaskSupervisor.java:1226)`n`tat com.android.server.wm." +
+    "ActivityStarter.executeRequest(ActivityStarter.java:1333)"
+$script:asked.Clear()
+$logFrom = $txtLog.TextLength
+$script:answers = @{
+    'dumpsys package com.android.shell*' = $holdsItNot
+    'cmd package resolve-activity --brief -a com.android.settings.action.FACTORY_RESET' = $screenThere
+    'cmd package resolve-activity --brief -a android.settings.BACKUP_AND_RESET_SETTINGS' = 'No activity found'
+    'cmd package resolve-activity --brief -a android.settings.PRIVACY_SETTINGS' = "priority=1`ncom.android.settings/.Settings`$PrivacyDashboardActivity"
+    'am start -a com.android.settings.action.FACTORY_RESET' = $denial
+    'am start -a android.settings.PRIVACY_SETTINGS' = 'Starting: Intent { act=android.settings.PRIVACY_SETTINGS }'
+}
+$fellThrough = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Reset-DeviceToNew -Serial 'ABC123' }
+$said = $txtLog.Text.Substring($logFrom)
+Say ("  a refused screen is not the end of it: the next one is opened   {0}" -f (Mark (
+    $fellThrough.Opened -and -not $fellThrough.Wiping -and
+    (Get-Asked -Like 'am start -a android.settings.PRIVACY_SETTINGS').Count -eq 1)))
+Say ("  and it says that one is not the reset screen itself   {0}" -f (Mark (
+    $said -match 'not on that screen')))
+Say ("  the refusal is one line that names the permission, not a stack   {0}" -f (Mark (
+    $said -match 'wants android\.permission\.MASTER_CLEAR' -and
+    $said -notmatch 'ActivityTaskSupervisor' -and $said -notmatch 'at com\.android\.server')))
+
+# every screen refused: nothing is claimed
+$script:answers['am start -a android.settings.PRIVACY_SETTINGS'] = $denial
+$script:answers['cmd package resolve-activity --brief -a android.settings.SETTINGS'] = "priority=1`ncom.android.settings/.MiuiSettings"
+$script:answers['am start -a android.settings.SETTINGS'] = $denial
+$logFrom = $txtLog.TextLength
+$allRefused = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Reset-DeviceToNew -Serial 'ABC123' }
+Say ("  a phone that refuses every one of them is told so, and nothing is claimed   {0}" -f (Mark (
+    -not $allRefused.Opened -and -not $allRefused.Wiping -and
+    $txtLog.Text.Substring($logFrom) -match 'will not let adb open any of its reset screens')))
+
+Say ''
 Say '== is there a backup of this phone first =='
 Say ("  today: {0} / yesterday: {1} / a week: {2} / longer: {3}   {4}" -f
     (Format-EraseAgo -When (Get-Date)), (Format-EraseAgo -When (Get-Date).AddDays(-1)),

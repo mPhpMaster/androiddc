@@ -30,6 +30,15 @@ Writing the test for it caught a second fault in the new code: the wait minded
 a leftover "stopped" flag before it asked the phone anything, so a phone that
 was never asked would have been reported as not having gone.
 
+**And the screen it falls back to is tried properly.** The phone's own reset
+screen wants `MASTER_CLEAR` to be *opened*, not only to do the resetting, so
+on such a phone that failed too - and the window gave up there, after writing
+Android's eighteen-line Java stack into the activity log one red line at a
+time. Now every screen in the list is tried in turn until one opens, the
+refusal is one line that names the permission, and a screen that is not the
+reset screen itself is said to be so rather than left looking like the place
+to tap.
+
 ### Nova opens about twice as fast
 
 The splash said what was happening; this makes there be less of it. Measured

@@ -240,9 +240,13 @@ on the strength of `Broadcast completed`, which only means the message was deliv
 drops it unless adb's shell holds `MASTER_CLEAR`, and hardly any phone grants that.
 
 The button now reads that permission first. On a phone without it, the phone's **own reset
-screen** opens instead and the last taps are done there - that is the way that works, and it is
-what the log will say. If your phone has no such screen either, the log says that too; open
-Settings on the phone and look for *Reset* or *Erase all data*.
+screen** opens instead and the last taps are done there.
+
+Some phones want the same permission to *open that screen*, which is one more thing adb cannot
+do on them. Every screen on the list is tried in turn, so what opens may be *Privacy* or
+Settings itself rather than the reset screen; the log says which it was and that the reset is
+not on it. If every one is refused, the log says that too: open Settings on the phone and look
+for *Reset* or *Erase all data*.
 
 ## The clipboard does not cross
 

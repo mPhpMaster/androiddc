@@ -314,49 +314,116 @@ function Format-DeviceCard {
     return $answer
 }
 
+function Get-DeviceResetScreenActions {
+    # the screens to try, nearest the reset first and the whole Settings app
+    # last. Not every ROM has every one: the phone this was written against
+    # has no BACKUP_AND_RESET_SETTINGS at all.
+    return @('com.android.settings.action.FACTORY_RESET',
+        'android.settings.BACKUP_AND_RESET_SETTINGS', 'android.settings.PRIVACY_SETTINGS',
+        'android.settings.SETTINGS')
+}
+
 function Test-DeviceResetScreen {
     <#
-        The phone's own factory reset screen, if it has one adb may open. The
-        first of these that resolves is the one used; on the phone this was
-        written against only the first did - a ROM whose Settings has no
-        BACKUP_AND_RESET_SETTINGS at all.
+        The phone's own factory reset screen, if it has one adb may open.
+        Resolving only says the screen is there - whether adb is allowed to
+        open it is another question, and one that is answered by trying.
     #>
     param([string]$Serial)
 
-    foreach ($action in @('com.android.settings.action.FACTORY_RESET',
-            'android.settings.BACKUP_AND_RESET_SETTINGS', 'android.settings.PRIVACY_SETTINGS',
-            'android.settings.SETTINGS')) {
-        $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-            'cmd', 'package', 'resolve-activity', '--brief', '-a', $action)).Text
-        foreach ($line in ("$text" -split "`r?`n")) {
-            $name = "$line".Trim()
-            if ($name -match '^[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+$') {
-                return [PSCustomObject]@{ Action = $action; Component = $name }
-            }
+    foreach ($action in (Get-DeviceResetScreenActions)) {
+        $found = Test-DeviceScreenAction -Serial $Serial -Action $action
+        if ($found) { return $found }
+    }
+    return $null
+}
+
+function Test-DeviceScreenAction {
+    # one screen: the component behind it, or $null when the phone has none
+    param([string]$Serial, [string]$Action)
+
+    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+        'cmd', 'package', 'resolve-activity', '--brief', '-a', $Action)).Text
+    foreach ($line in ("$text" -split "`r?`n")) {
+        $name = "$line".Trim()
+        if ($name -match '^[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+$') {
+            return [PSCustomObject]@{ Action = $Action; Component = $name }
         }
     }
     return $null
 }
 
+function Get-DeviceAnswerLine {
+    <#
+        One line out of what a phone said, for the log.
+
+        am answers a refusal with a Java exception and eighteen lines of stack
+        under it, and the log wrote every one of them in red. The first line
+        that names the trouble is the only one worth a person's attention;
+        the frames below it name this phone's own source files.
+    #>
+    param([string]$Text)
+
+    # the permission it wants is the whole of the news, when it says one
+    $wants = [regex]::Match("$Text", 'requires (android\.permission\.[A-Z_]+)')
+    if ($wants.Success) {
+        return "Android wants $($wants.Groups[1].Value) for it, which adb's shell does not have"
+    }
+    $best = ''
+    foreach ($line in ("$Text" -split "`r?`n")) {
+        $said = "$line".Trim()
+        if (-not $said) { continue }
+        if ($said -like 'at *') { continue }               # a stack frame
+        if ($said -like 'Exception occurred*') { continue } # the preamble, not the reason
+        if ($said -match 'Denial|Security|Error:|not started|unable to|Exception') { return $said }
+        if (-not $best) { $best = $said }
+    }
+    return $best
+}
+
 function Open-DeviceResetScreen {
-    # the reset screen on the phone's own display, for the taps Android keeps
-    # to itself
+    <#
+        The reset screen on the phone's own display, for the taps Android
+        keeps to itself.
+
+        Every screen in the list is tried, not only the first that resolves:
+        on the phone this was written against the reset screen is there, and
+        opening it is refused for want of MASTER_CLEAR - the same permission
+        the reset itself wants. Giving up at that point left the button doing
+        nothing at all, which is what it did.
+    #>
     param([string]$Serial)
 
-    $screen = Test-DeviceResetScreen -Serial $Serial
-    if (-not $screen) {
+    $refusals = 0
+    foreach ($action in (Get-DeviceResetScreenActions)) {
+        $screen = Test-DeviceScreenAction -Serial $Serial -Action $action
+        if (-not $screen) { continue }
+        $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @('am', 'start', '-a', $action)
+        $said = "$($result.Text)"
+        if ($said -match 'Exception|Permission Denial|Error:') {
+            $refusals++
+            Write-Log ("  $($screen.Component) : " + (Get-DeviceAnswerLine -Text $said)) $colorWarn
+            continue
+        }
+        if ($action -eq 'com.android.settings.action.FACTORY_RESET') {
+            Write-Log "Opened $($screen.Component) on the phone." $colorGood
+            Write-Log '  The last step is on the phone: tap Erase and enter the screen lock.' $colorInfo
+        } else {
+            # not the reset screen itself: say so rather than leave someone
+            # looking for an Erase button that is not on what was opened
+            Write-Log "Opened $($screen.Component) on the phone - as near as adb may get on it." $colorGood
+            Write-Log '  The reset is not on that screen: look for "Reset" or "Erase all data" from there.' $colorInfo
+        }
+        return $true
+    }
+
+    if ($refusals -gt 0) {
+        Write-Log 'This phone will not let adb open any of its reset screens.' $colorWarn
+    } else {
         Write-Log 'This phone has no reset screen adb can open.' $colorWarn
-        Write-Log '  Open Settings on the phone and look for "Reset" or "Erase all data".' $colorInfo
-        return $false
     }
-    $result = Invoke-DeviceShell -Serial $Serial -CommandArguments @('am', 'start', '-a', $screen.Action)
-    if ("$($result.Text)" -match 'Error|Exception') {
-        Write-Log ('am start said: ' + "$($result.Text)".Trim()) $colorBad
-        return $false
-    }
-    Write-Log "Opened $($screen.Component) on the phone." $colorGood
-    Write-Log '  The last step is on the phone: tap Erase and enter the screen lock.' $colorInfo
-    return $true
+    Write-Log '  Open Settings on the phone and look for "Reset" or "Erase all data".' $colorInfo
+    return $false
 }
 
 function Test-DeviceResetAllowed {
@@ -448,7 +515,7 @@ function Reset-DeviceToNew {
     $answer.Text = $said
 
     if ($said -match 'SecurityException|Permission Denial') {
-        Write-Log ('Android refused it: ' + ($said -split "`r?`n")[0]) $colorWarn
+        Write-Log ('Android refused it: ' + (Get-DeviceAnswerLine -Text $said)) $colorWarn
         Write-Log 'Opening the phone''s own reset screen instead - the taps are done there.' $colorInfo
         $answer.Opened = [bool](Open-DeviceResetScreen -Serial $Serial)
         return $answer
