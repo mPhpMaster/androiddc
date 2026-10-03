@@ -11,7 +11,9 @@ jobs:
     name: PowerShell parses
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      # v4 runs on Node 20, which the runners no longer have: every run
+      # was forced onto Node 24 and said so. v7 asks for Node 24 itself.
+      - uses: actions/checkout@v7
 
       - name: Every .ps1 must parse
         shell: pwsh
