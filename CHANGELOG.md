@@ -2,7 +2,7 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.5.1
 
 ### Something on screen while it opens
 

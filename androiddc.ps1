@@ -43,7 +43,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # half seconds it stands in for start here
 . (Join-Path $scriptRoot 'shared\Splash.ps1')
 # the release this file is; CHANGELOG.md says what each one changed
-$appVersion = '1.5.0'
+$appVersion = '1.5.1'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
