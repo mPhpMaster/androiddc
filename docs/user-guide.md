@@ -236,6 +236,9 @@ not take it* types the text into whatever has the cursor on the phone instead - 
 clipboard, and the list says `typed` rather than pretending otherwise. *Take the phone's* reads
 the other way, and only a phone whose shell has `cmd clipboard` can be asked.
 
+In Nova the header shows **clipboard on** or **clipboard off** beside the FTP indicator: click it
+to open this page, right-click it to start or stop sharing with the phones picked.
+
 **The monitor** is the list: the time, the phone, which way it went, how it got there, how many
 characters, and the text as one line. Double-click a line, or press *Copy this line*, to put it
 back on this PC's clipboard.

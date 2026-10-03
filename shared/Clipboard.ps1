@@ -238,6 +238,7 @@ function Start-ClipboardShare {
         Err       = ''
         Offset    = [long]0
         LastPhone = $null
+        Said      = ''
         Since     = (Get-Date)
     }
 
@@ -390,6 +391,16 @@ function Invoke-ClipboardTick {
 
         if ($share.Route -eq 'scrcpy') {
             foreach ($line in @(Read-ClipboardShareLines -Share $share)) {
+                # a phone that refuses to hand its clipboard over says so in
+                # scrcpy's own words; without this the page would simply sit
+                # there looking as though nothing had been copied
+                if ($line -match 'ERROR|Exception|refused|denied') {
+                    if ("$line" -ne "$($share.Said)") {
+                        $share.Said = "$line"
+                        Write-Log ("Clipboard: $serial - " + $line) $colorWarn
+                    }
+                    continue
+                }
                 if ($line -notmatch 'clipboard') { continue }
                 if ($line -match 'Device clipboard copied') {
                     $now = Get-ClipboardHere

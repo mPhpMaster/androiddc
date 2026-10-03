@@ -380,14 +380,85 @@ function Set-StatusPill {
     }
 }
 
+function Get-DeviceMake {
+    <#
+        The make of a phone, from the model name the device list already has -
+        no trip to the phone for it.
+
+        A letter in the make's own colour, because there are no brand marks to
+        show: the icon font has none, and shipping somebody's logo with this is
+        not something to do lightly. A make nobody here knows keeps the plain
+        phone glyph, which is what every phone had before.
+    #>
+    param([string]$Model, [string]$Serial = '')
+
+    $text = "$Model $Serial".ToLowerInvariant()
+    foreach ($make in @(
+            @{ Name = 'Samsung';  Letter = 'S'; Color = '#1428A0'; Match = 'samsung|^sm-|galaxy' }
+            @{ Name = 'Xiaomi';   Letter = 'M'; Color = '#FF6900'; Match = 'xiaomi|redmi|poco|^mi\b|mi \d' }
+            @{ Name = 'Google';   Letter = 'G'; Color = '#1A73E8'; Match = 'pixel|google' }
+            @{ Name = 'OnePlus';  Letter = '1'; Color = '#EB0029'; Match = 'oneplus|^op\d' }
+            @{ Name = 'Huawei';   Letter = 'H'; Color = '#CF0A2C'; Match = 'huawei|honor' }
+            @{ Name = 'Oppo';     Letter = 'O'; Color = '#046A38'; Match = 'oppo|realme' }
+            @{ Name = 'vivo';     Letter = 'V'; Color = '#415FFF'; Match = 'vivo|iqoo' }
+            @{ Name = 'Motorola'; Letter = 'M'; Color = '#5C92FA'; Match = 'motorola|moto ' }
+            @{ Name = 'Nokia';    Letter = 'N'; Color = '#124191'; Match = 'nokia' }
+            @{ Name = 'Sony';     Letter = 'S'; Color = '#111111'; Match = 'sony|xperia' }
+            @{ Name = 'LG';       Letter = 'L'; Color = '#A50034'; Match = '^lg[- ]|lg electronics' }
+            @{ Name = 'Asus';     Letter = 'A'; Color = '#00539B'; Match = 'asus|zenfone|rog phone' }
+            @{ Name = 'Lenovo';   Letter = 'L'; Color = '#E1140A'; Match = 'lenovo' }
+            @{ Name = 'Nothing';  Letter = 'N'; Color = '#111111'; Match = 'nothing phone|^a06\d' }
+            @{ Name = 'Tecno';    Letter = 'T'; Color = '#0057FF'; Match = 'tecno|infinix|itel' }
+            @{ Name = 'Apple';    Letter = 'A'; Color = '#555555'; Match = 'iphone|ipad|apple' })) {
+        if ($text -match $make.Match) {
+            return [PSCustomObject]@{ Name = $make.Name; Letter = $make.Letter; Color = $make.Color }
+        }
+    }
+    return $null
+}
+
+function Update-DeviceMark {
+    # the square beside the phone's name: its make, or the plain phone glyph
+    param($Device)
+
+    $make = $null
+    if ($Device) { $make = Get-DeviceMake -Model "$($Device.Model)" -Serial "$($Device.Serial)" }
+    if (-not $make) {
+        $ui.DeviceMarkLetter.Visibility = 'Collapsed'
+        $ui.DeviceMarkGlyph.Visibility = 'Visible'
+        $ui.DeviceMarkBox.Background = Get-Resource 'Surface'
+        $ui.DeviceMarkBox.ToolTip = $null
+        return
+    }
+    $ui.DeviceMarkGlyph.Visibility = 'Collapsed'
+    $ui.DeviceMarkLetter.Text = $make.Letter
+    $ui.DeviceMarkLetter.Visibility = 'Visible'
+    try {
+        $ui.DeviceMarkBox.Background = New-Object System.Windows.Media.SolidColorBrush(
+            [System.Windows.Media.ColorConverter]::ConvertFromString($make.Color))
+    } catch {
+        $ui.DeviceMarkBox.Background = Get-Resource 'Brand'
+    }
+    $ui.DeviceMarkBox.ToolTip = $make.Name
+}
+
+function Invoke-PageRefresh {
+    # what F5 does, and what the logo does when Overview is already on screen:
+    # the page's own Refresh, or the device list for a page that has none
+    if ($script:busy -gt 0) { return }
+    if ($script:currentPage -and $script:currentPage.Refresh) { & $script:currentPage.Refresh }
+    else { Update-DeviceList }
+}
+
 function Update-DeviceHeader {
     # the title and the line under it, from the list alone - no trip to the phone
     $first = (Get-SelectedDevice)
     $count = @($ui.DeviceList.SelectedItems).Count
+    Update-DeviceMark -Device $first
     if ($null -eq $first) {
         $ui.DeviceTitle.Text = if ($script:deviceRows.Count -eq 0) { 'No device' } else { 'Pick a device' }
         $ui.DeviceSubtitle.Text = if ($script:deviceRows.Count -eq 0) { 'Plug a phone in with USB debugging on' } else { "$($script:deviceRows.Count) attached" }
-        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen', 'PillFtp')) { $ui[$pill].Visibility = 'Collapsed' }
+        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen', 'PillFtp', 'PillClipboard')) { $ui[$pill].Visibility = 'Collapsed' }
         return
     }
     $ui.DeviceTitle.Text = $first.Model
@@ -402,12 +473,86 @@ function Update-DeviceHeader {
     $ui.DeviceSubtitle.Text = $parts -join ('  ' + [char]0x00B7 + '  ')
 }
 
+function Get-DeviceLoad {
+    <#
+        What the phone is doing with itself: how busy its processors are, how
+        much of its memory is in use, and - where Android lets adb read it at
+        all - its GPU.
+
+        Measured on the phone this was written against: dumpsys cpuinfo ends
+        with a TOTAL line, /proc/meminfo is readable, and every GPU file a
+        phone might have (kgsl's gpubusy, mali's utilisation, devfreq's load)
+        was refused. So the GPU answer is often "not readable", which is said
+        rather than left looking broken.
+    #>
+    param([string]$Serial)
+
+    $answer = [PSCustomObject]@{ Cpu = ''; Ram = ''; Gpu = ''; RamUsed = -1 }
+    $cpu = (Invoke-DeviceShell -Serial $Serial -CommandArguments @('dumpsys cpuinfo 2>/dev/null | tail -1')).Text
+    if ("$cpu" -match '([\d.]+)%\s+TOTAL') { $answer.Cpu = "$($Matches[1])%" }
+
+    $mem = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+        "grep -E 'MemTotal|MemAvailable' /proc/meminfo 2>/dev/null")).Text
+    $total = 0
+    $free = 0
+    if ("$mem" -match 'MemTotal:\s+(\d+)') { $total = [long]$Matches[1] }
+    if ("$mem" -match 'MemAvailable:\s+(\d+)') { $free = [long]$Matches[1] }
+    if ($total -gt 0) {
+        $used = $total - $free
+        $answer.RamUsed = [int][Math]::Round(100.0 * $used / $total)
+        $answer.Ram = "$($answer.RamUsed)% of " + (Format-FileSize -Bytes ([long]$total * 1024))
+    }
+
+    # the places a phone keeps its GPU load, tried in turn; most phones refuse
+    $gpu = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+        'cat /sys/class/kgsl/kgsl-3d0/gpubusy 2>/dev/null; ' +
+        'cat /sys/class/misc/mali0/device/utilisation 2>/dev/null; ' +
+        'cat /sys/class/devfreq/*.mali/load 2>/dev/null')).Text
+    foreach ($line in ("$gpu" -split "`r?`n")) {
+        $words = "$line".Trim()
+        if (-not $words) { continue }
+        if ($words -match '^(\d+)\s+(\d+)$') {
+            # kgsl: busy and total since the last read
+            $busy = [double]$Matches[1]
+            $all = [double]$Matches[2]
+            if ($all -gt 0) { $answer.Gpu = "$([int][Math]::Round(100 * $busy / $all))%" }
+            break
+        }
+        if ($words -match '^(\d+)%?$') { $answer.Gpu = "$($Matches[1])%"; break }
+    }
+    if (-not $answer.Gpu) { $answer.Gpu = 'not readable' }
+    return $answer
+}
+
+function Update-DeviceLoad {
+    # the three lines at the foot of the side bar, read on their own slow timer
+    param([switch]$Force)
+
+    $first = (Get-SelectedDevice)
+    if ($null -eq $first -or $first.State -ne 'device') {
+        foreach ($row in @('SideCpuRow', 'SideRamRow', 'SideGpuRow')) { $ui[$row].Visibility = 'Collapsed' }
+        return
+    }
+    if (-not $Force -and $script:busy -gt 0) { return }
+    $serial = $first.Serial
+    $load = Get-DeviceLoad -Serial $serial
+    if ((Get-SelectedSerial) -ne $serial) { return }
+
+    $ui.SideCpu.Text = $(if ("$($load.Cpu)") { $load.Cpu } else { '-' })
+    $ui.SideRam.Text = $(if ("$($load.Ram)") { $load.Ram } else { '-' })
+    $ui.SideGpu.Text = $load.Gpu
+    foreach ($row in @('SideCpuRow', 'SideRamRow', 'SideGpuRow')) { $ui[$row].Visibility = 'Visible' }
+    # a phone with almost no memory left explains a great deal, so it is coloured
+    if ($load.RamUsed -ge 90) { $ui.SideRam.Foreground = Get-Resource 'Warning' }
+    else { $ui.SideRam.Foreground = Get-Resource 'Ink' }
+}
+
 function Update-DeviceStatus {
     # battery, signal and screen for the header pills; one phone, the first picked
     Update-DeviceHeader
     $first = (Get-SelectedDevice)
     if ($null -eq $first -or $first.State -ne 'device') {
-        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen', 'PillFtp')) { $ui[$pill].Visibility = 'Collapsed' }
+        foreach ($pill in @('PillBattery', 'PillSignal', 'PillScreen', 'PillFtp', 'PillClipboard')) { $ui[$pill].Visibility = 'Collapsed' }
         $script:statusSerial = $null
         return
     }
@@ -439,6 +584,7 @@ function Update-DeviceStatus {
     $screenTone = if ($screen.Locked -or ($null -ne $screen.ScreenOn -and -not $screen.ScreenOn)) { 'warn' } else { 'ok' }
     Set-StatusPill $ui.PillScreen $ui.PillScreenText ($screenWords -join ', ') $screenTone
     if (Get-Command Update-FtpHeader -ErrorAction SilentlyContinue) { Update-FtpHeader }
+    if (Get-Command Update-ClipboardHeader -ErrorAction SilentlyContinue) { Update-ClipboardHeader }
 }
 
 # --------------------------------------------------------------- dialogs ----
@@ -809,7 +955,7 @@ function Invoke-WindowKey {
     if ($Key -eq [System.Windows.Input.Key]::F5 -and $none) {
         # never on top of a call still running: F5 held down would stack them
         if ($script:busy -gt 0) { return $true }
-        if ($script:currentPage -and $script:currentPage.Refresh) { & $script:currentPage.Refresh } else { Update-DeviceList }
+        Invoke-PageRefresh
         return $true
     }
     if ($control -and $Key -ge [System.Windows.Input.Key]::D1 -and $Key -le [System.Windows.Input.Key]::D9) {
@@ -923,6 +1069,30 @@ function Initialize-ShellEvents {
     })
 
     $ui.HeaderRefresh.Add_Click({ Update-DeviceList })
+    # the logo: the way back to Overview, and a second press reads it again
+    $ui.SideBrand.Add_Click({
+        if (Test-PageShown -Key 'overview') { Invoke-PageRefresh } else { Show-Page -Page 'overview' }
+    })
+    # the program's own icon in place of the letter, when it is beside the script
+    $icon = Join-Path $script:toolsRoot 'assets\icon-64.png'
+    if (Test-Path -LiteralPath $icon -PathType Leaf) {
+        try {
+            $image = New-Object System.Windows.Media.Imaging.BitmapImage
+            $image.BeginInit()
+            $image.UriSource = New-Object System.Uri($icon)
+            $image.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+            $image.EndInit()
+            $ui.SideBrandImage.Source = $image
+            $ui.SideBrandImage.Visibility = 'Visible'
+            $ui.SideBrandLetter.Visibility = 'Collapsed'
+        } catch { }
+    }
+
+    # what the phone is doing with itself: its own timer, slower than the rest
+    $script:loadTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:loadTimer.Interval = [TimeSpan]::FromSeconds(6)
+    $script:loadTimer.Add_Tick({ Update-DeviceLoad })
+    $script:loadTimer.Start()
     $ui.SideClassic.Add_Click({ Switch-ToClassic })
     $ui.DeviceRefresh.Add_Click({ Update-DeviceList })
 
