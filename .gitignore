@@ -38,6 +38,7 @@ gnirehtet-run.cmd
 *.tar.gz
 
 # --- local only --------------------------------------------------------------
+.idea/
 backups/
 android/ftp/companion/out/
 *.log
