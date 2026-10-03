@@ -212,12 +212,29 @@ Say ("  opening the page reads it: '{0}'   {1}" -f $ui.ToolsEraseWhat.Text, (Mar
     $ui.ToolsEraseWhat.Text -ne 'Pick a phone to see what it has.')))
 
 $script:asked.Clear()
-$script:answers = @{ 'am broadcast*' = 'Broadcast completed: result=0' }
+$script:answers = @{
+    'dumpsys package com.android.shell*' = 'android.permission.MASTER_CLEAR: granted=true'
+    'am broadcast*' = 'Broadcast completed: result=0'
+    'echo still-here' = ''          # the phone has left the cable to do it
+}
 $wiping = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
     Reset-DeviceToNew -Serial 'ABC123' }
-Say ("  a phone that takes the reset is erasing itself   {0}" -f (Mark (
+Say ("  a phone that takes the reset and goes is erasing itself   {0}" -f (Mark (
     $wiping.Wiping -and -not $wiping.Opened -and
     @($script:asked | Where-Object { $_ -like '*android.intent.action.FACTORY_RESET*' }).Count -eq 1)))
+# "Broadcast completed" is the message being delivered, not acted on
+$script:asked.Clear()
+$script:answers = @{
+    'dumpsys package com.android.shell*' = 'android.permission.MASTER_CLEAR: granted=true'
+    'am broadcast*' = 'Broadcast completed: result=0'
+    'echo still-here' = 'still-here'    # and the phone is still answering
+    'cmd package resolve-activity --brief -a com.android.settings.action.FACTORY_RESET' = "priority=1`ncom.android.settings/.Settings`$FactoryResetActivity"
+    'am start*' = 'Starting: Intent'
+}
+$ignored = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Reset-DeviceToNew -Serial 'ABC123' }
+Say ("  one that says 'completed' and then does nothing is not called erased   {0}" -f (Mark (
+    -not $ignored.Wiping -and $ignored.Opened)))
 $script:answers = @{
     'sm format public:179,1'     = ''
     'sm list-volumes all'        = "public:179,1 mounted CCCC-DDDD`nemulated;0 mounted null"

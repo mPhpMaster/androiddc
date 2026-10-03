@@ -233,6 +233,17 @@ to keep, and contacts are the only part that goes back on a phone.
 it to look again after a restore, but some ROMs take their time; opening the gallery once
 usually does it.
 
+## Factory reset does nothing
+
+That was a real fault, fixed: the window used to say *the phone took it: it is erasing itself*
+on the strength of `Broadcast completed`, which only means the message was delivered. Android
+drops it unless adb's shell holds `MASTER_CLEAR`, and hardly any phone grants that.
+
+The button now reads that permission first. On a phone without it, the phone's **own reset
+screen** opens instead and the last taps are done there - that is the way that works, and it is
+what the log will say. If your phone has no such screen either, the log says that too; open
+Settings on the phone and look for *Reset* or *Erase all data*.
+
 ## The clipboard does not cross
 
 **Check which way it says it got in.** The line under the buttons on the Clipboard page names

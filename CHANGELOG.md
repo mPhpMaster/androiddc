@@ -4,6 +4,32 @@
 
 ## Unreleased
 
+### "The phone took it" - when the phone had not
+
+Pressing *Factory reset* said **the phone is erasing itself and will restart as
+new**, and the phone did nothing at all. The reset went out as a broadcast, and
+`Broadcast completed: result=0` was read as the phone agreeing to it. It is not:
+it means the message was delivered. Android's receiver is in the system, and a
+system that does not like the caller drops it without a word back down the
+cable.
+
+Now the phone is asked first and checked afterwards.
+
+* **Asked first**: `dumpsys package com.android.shell` says whether adb's shell
+  holds `MASTER_CLEAR`, which is what Android looks at. Where it does not - the
+  phone this was tested on grants its shell 1046 permissions and this is not
+  one of them - the broadcast is not sent at all, and the phone's own reset
+  screen is opened, which is the way that works.
+* **Checked afterwards**: a phone that has really begun erasing itself leaves
+  the cable within seconds, because it restarts to do the wiping. One that
+  ignored the broadcast goes on answering. That is the only honest evidence
+  there is, so it is what the window is told - *the phone is still here, so it
+  did not act on it, whatever the broadcast reported*.
+
+Writing the test for it caught a second fault in the new code: the wait minded
+a leftover "stopped" flag before it asked the phone anything, so a phone that
+was never asked would have been reported as not having gone.
+
 ### Nova opens about twice as fast
 
 The splash said what was happening; this makes there be less of it. Measured

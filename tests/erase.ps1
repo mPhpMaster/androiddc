@@ -160,30 +160,77 @@ Say ("  nothing to format is refused before anything is run   {0}" -f (Mark (
 
 Say ''
 Say '== the whole phone =='
+# The shell on most phones does not hold MASTER_CLEAR, and the broadcast says
+# nothing about that: it is delivered, reported completed, and dropped. So the
+# permission is read first, and afterwards whether the phone really left.
+$screenThere = "priority=1 preferredOrder=0`ncom.android.settings/.Settings`$FactoryResetActivity"
+$holdsIt = 'android.permission.MASTER_CLEAR: granted=true'
+$holdsItNot = 'android.permission.INTERNET: granted=true'
+
 $script:asked.Clear()
-$script:answers = @{ 'am broadcast*' = 'Broadcast completed: result=0' }
+$script:answers = @{
+    'dumpsys package com.android.shell*' = $holdsIt
+    'am broadcast*' = 'Broadcast completed: result=0'
+    'echo still-here' = ''          # the phone has left the cable
+}
 $wiping = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
     Reset-DeviceToNew -Serial 'ABC123' }
 $sent = (Get-Asked -Like 'am broadcast*')[0]
 Say ("  it asks with: {0}" -f $sent)
-Say ("  a phone that takes it is erasing itself, and no screen was opened   {0}" -f (Mark (
+Say ("  a phone that takes it and goes is erasing itself, and no screen was opened   {0}" -f (Mark (
     $wiping.Wiping -and -not $wiping.Opened -and
     $sent -like '*-a android.intent.action.FACTORY_RESET -p android --receiver-foreground*')))
 
+# the fault this was written for: delivered, "completed", and nothing happened
 $script:asked.Clear()
 $script:answers = @{
-    'am broadcast*' = 'java.lang.SecurityException: Permission Denial: requires android.permission.MASTER_CLEAR'
-    'cmd package resolve-activity --brief -a com.android.settings.action.FACTORY_RESET' = "priority=1 preferredOrder=0`ncom.android.settings/.Settings`$FactoryResetActivity"
+    'dumpsys package com.android.shell*' = $holdsIt
+    'am broadcast*' = 'Broadcast completed: result=0'
+    'echo still-here' = 'still-here'    # the phone is answering as if nothing was asked
+    'cmd package resolve-activity --brief -a com.android.settings.action.FACTORY_RESET' = $screenThere
+    'am start*' = 'Starting: Intent'
+}
+$ignored = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Reset-DeviceToNew -Serial 'ABC123' }
+Say ("  a phone that answers 'completed' and then does nothing is not called erased   {0}" -f (Mark (
+    -not $ignored.Wiping -and $ignored.Opened -and
+    (Get-Asked -Like 'echo still-here').Count -ge 1)))
+Say ("  and the log says the phone is still here   {0}" -f (Mark (
+    $txtLog.Text -match 'still here, so it did not act on it')))
+
+# a phone whose shell has no MASTER_CLEAR: the broadcast is not even sent
+$script:asked.Clear()
+$script:answers = @{
+    'dumpsys package com.android.shell*' = $holdsItNot
+    'cmd package resolve-activity --brief -a com.android.settings.action.FACTORY_RESET' = $screenThere
     'am start*' = 'Starting: Intent'
 }
 $opened = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
     Reset-DeviceToNew -Serial 'ABC123' }
-Say ("  a phone that refuses it has its own screen opened: {0}   {1}" -f ((Get-Asked -Like 'am start*')[0]), (Mark (
+Say ("  a phone whose shell cannot do it has its own screen opened: {0}   {1}" -f
+    ((Get-Asked -Like 'am start*')[0]), (Mark (
     -not $opened.Wiping -and $opened.Opened -and
     ((Get-Asked -Like 'am start*')[0]) -eq 'am start -a com.android.settings.action.FACTORY_RESET')))
-Say ("  and the log says MASTER_CLEAR is why   {0}" -f (Mark ($txtLog.Text -match 'MASTER_CLEAR is a system permission')))
+Say ("  and nothing was broadcast at it   {0}" -f (Mark ((Get-Asked -Like 'am broadcast*').Count -eq 0)))
+Say ("  the log says MASTER_CLEAR is why   {0}" -f (Mark ($txtLog.Text -match 'does not hold MASTER_CLEAR')))
 
-$script:answers = @{ 'am broadcast*' = 'java.lang.SecurityException'; 'cmd package resolve-activity*' = 'No activity found' }
+# refused outright, although the permission looked granted
+$script:asked.Clear()
+$script:answers = @{
+    'dumpsys package com.android.shell*' = $holdsIt
+    'am broadcast*' = 'java.lang.SecurityException: Permission Denial: requires android.permission.MASTER_CLEAR'
+    'cmd package resolve-activity --brief -a com.android.settings.action.FACTORY_RESET' = $screenThere
+    'am start*' = 'Starting: Intent'
+}
+$refused = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    Reset-DeviceToNew -Serial 'ABC123' }
+Say ("  a refusal is a refusal, not a wipe   {0}" -f (Mark (
+    -not $refused.Wiping -and $refused.Opened -and (Get-Asked -Like 'echo still-here').Count -eq 0)))
+
+$script:answers = @{
+    'dumpsys package com.android.shell*' = $holdsItNot
+    'cmd package resolve-activity*' = 'No activity found'
+}
 $neither = & { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
     Reset-DeviceToNew -Serial 'ABC123' }
 Say ("  a phone with no reset screen either says so instead of claiming it worked   {0}" -f (Mark (

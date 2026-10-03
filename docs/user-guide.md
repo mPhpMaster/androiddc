@@ -213,6 +213,14 @@ Nothing is ever claimed without being checked: a format is verified by reading t
 and counting the files on it, and an erase by counting what is left. A refusal is reported as a
 refusal.
 
+**Factory reset** needs a permission adb's shell does not have on most phones, and Android does
+not say so: the reset is a broadcast, and *Broadcast completed* means it was delivered, not that
+anything was done with it. So the permission is read before anything is sent, and where it is
+missing the phone's **own reset screen** is opened instead - the taps are done there, on the
+phone. Where it is held, the broadcast goes out and the phone is then watched: one that is
+really erasing itself leaves the cable within seconds. If it is still answering, the window says
+so rather than claiming a wipe.
+
 > Take a backup first. There is no undoing either of these, and the backup page is the other
 > half of this one: back up, erase, restore.
 

@@ -226,10 +226,11 @@ user - which is why the scrcpy route is now the last resort rather than the firs
 | Purpose | Command |
 |---|---|
 | What storage this phone has | `adb shell sm list-volumes all`, and `adb shell df -k '<path>'` for how big and how full each one is |
+| Whether adb may reset this phone | `adb shell dumpsys package com.android.shell`, read for `MASTER_CLEAR`. Android checks that permission before acting on the reset broadcast, and the broadcast itself never says it was refused - so it is read before anything is sent |
+| Resetting the phone | `adb shell am broadcast -a android.intent.action.FACTORY_RESET -p android --receiver-foreground`, and only where the permission above is held. *Broadcast completed: result=0* means it was delivered, not done, so afterwards `adb shell echo` is asked every second for up to 25 s: a phone that is really erasing itself leaves the cable, and one that ignored the message answers |
+| The phone's own reset screen | `adb shell cmd package resolve-activity --brief -a com.android.settings.action.FACTORY_RESET` (then `android.settings.BACKUP_AND_RESET_SETTINGS`, `android.settings.PRIVACY_SETTINGS`, `android.settings.SETTINGS`), opened with `adb shell am start -a <action>`. The taps are done on the phone |
 | Formatting a memory card | `adb shell sm format <volume>`, then `adb shell sm mount <volume>` if it did not come back by itself. Checked by reading `sm list-volumes` again and counting with `find '<path>' -type f \| wc -l` |
 | Emptying a card or `/sdcard` | `adb shell ls -A1 '<path>'`, then one `adb shell rm -rf '<path>/<name>'` per name at the top level, and the same `find \| wc -l` afterwards |
-| Asking the phone to factory reset itself | `adb shell am broadcast -a android.intent.action.FACTORY_RESET -p android --receiver-foreground --es android.intent.extra.REASON AndroidDC`. Refused on most phones: the receiver wants `MASTER_CLEAR`, which adb's shell does not hold |
-| Opening the phone's own reset screen | `adb shell cmd package resolve-activity --brief -a <action>` to find one that exists, then `adb shell am start -a <action>`. Tried in order: `com.android.settings.action.FACTORY_RESET`, `android.settings.BACKUP_AND_RESET_SETTINGS`, `android.settings.PRIVACY_SETTINGS`, `android.settings.SETTINGS` |
 
 What adb's shell is allowed to do here was read from the phone, not assumed:
 `adb shell dumpsys package com.android.shell` lists `MOUNT_FORMAT_FILESYSTEMS: granted=true`
