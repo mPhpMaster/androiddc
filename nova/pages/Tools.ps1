@@ -26,12 +26,15 @@ function Test-ToolsTabShown {
 
 function Update-ToolsShown {
     # the page opened: the root page says what this phone allows, the tools page shows its DNS
+    # the erase line first, and with no phone as well: it is the one thing on
+    # this page that would otherwise sit on its opening sentence for ever
+    if (-not (Test-ToolsTabShown -Tab 'root')) { Update-ToolsErase }
     if (-not (Get-SelectedSerial)) {
         if (-not (Test-ToolsTabShown -Tab 'root')) { $ui.ToolsDnsState.Text = '' }
         return
     }
     if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability }
-    else { $null = Show-DnsState -Quiet; Update-ToolsErase }
+    else { $null = Show-DnsState -Quiet }
 }
 
 function Update-ToolsForDevice {
@@ -50,7 +53,12 @@ function Update-ToolsForDevice {
     if ($selected -ne $script:rootCheckedSerial) {
         if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability } else { Reset-RootAvailability }
     }
-    if ($selected -ne $script:eraseFor -and (Test-ToolsTabShown -Tab 'device')) { Update-ToolsErase }
+    if ($selected -ne $script:eraseFor) {
+        # read now if it is on screen, and otherwise left to be read when the
+        # page is opened - never left saying another phone's answer
+        if (Test-ToolsTabShown -Tab 'device') { Update-ToolsErase }
+        else { $script:eraseFor = ''; $ui.ToolsEraseWhat.Text = 'Pick a phone to see what it has.' }
+    }
     if ($script:toolsImeSerial -and $selected -ne $script:toolsImeSerial) {
         # another phone's keyboards are not this phone's
         $ui.ToolsIme.Items.Clear()
@@ -61,7 +69,8 @@ function Update-ToolsForDevice {
 
 function Update-ToolsRefresh {
     # F5
-    if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability } else { $null = Show-DnsState }
+    if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability }
+    else { $null = Show-DnsState; Update-ToolsErase -Force }
 }
 
 function Invoke-ToolsPageCall {
@@ -1220,7 +1229,7 @@ function Update-ToolsErase {
     if (-not $serial) {
         $script:eraseFor = ''
         $script:eraseCards = @()
-        $ui.ToolsEraseWhat.Text = 'No phone picked.'
+        $ui.ToolsEraseWhat.Text = 'Pick a phone to see what it has.'
         return
     }
     if (-not $Force -and $script:eraseFor -eq $serial) { return }
@@ -1362,7 +1371,8 @@ $ui.ToolsTabs.Add_SelectionChanged({
     if (-not [object]::ReferenceEquals($eventArgs.OriginalSource, $sender)) { return }
     if (-not (Test-PageShown -Key 'tools') -or $script:busy -gt 0 -or -not (Get-SelectedSerial)) { return }
     # the root page says what this phone allows as soon as it is opened, from either tab
-    if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability } else { $null = Show-DnsState -Quiet }
+    if (Test-ToolsTabShown -Tab 'root') { Update-RootAvailability }
+    else { $null = Show-DnsState -Quiet; Update-ToolsErase }
 })
 
 $ui.ToolsPair.Add_Click({ Start-WirelessPairing })

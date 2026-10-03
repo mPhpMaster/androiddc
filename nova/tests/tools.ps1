@@ -194,7 +194,22 @@ Say ("  a phone with no card: '{0}'   {1}" -f $ui.ToolsEraseWhat.Text, (Mark (
 & { function Get-SelectedSerial { $null }
     Update-ToolsErase -Force }
 Say ("  no phone picked: '{0}'   {1}" -f $ui.ToolsEraseWhat.Text, (Mark (
-    $ui.ToolsEraseWhat.Text -eq 'No phone picked.')))
+    $ui.ToolsEraseWhat.Text -eq 'Pick a phone to see what it has.')))
+# and the page reads it on the way in, so the card never sits on its opening
+# line while a phone is plugged in - which is how this was found, in a picture
+$script:answers = @{
+    'sm list-volumes all' = "public:179,1 mounted EEEE-FFFF`nemulated;0 mounted null"
+    'df -k*'              = "Filesystem 1K-blocks Used Available Use% Mounted on`n/dev/fuse 2048 1024 1024 50% /storage/EEEE-FFFF"
+}
+$ui.ToolsTabs.SelectedItem = $ui.ToolsTabDevice
+$null = Wait-Idle
+& { function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
+    function Get-SelectedSerial { 'ABC123' }
+    $script:eraseFor = ''
+    Update-ToolsShown }
+$null = Wait-Idle
+Say ("  opening the page reads it: '{0}'   {1}" -f $ui.ToolsEraseWhat.Text, (Mark (
+    $ui.ToolsEraseWhat.Text -ne 'Pick a phone to see what it has.')))
 
 $script:asked.Clear()
 $script:answers = @{ 'am broadcast*' = 'Broadcast completed: result=0' }

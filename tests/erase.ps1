@@ -252,7 +252,7 @@ Say ("  a phone without one: '{0}'   {1}" -f $lblErase.Text, (Mark (
 & { function Get-SelectedSerial { $null }
     Update-EraseHint -Force }
 Say ("  no phone picked: '{0}'   {1}" -f $lblErase.Text, (Mark (
-    $lblErase.Text -eq 'No phone picked in the list.')))
+    $lblErase.Text -eq 'Pick a phone in the list to see what it has.')))
 
 Set-EraseBusyUi -Running $true
 Say ("  while an erase runs, Cancel is the only one that works   {0}" -f (Mark (

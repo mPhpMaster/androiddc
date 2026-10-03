@@ -1986,7 +1986,7 @@ $tabTools.Controls.Add($btnEraseCancel)
 $toolTip.SetToolTip($btnEraseCancel, 'Stops an erase where it is; what has already gone does not come back')
 
 $lblErase = New-Object System.Windows.Forms.Label
-$lblErase.Text = 'What this phone has is read when the page is opened.'
+$lblErase.Text = 'Both ask twice, and work on the phone picked in the list.'
 $lblErase.ForeColor = [System.Drawing.Color]::DimGray
 $lblErase.AutoEllipsis = $true
 $lblErase.Location = New-Object System.Drawing.Point(396, 475)
@@ -5802,7 +5802,7 @@ function Update-EraseHint {
     if (-not $serial) {
         $script:eraseFor = ''
         $script:eraseCards = @()
-        $lblErase.Text = 'No phone picked in the list.'
+        $lblErase.Text = 'Pick a phone in the list to see what it has.'
         return
     }
     if (-not $Force -and $script:eraseFor -eq $serial) { return }

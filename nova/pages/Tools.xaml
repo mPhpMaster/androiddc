@@ -182,8 +182,12 @@
                 <Button x:Name="ToolsEraseCancel" Content="Cancel" IsEnabled="False" Margin="0,0,8,8"
                         ToolTip="Stops an erase where it is; what has already gone does not come back"/>
               </WrapPanel>
-              <TextBlock x:Name="ToolsEraseWhat" Style="{StaticResource MutedLine}" TextWrapping="Wrap"
-                         Text="What this phone has is read when the page is opened."/>
+              <!-- what the buttons do, as the other cards say it, and under it
+                   the line that fills from the phone -->
+              <TextBlock Style="{StaticResource MutedLine}" TextWrapping="Wrap"
+                         Text="Both ask twice - a question, then the word typed out - and work on the one phone picked above, not on every device selected."/>
+              <TextBlock x:Name="ToolsEraseWhat" Style="{StaticResource MutedLine}" TextWrapping="Wrap" Margin="0,2,0,0"
+                         Text="Pick a phone to see what it has."/>
             </StackPanel>
           </Border>
         </StackPanel>
