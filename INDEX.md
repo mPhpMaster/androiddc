@@ -22,7 +22,7 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 | `nova\` | 75 files | 2026-10-03 | AndroidDC Nova, the same tool in a newer design: WPF hosted in PowerShell 5.1. `lib\` (adb off the window's thread, the window's helpers), `ui\` (theme and shell), `pages\` (one `.ps1` + `.xaml` per page), `fonts\` (DM Sans, Space Grotesk, OFL), `tests\` (runner, audit, a test per page, a tour of every page), `CONTRACT.md` (how a page is built). |
 | `shared\` | 9 files | 2026-10-03 | Loaded by both windows. `Tray.ps1`: the icon by the clock (a click hides or shows the window, minimizing hides it there, Exit in its menu). `Backup.ps1`: a copy of the phone on this PC (files, APK files, contacts, messages, call log, settings) and putting one back. `Erase.ps1`: formatting - the phone's storage volumes, a memory card formatted by the phone itself, a folder emptied name by name behind a guard, and a factory reset asked for from here or opened on the phone. `Automation.ps1`: starting with Windows (one `AndroidDC` value under the user's Run key, the launcher with `-Minimized`), the actions a rule can run, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone just plugged in from one already there, and the mutex that lets only one window run the rules. |
 | `README.md` | 11 KB | 2026-10-03 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
-| `CHANGELOG.md` | 41 KB | 2026-10-03 | What each release changed, starting with 1.0.0 and what the pre-release review fixed. The version is also `$appVersion` at the top of `androiddc.ps1`, and the log shows it at startup. |
+| `CHANGELOG.md` | 42 KB | 2026-10-03 | What each release changed, starting with 1.0.0 and what the pre-release review fixed. The version is also `$appVersion` at the top of `androiddc.ps1`, and the log shows it at startup. |
 | `docs\` | 9 pages | 2026-10-03 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
 | `assets\` | 10 files | 2026-09-10 | The logo: `androiddc.svg` (source), `wordmark.png` (README banner), `androiddc.ico` (window icon) and PNGs from 16 to 512 px. |
 | `LICENSE` | 12 KB | 2026-09-10 | Apache License 2.0 for AndroidDC itself. |
@@ -30,7 +30,7 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 | `gnirehtet-share.bat` | 118 B | 2026-09-07 | Launcher for the script above, adds `-PauseOnError` and forwards your arguments. |
 | `get-upstream.ps1` | 17 KB | 2026-09-11 | Downloads the two upstream packages below from the official GitHub releases, checks each archive against SHA256, unpacks it here and never touches the files above. `-OnlyMissing` fetches only what is absent - that is what the GUI runs when it finds a tool missing at startup. Also `-ScrcpyVersion` / `-GnirehtetVersion` / `-Destination` / `-Force` / `-SkipScrcpy` / `-SkipGnirehtet` / `-KeepArchives` / `-CacheFolder`. |
 | `get-upstream.bat` | 97 B | 2026-09-09 | Double-click launcher for the script above; passes any arguments straight through. |
-| `.github\` | 5 files | 2026-09-23 | CI. `workflows\check.yml` runs on every push and pull request: every `.ps1` parses, no variable is read before it is assigned (`audit-variables.ps1`), every control reaches the screen, every button has a handler and no control's name is reused (`audit-wiring.ps1`), both launchers point at a file that exists, `start-menu.vbs` makes shortcuts to both and `start-menu-remove.vbs` removes the same two, Nova's own audit passes (`nova\tests\audit.ps1`), and no absolute developer path appears in a shipped file. `update-index.py` rewrites the numbers in this index. |
+| `.github\` | 5 files | 2026-10-03 | CI. `workflows\check.yml` runs on every push and pull request: every `.ps1` parses, no variable is read before it is assigned (`audit-variables.ps1`), every control reaches the screen, every button has a handler and no control's name is reused (`audit-wiring.ps1`), both launchers point at a file that exists, `start-menu.vbs` makes shortcuts to both and `start-menu-remove.vbs` removes the same two, Nova's own audit passes (`nova\tests\audit.ps1`), and no absolute developer path appears in a shipped file. `update-index.py` rewrites the numbers in this index. |
 | `tests\` | 21 files | 2026-10-03 | The test suite. `run.ps1` runs the real window off screen with a test spliced in, closes it normally and reads its report. Eight tests need no phone (automation - rules, arrivals and the start-up entry against test copies -, layout at both window sizes, the phone-screen pane, screenshots, the Files page's search hits and Compress, the Wi-Fi order, the busy strip, toggle marks, device watch and shortcuts, and formatting against a made-up phone) and six need one (audio, apps, root, logcat and the live shell, UTF-8, text arriving on the phone unchanged). How to run them: `tests\README.md`. |
 
 ## Reverse tethering (gnirehtet 2.5.1, upstream files)
@@ -81,13 +81,13 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-34d2926415463f77  androiddc.ps1
+b6db84fb12f3c693  androiddc.ps1
 574f70700b74dec2  androiddc.vbs
 95c311cc87896c05  androiddc-nova.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
 3d6170dd68549c6f  avutil-60.dll
-cafb659142b4ae78  CHANGELOG.md
+072679233a9ba43e  CHANGELOG.md
 e394873cd3e2cc3a  disconnected.png
 b5e5354ae222bd71  get-upstream.bat
 63f3fa6196d817aa  get-upstream.ps1

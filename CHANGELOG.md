@@ -2,6 +2,25 @@
 
 [← back to the README](README.md)
 
+## 1.6.1
+
+**Nothing in either window changes.** What this ships is 1.6.0 with its version
+number moved on; both commits behind it are about the repository rather than the
+tool. It is here so that the two are recorded somewhere a person can find them.
+
+* **The editor's own folder is ignored.** `.idea/` sat untracked in every
+  `git status`, one line of noise over anything real that was waiting there.
+* **CI checks out with an action that asks for the runtime it gets.**
+  `actions/checkout@v4` declares Node 20, which the runners no longer carry, so
+  every run was forced onto Node 24 and wrote a deprecation notice into its own
+  annotations. `@v7` declares Node 24. Measured either side of the change: the
+  run before it carried that warning, the run after carried no annotations at
+  all. v5, v6 and v7 all declare Node 24, and the newest was taken after
+  reading what the two majors in between changed - v6 keeps the git credential
+  in a separate file, v7 refuses to check out a fork's head for
+  `pull_request_target` and `workflow_run` - neither of which this workflow
+  uses, and nothing in it reads the token after the checkout.
+
 ## 1.6.0
 
 ### "The phone took it" - when the phone had not
