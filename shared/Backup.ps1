@@ -1458,14 +1458,96 @@ function Get-BackupLocalFiles {
     return $map
 }
 
+function Test-BackupPlainPath {
+    # a path adb can be trusted with on Windows: plain ASCII, nothing else.
+    # Measured on a phone with a folder named in Arabic-Indic digits
+    # (2024-03-23_01.36.26 written in them): "adb pull" made a folder out of
+    # the first eleven characters, then said "Not a directory" for everything
+    # under the real name, and afterwards "No such file or directory" for
+    # files put into the folder this program had made correctly. adb converts
+    # the path to the PC's ANSI code page somewhere in there, and what that
+    # cannot carry is lost.
+    param([string]$Path)
+
+    foreach ($letter in "$Path".ToCharArray()) {
+        if ([int]$letter -lt 32 -or [int]$letter -gt 126) { return $false }
+    }
+    return $true
+}
+
+function Get-BackupScratchFolder {
+    <#
+        A folder adb can certainly write into: plain ASCII, outside the backup
+        so that nothing of it is ever packed, and used only for the few folders
+        whose own names adb cannot carry. %TEMP% itself can hold a name that is
+        not plain, and then there is nowhere left to try.
+    #>
+    $root = "$env:TEMP"
+    if (-not (Test-BackupPlainPath -Path $root)) { $root = 'C:\Windows\Temp' }
+    $scratch = Join-Path $root 'androiddc-pull'
+    if (-not (Test-Path -LiteralPath $scratch)) { $null = New-Item -ItemType Directory -Path $scratch -Force }
+    return $scratch
+}
+
+function Invoke-BackupPullGroup {
+    <#
+        One adb call for a handful of files that share a folder. adb takes
+        several remote paths and one local folder, so forty files cost one
+        call instead of forty - which is the difference between minutes and
+        half an hour on a folder adb gave up on.
+
+        Where the local folder is not plain ASCII, the files are pulled into a
+        scratch folder beside the backup and moved into place here, because
+        PowerShell writes those names correctly and adb does not.
+    #>
+    param([string]$Serial, [string[]]$Paths, [string]$LocalFolder, [string]$Scratch, [string]$Caption)
+
+    $answer = [PSCustomObject]@{ Pulled = 0; Failed = 0; Stopped = $false; Text = '' }
+    $files = @(@($Paths) | Where-Object { $_ })
+    if ($files.Count -eq 0) { return $answer }
+    if (-not (Test-Path -LiteralPath $LocalFolder)) { $null = New-Item -ItemType Directory -Path $LocalFolder -Force }
+
+    $plain = Test-BackupPlainPath -Path $LocalFolder
+    $into = $(if ($plain) { $LocalFolder } else { $Scratch })
+    if (-not $plain) {
+        if (-not (Test-Path -LiteralPath $into)) { $null = New-Item -ItemType Directory -Path $into -Force }
+        foreach ($old in @(Get-ChildItem -LiteralPath $into -File -ErrorAction SilentlyContinue)) {
+            Remove-Item -LiteralPath $old.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $pull = Invoke-BackupAdb -ArgumentList (@('-s', $Serial, 'pull', '-a') + $files + @($into)) -Caption $Caption
+    $answer.Stopped = $pull.Stopped
+    $answer.Text = "$($pull.Text)"
+
+    foreach ($remote in $files) {
+        $name = [System.IO.Path]::GetFileName(($remote -replace '/+$', ''))
+        $landed = Join-Path $into $name
+        $wanted = Join-Path $LocalFolder $name
+        if (-not $plain -and (Test-Path -LiteralPath $landed -PathType Leaf)) {
+            try {
+                Move-Item -LiteralPath $landed -Destination $wanted -Force -ErrorAction Stop
+            } catch {
+                # across drives, or a name Windows will not take: say so once
+                $answer.Text = $_.Exception.Message
+            }
+        }
+        if (Test-Path -LiteralPath $wanted -PathType Leaf) { $answer.Pulled++ } else { $answer.Failed++ }
+    }
+    return $answer
+}
+
 function Resume-BackupTree {
     <#
         One folder on the phone against the folder on this PC that was being
-        filled from it. What is missing, and what came over short, is fetched
-        one file at a time - so a backup stopped after 40 GB does not start
-        those 40 GB again.
+        filled from it. What is missing, and what came over short, is fetched -
+        so a backup stopped after 40 GB does not start those 40 GB again.
+
+        The files are fetched in groups that share a folder, which is one adb
+        call for forty of them rather than forty calls, and each one is checked
+        for afterwards rather than believed.
     #>
-    param([string]$Serial, [string]$Remote, [string]$Local, [string]$Caption)
+    param([string]$Serial, [string]$Remote, [string]$Local, [string]$Caption, [string]$Scratch = '')
 
     $result = [PSCustomObject]@{ Pulled = 0; Kept = 0; Failed = 0 }
     $onPhone = Get-BackupRemoteFiles -Serial $Serial -Remote $Remote
@@ -1486,26 +1568,43 @@ function Resume-BackupTree {
     Write-Log ("  $Caption : $($result.Kept) here already, $($todo.Count) to fetch (" +
         (Format-FileSize -Bytes $toFetch) + ') ...') $colorStep
     Start-BackupClock -Total $toFetch
+    if (-not $Scratch) { $Scratch = Get-BackupScratchFolder }
 
-    $index = 0
+    # by the folder they go into, so one call can carry a folder's worth
+    $groups = New-Object 'System.Collections.Generic.Dictionary[string,System.Collections.Generic.List[string]]'
     foreach ($path in $todo) {
-        if (Test-BackupStopped) { break }
-        $index++
-        Write-BackupProgress -Text ("$Caption : " + [System.IO.Path]::GetFileName($path)) -Done $index -Total $todo.Count
         $relative = $path.Substring($Remote.Length).TrimStart([char]47)
         if (-not $relative) { $relative = [System.IO.Path]::GetFileName($path) }
         $target = Join-Path $Local ($relative.Replace([char]47, [char]92))
-        $parent = Split-Path -Parent $target
-        if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
+        $folder = Split-Path -Parent $target
+        if (-not $folder) { $folder = $Local }
+        if (-not $groups.ContainsKey($folder)) {
+            $groups[$folder] = New-Object System.Collections.Generic.List[string]
+        }
+        $null = $groups[$folder].Add($path)
+    }
 
-        $pull = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'pull', '-a', $path, $target) -Caption $Caption
-        Add-BackupClockDone -Amount ([long]$onPhone[$path])
-        if ($pull.Stopped) { break }
-        if ($pull.ExitCode -eq 0) {
-            $result.Pulled++
-        } else {
-            $result.Failed++
-            if ($result.Failed -le 5) { Write-Log ('  ' + $pull.Text) $colorWarn }
+    $done = 0
+    $said = 0
+    foreach ($folder in @($groups.Keys)) {
+        if (Test-BackupStopped) { break }
+        $files = $groups[$folder]
+        for ($start = 0; $start -lt $files.Count; $start += 40) {
+            if (Test-BackupStopped) { break }
+            $chunk = @($files[$start..([Math]::Min($start + 39, $files.Count - 1))])
+            $done += $chunk.Count
+            Write-BackupProgress -Text ("$Caption : " + [System.IO.Path]::GetFileName($chunk[0])) `
+                -Done $done -Total $todo.Count
+            $group = Invoke-BackupPullGroup -Serial $Serial -Paths $chunk -LocalFolder $folder `
+                -Scratch $Scratch -Caption $Caption
+            foreach ($path in $chunk) { Add-BackupClockDone -Amount ([long]$onPhone[$path]) }
+            $result.Pulled += $group.Pulled
+            $result.Failed += $group.Failed
+            if ($group.Failed -gt 0 -and $said -lt 5 -and "$($group.Text)") {
+                $said++
+                Write-Log ('  ' + ("$($group.Text)" -split "`r?`n")[0]) $colorWarn
+            }
+            if ($group.Stopped) { break }
         }
     }
     Stop-BackupClock

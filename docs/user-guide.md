@@ -216,6 +216,40 @@ refusal.
 > Take a backup first. There is no undoing either of these, and the backup page is the other
 > half of this one: back up, erase, restore.
 
+### Clipboard
+
+What you copy on the phone and what you copy on this PC, kept together, with a list of
+everything that moved. Nova has the same page under *Workspace*.
+
+**Turn it on** with *Start sharing*: every phone selected in the device list is asked which way
+it can go, and the line under the buttons says what each one answered.
+
+| What the phone can do | What sharing does |
+|---|---|
+| Its shell has `cmd clipboard` | Both ways. The phone is asked every second and a half, and anything new on this PC is put onto it |
+| It has not | What you copy **on the phone** still arrives here by itself, through a scrcpy connection with no window, no video and no audio. This PC's side has to be sent by hand |
+| Neither, and no scrcpy here | Nothing: it says so rather than sitting quiet |
+
+**Sending by hand.** *Send this PC's clipboard* puts what is here onto the phone picked in the
+list. Where Android does not let adb set the clipboard, ticking *Type it when the phone will
+not take it* types the text into whatever has the cursor on the phone instead - that is not the
+clipboard, and the list says `typed` rather than pretending otherwise. *Take the phone's* reads
+the other way, and only a phone whose shell has `cmd clipboard` can be asked.
+
+**The monitor** is the list: the time, the phone, which way it went, how it got there, how many
+characters, and the text as one line. Double-click a line, or press *Copy this line*, to put it
+back on this PC's clipboard.
+
+> What was copied is kept in the window and nowhere else. The activity log is told the length
+> only, because a log can be saved to a file and a clipboard can hold a password. Closing the
+> window ends the sharing and the list.
+
+**Why Android makes this awkward.** Since Android 10 only the app in front, or the keyboard,
+may read or set the clipboard, so a program on this side of the cable cannot simply ask. Two
+doors are left: a shell command that some ROMs implement (`cmd clipboard`), and scrcpy, whose
+server is allowed to pass the clipboard on while it is connected. AndroidDC tries the first and
+falls back to the second, and says which one it got.
+
 ### Root / recovery
 
 Eleven adb commands, most of which an ordinary retail phone refuses: `root`, `unroot`,
@@ -408,7 +442,8 @@ unpacked whole: each file is taken out of the zip, sent, and dropped again.
 * **Restore contacts** adds the contacts the phone does not have, matched by name and number,
   so running it twice adds nothing twice. Messages and the call log are not put back: Android
   has no way for adb to write them.
-* **Show in Explorer** opens the folder with the backup file picked out.
+* **Show the open one** opens the folder with the backup that is open picked out. (The list has its
+  own *Show in Explorer* for the row picked there - the two buttons mean different backups.)
 
 Nothing is written to the phone until you press one of those buttons.
 

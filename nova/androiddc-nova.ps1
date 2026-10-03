@@ -81,6 +81,9 @@ if (Test-Path -LiteralPath $backupScript -PathType Leaf) { . $backupScript }
 # formatting a memory card, and asking the phone to reset itself
 $eraseScript = Join-Path $script:toolsRoot 'shared\Erase.ps1'
 if (Test-Path -LiteralPath $eraseScript -PathType Leaf) { . $eraseScript }
+# the clipboard shared between this PC and the phones
+$clipboardScript = Join-Path $script:toolsRoot 'shared\Clipboard.ps1'
+if (Test-Path -LiteralPath $clipboardScript -PathType Leaf) { . $clipboardScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen
@@ -89,7 +92,7 @@ Initialize-Ui
 
 # The pages, in the order the side navigation lists them within each section.
 # A page that is not written yet is simply not there.
-foreach ($pageName in @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Ftp', 'Media',
+foreach ($pageName in @('Overview', 'Screen', 'Mirroring', 'Apps', 'Files', 'Ftp', 'Clipboard', 'Media',
         'Messages', 'Contacts', 'Tethering', 'Radios', 'Tools', 'Running', 'Users', 'Shell', 'Automation', 'Backup')) {
     # "-Pages a,b" through -File arrives as one string
     $onlyPages = @($PageNames | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })

@@ -60,6 +60,7 @@ window's `settings.json`, so switching never mixes them.
 | `..\shared\Automation.ps1` | Start with Windows and the rules per phone, loaded by both windows |
 | `..\shared\Tray.ps1` | The icon by the clock: a click hides or shows the window, minimizing hides it there, the menu has Exit |
 | `..\shared\Backup.ps1` | A backup of the phone on this PC as one `.zip`, what is inside it, the backups this PC has, and putting one back - the classic window's Advanced > Backup |
+| `..\shared\Clipboard.ps1` | The clipboard shared with the phones, loaded by both windows: which way each one can go, reading and writing it, and the list of what moved - the classic window's Advanced > Clipboard |
 | `..\shared\Erase.ps1` | Formatting, loaded by both windows: a memory card formatted by the phone itself, a folder emptied name by name, and a factory reset - the classic window's Advanced > Device tools |
 | `tests\` | `run.ps1` runs the real program off screen with a test inside; `audit.ps1` checks the files without starting it |
 | `CONTRACT.md` | How a page is built, and which page owns what |

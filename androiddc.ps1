@@ -51,6 +51,7 @@ $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
 . (Join-Path $scriptRoot 'shared\Tray.ps1')
 . (Join-Path $scriptRoot 'shared\Backup.ps1')
 . (Join-Path $scriptRoot 'shared\Erase.ps1')
+. (Join-Path $scriptRoot 'shared\Clipboard.ps1')
 . (Join-Path $scriptRoot 'shared\Ftp.ps1')
 . (Join-Path $scriptRoot 'shared\FtpClassicPage.ps1')
 
@@ -545,6 +546,11 @@ $tabBackup = New-Object System.Windows.Forms.TabPage
 $tabBackup.Text = 'Backup'
 $tabBackup.BackColor = [System.Drawing.SystemColors]::Control
 $tabsAdvanced.TabPages.Add($tabBackup)
+
+$tabClipboard = New-Object System.Windows.Forms.TabPage
+$tabClipboard.Text = 'Clipboard'
+$tabClipboard.BackColor = [System.Drawing.SystemColors]::Control
+$tabsAdvanced.TabPages.Add($tabClipboard)
 
 $tabApps = New-Object System.Windows.Forms.TabPage
 $tabApps.Text = 'Apps'
@@ -2053,6 +2059,103 @@ foreach ($entry in @(
     }
 }
 
+
+# --- Advanced > Clipboard ----------------------------------------------------
+# What is copied here and on the phone, kept together. shared\Clipboard.ps1
+# does the work and says which way each phone can go; this page turns it on,
+# sends and fetches on demand, and shows everything that moved.
+$grpClipboard = New-Object System.Windows.Forms.GroupBox
+$grpClipboard.Text = 'Share the clipboard'
+$grpClipboard.Dock = 'Top'
+$grpClipboard.Height = 100
+$tabClipboard.Controls.Add($grpClipboard)
+
+$btnClipStart = New-Object System.Windows.Forms.Button
+$btnClipStart.Text = 'Start sharing'
+$btnClipStart.Location = New-Object System.Drawing.Point(12, 22)
+$btnClipStart.Size = New-Object System.Drawing.Size(120, 28)
+$grpClipboard.Controls.Add($btnClipStart)
+$toolTip.SetToolTip($btnClipStart, 'Watches this PC and the selected phones. What you copy on the phone arrives here, and what you copy here goes to the phone where the phone allows it')
+
+$btnClipStop = New-Object System.Windows.Forms.Button
+$btnClipStop.Text = 'Stop'
+$btnClipStop.Location = New-Object System.Drawing.Point(138, 22)
+$btnClipStop.Size = New-Object System.Drawing.Size(80, 28)
+$btnClipStop.Enabled = $false
+$grpClipboard.Controls.Add($btnClipStop)
+$toolTip.SetToolTip($btnClipStop, 'Stops watching and closes the connection it opened to the phone. Nothing is left running')
+
+$lblClipState = New-Object System.Windows.Forms.Label
+$lblClipState.Text = 'Not sharing.'
+$lblClipState.Location = New-Object System.Drawing.Point(228, 28)
+$lblClipState.Size = New-Object System.Drawing.Size(470, 20)
+$lblClipState.AutoEllipsis = $true
+$grpClipboard.Controls.Add($lblClipState)
+$toolTip.SetToolTip($lblClipState, 'Which phones are being shared with, and the way each one can go')
+
+$btnClipSend = New-Object System.Windows.Forms.Button
+$btnClipSend.Text = 'Send this PC''s clipboard'
+$btnClipSend.Location = New-Object System.Drawing.Point(12, 58)
+$btnClipSend.Size = New-Object System.Drawing.Size(170, 28)
+$grpClipboard.Controls.Add($btnClipSend)
+$toolTip.SetToolTip($btnClipSend, 'Puts what is on this PC onto the phone picked in the list, now')
+
+$btnClipTake = New-Object System.Windows.Forms.Button
+$btnClipTake.Text = 'Take the phone''s'
+$btnClipTake.Location = New-Object System.Drawing.Point(188, 58)
+$btnClipTake.Size = New-Object System.Drawing.Size(140, 28)
+$grpClipboard.Controls.Add($btnClipTake)
+$toolTip.SetToolTip($btnClipTake, 'Reads the phone''s clipboard onto this PC, now. Only phones whose shell has "cmd clipboard" can be asked')
+
+$chkClipType = New-Object System.Windows.Forms.CheckBox
+$chkClipType.Text = 'Type it when the phone will not take it'
+$chkClipType.Location = New-Object System.Drawing.Point(336, 62)
+$chkClipType.Size = New-Object System.Drawing.Size(270, 22)
+$grpClipboard.Controls.Add($chkClipType)
+$toolTip.SetToolTip($chkClipType, 'Where Android does not let adb set the clipboard, the text is typed into whatever has the cursor on the phone instead. That is not the clipboard, and the list says "typed"')
+
+$lstClipboard = New-Object System.Windows.Forms.ListView
+$lstClipboard.View = 'Details'
+$lstClipboard.FullRowSelect = $true
+$lstClipboard.MultiSelect = $false
+$lstClipboard.HideSelection = $false
+$lstClipboard.Dock = 'Fill'
+$null = $lstClipboard.Columns.Add('Time', 90)
+$null = $lstClipboard.Columns.Add('Phone', 150)
+$null = $lstClipboard.Columns.Add('Way', 110)
+$null = $lstClipboard.Columns.Add('How', 70)
+$null = $lstClipboard.Columns.Add('Size', 60)
+$null = $lstClipboard.Columns.Add('What was copied', 420)
+$tabClipboard.Controls.Add($lstClipboard)
+$toolTip.SetToolTip($lstClipboard, 'Everything that moved while sharing was on, newest first. It is kept in this window only - the activity log is told the length, not the text')
+
+$pnlClipButtons = New-Object System.Windows.Forms.Panel
+$pnlClipButtons.Dock = 'Bottom'
+$pnlClipButtons.Height = 30
+$tabClipboard.Controls.Add($pnlClipButtons)
+
+$btnClipCopy = New-Object System.Windows.Forms.Button
+$btnClipCopy.Text = 'Copy this line'
+$btnClipCopy.Location = New-Object System.Drawing.Point(4, 2)
+$btnClipCopy.Size = New-Object System.Drawing.Size(110, 26)
+$pnlClipButtons.Controls.Add($btnClipCopy)
+$toolTip.SetToolTip($btnClipCopy, 'Puts the picked line back onto this PC''s clipboard')
+
+$btnClipClear = New-Object System.Windows.Forms.Button
+$btnClipClear.Text = 'Clear the list'
+$btnClipClear.Location = New-Object System.Drawing.Point(118, 2)
+$btnClipClear.Size = New-Object System.Drawing.Size(110, 26)
+$pnlClipButtons.Controls.Add($btnClipClear)
+$toolTip.SetToolTip($btnClipClear, 'Empties the list. Nothing here is written to disk anyway')
+
+$lblClipHint = New-Object System.Windows.Forms.Label
+$lblClipHint.Text = 'Nothing here is saved to disk.'
+$lblClipHint.ForeColor = [System.Drawing.Color]::DimGray
+$lblClipHint.Location = New-Object System.Drawing.Point(236, 7)
+$lblClipHint.Size = New-Object System.Drawing.Size(440, 20)
+$lblClipHint.AutoEllipsis = $true
+$pnlClipButtons.Controls.Add($lblClipHint)
+$toolTip.SetToolTip($lblClipHint, 'A clipboard can hold a password: this list lives in the window and goes when it closes')
 
 # --- tab: root / recovery -----------------------------------------------------
 # These exist in adb but cannot run on an ordinary retail phone. They are shown
@@ -4053,7 +4156,7 @@ $btnBackupListShow.Text = 'Show in Explorer'
 $btnBackupListShow.Location = New-Object System.Drawing.Point(212, 2)
 $btnBackupListShow.Size = New-Object System.Drawing.Size(126, 26)
 $pnlBackupListButtons.Controls.Add($btnBackupListShow)
-$toolTip.SetToolTip($btnBackupListShow, 'Opens Explorer with the backup file picked out')
+$toolTip.SetToolTip($btnBackupListShow, 'Opens Explorer with the backup picked in this list picked out')
 
 # a backup that stopped is a folder with a manifest saying so; carrying it on
 # fetches what is missing and packs it, however long ago it stopped
@@ -4231,11 +4334,11 @@ $pnlBackupButtons.Controls.Add($btnRestoreContacts)
 $toolTip.SetToolTip($btnRestoreContacts, 'Adds the contacts this phone does not have; messages and the call log cannot be written by adb')
 
 $btnBackupOpenFolder = New-Object System.Windows.Forms.Button
-$btnBackupOpenFolder.Text = 'Show in Explorer'
+$btnBackupOpenFolder.Text = 'Show the open one'
 $btnBackupOpenFolder.Location = New-Object System.Drawing.Point(428, 4)
 $btnBackupOpenFolder.Size = New-Object System.Drawing.Size(130, 26)
 $pnlBackupButtons.Controls.Add($btnBackupOpenFolder)
-$toolTip.SetToolTip($btnBackupOpenFolder, 'Opens Explorer with the opened backup picked out')
+$toolTip.SetToolTip($btnBackupOpenFolder, 'Opens Explorer with the backup that is open above picked out - the one these buttons put back. The list has its own button for the row picked there')
 
 # --- what an empty list says --------------------------------------------------
 # A list that has never been read looks exactly like a list with nothing in it,
@@ -12302,6 +12405,25 @@ $tabsAdvanced.Add_SelectedIndexChanged({
 })
 
 
+# the clipboard watch: only while sharing is on, and never on top of other adb
+$clipboardTimer = New-Object System.Windows.Forms.Timer
+$clipboardTimer.Interval = 1500
+$clipboardTimer.Add_Tick({
+    if ($script:busy -gt 0) { return }
+    if (-not (Test-ClipboardSharing)) { $clipboardTimer.Stop(); Update-ClipboardUi; return }
+    $events = @(Invoke-ClipboardTick)
+    if ($events.Count -gt 0) { Add-ClipboardRows -Events $events }
+    if (-not (Test-ClipboardSharing)) { Update-ClipboardUi }
+})
+
+$btnClipStart.Add_Click({ Start-ClipboardSharing })
+$btnClipStop.Add_Click({ Stop-ClipboardSharing })
+$btnClipSend.Add_Click({ Send-ClipboardNow })
+$btnClipTake.Add_Click({ Receive-ClipboardNow })
+$btnClipCopy.Add_Click({ Copy-ClipboardRow })
+$btnClipClear.Add_Click({ Clear-ClipboardEvents; Update-ClipboardList })
+$lstClipboard.Add_DoubleClick({ Copy-ClipboardRow })
+
 $btnClearShot.Add_Click({ Clear-Capture })
 $btnTogglePane.Add_Click({ Switch-ScreenPane })
 $btnLogFold.Add_Click({ Switch-LogPane })
@@ -13516,6 +13638,110 @@ function Show-BackupInExplorer {
     Show-BackupPathInExplorer -Path $script:backupPath
 }
 
+# --------------------------------------------------------------- clipboard ---
+# The page's own work; the sharing itself is shared\Clipboard.ps1, which the
+# Nova window uses as well. The timer is the watch: it only runs while sharing
+# is on, and it steps aside while something else is using adb.
+
+function Update-ClipboardUi {
+    $shares = @(Get-ClipboardShares)
+    $on = $shares.Count -gt 0
+    $btnClipStart.Enabled = -not $on
+    $btnClipStop.Enabled = $on
+    if (-not $on) {
+        $lblClipState.Text = 'Not sharing.'
+        return
+    }
+    $words = @()
+    foreach ($share in $shares) {
+        $who = $(if ("$($share.Model)") { "$($share.Model)" } else { $share.Serial })
+        $words += "$who ($($share.Route))"
+    }
+    $lblClipState.Text = 'Sharing with ' + ($words -join ', ')
+}
+
+function Add-ClipboardRows {
+    # the new lines, newest at the top, without rebuilding the whole list
+    param($Events)
+
+    foreach ($one in @($Events)) {
+        $item = New-Object System.Windows.Forms.ListViewItem($one.Time)
+        $null = $item.SubItems.Add("$($one.Phone)")
+        $null = $item.SubItems.Add("$($one.Way)")
+        $null = $item.SubItems.Add("$($one.How)")
+        $null = $item.SubItems.Add("$($one.Chars)")
+        $null = $item.SubItems.Add("$($one.Line)")
+        $item.Tag = $one
+        $null = $lstClipboard.Items.Insert(0, $item)
+    }
+    while ($lstClipboard.Items.Count -gt 200) { $lstClipboard.Items.RemoveAt($lstClipboard.Items.Count - 1) }
+}
+
+function Update-ClipboardList {
+    $lstClipboard.BeginUpdate()
+    try {
+        $lstClipboard.Items.Clear()
+        foreach ($one in @(Get-ClipboardEvents)) {
+            $item = New-Object System.Windows.Forms.ListViewItem($one.Time)
+            $null = $item.SubItems.Add("$($one.Phone)")
+            $null = $item.SubItems.Add("$($one.Way)")
+            $null = $item.SubItems.Add("$($one.How)")
+            $null = $item.SubItems.Add("$($one.Chars)")
+            $null = $item.SubItems.Add("$($one.Line)")
+            $item.Tag = $one
+            $null = $lstClipboard.Items.Add($item)
+        }
+    } finally {
+        $lstClipboard.EndUpdate()
+    }
+}
+
+function Start-ClipboardSharing {
+    $serials = @(Get-SelectedSerials)
+    if ($serials.Count -eq 0) { Write-Log 'Select at least one ready device.' $colorWarn; return }
+
+    $started = 0
+    foreach ($serial in $serials) {
+        $model = ''
+        foreach ($item in $lstDevices.Items) { if ($item.Text -eq $serial) { $model = $item.SubItems[2].Text } }
+        if (Start-ClipboardShare -Serial $serial -Model $model) { $started++ }
+    }
+    if ($started -eq 0) { Update-ClipboardUi; return }
+    # the first turn only learns what is already on this PC's clipboard
+    $null = Invoke-ClipboardTick -Quiet
+    $clipboardTimer.Start()
+    Update-ClipboardUi
+}
+
+function Stop-ClipboardSharing {
+    $clipboardTimer.Stop()
+    Stop-AllClipboardShares
+    Update-ClipboardUi
+}
+
+function Send-ClipboardNow {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    $one = Send-ClipboardToPhone -Serial $serial -TypeWhenShut:$chkClipType.Checked
+    if ($one) { Add-ClipboardRows -Events @($one) }
+}
+
+function Receive-ClipboardNow {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+    $one = Receive-ClipboardFromPhone -Serial $serial
+    if ($one) { Add-ClipboardRows -Events @($one) }
+}
+
+function Copy-ClipboardRow {
+    if ($lstClipboard.SelectedItems.Count -eq 0) { Write-Log 'Pick a line in the list first.' $colorWarn; return }
+    $one = $lstClipboard.SelectedItems[0].Tag
+    if (-not $one) { return }
+    if (Set-ClipboardHere -Text $one.Text) {
+        Write-Log "Clipboard: $($one.Chars) character(s) put back on this PC." $colorGood
+    }
+}
+
 $btnBackupRun.Add_Click({ Start-BackupNow })
 $btnBackupCancel.Add_Click({
     Write-Log 'Stopping ...' $colorWarn
@@ -13729,6 +13955,9 @@ $form.Add_FormClosing({
     }
     $screenTimer.Stop()
     $runningTimer.Stop()
+    # the clipboard watch holds a scrcpy connection open while it runs
+    $clipboardTimer.Stop()
+    Stop-AllClipboardShares
     Stop-AudioListen
     Stop-LiveShell -Quiet
     Stop-Logcat -Quiet

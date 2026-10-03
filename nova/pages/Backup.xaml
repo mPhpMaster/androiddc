@@ -151,7 +151,7 @@
               <Button x:Name="BackupListOpen" Style="{StaticResource Primary}" Content="Open this one" Margin="0,4,8,0"
                       ToolTip="Opens the selected backup, so what is inside it can be read and put back"/>
               <Button x:Name="BackupListShow" Content="Show in Explorer" Margin="0,4,8,0"
-                      ToolTip="Opens Explorer with the backup file picked out"/>
+                      ToolTip="Opens Explorer with the backup picked in this list picked out"/>
               <Button x:Name="BackupListResume" Content="Continue / update" Margin="0,4,8,0"
                       ToolTip="Carries a backup that stopped part way on from where it got to, or brings a finished one up to date - either way only what is missing or changed is fetched. For a backup kept as a folder; it works after the program has been closed and opened again"/>
               <Button x:Name="BackupListDelete" Style="{StaticResource DangerButton}" Content="Delete ..." Margin="0,4,8,0"
@@ -239,8 +239,8 @@
                 ToolTip="Installs the apps picked out under Apps to install; a split app goes in one call"/>
         <Button x:Name="BackupRestoreContacts" Content="Restore contacts" Margin="0,4,8,0"
                 ToolTip="Adds the contacts this phone does not have; messages and the call log cannot be written by adb"/>
-        <Button x:Name="BackupShowFolder" Content="Show in Explorer" Margin="0,4,8,0"
-                ToolTip="Opens Explorer with the opened backup picked out"/>
+        <Button x:Name="BackupShowFolder" Content="Show the open one" Margin="0,4,8,0"
+                ToolTip="Opens Explorer with the backup that is open above picked out - the one these buttons put back. The list has its own button for the row picked there"/>
       </WrapPanel>
     </Grid>
   </Border>

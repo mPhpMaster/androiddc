@@ -4,6 +4,27 @@
 
 ## Unreleased
 
+### The clipboard, shared with the phone
+
+A page of its own in both windows: turn it on, and what you copy on the phone arrives on this
+PC while what you copy here goes to the phone. A list shows everything that moved - the time,
+the phone, which way, how, how many characters and the text.
+
+* **Each phone is asked which way it can go**, and the page says what it answered. Android has
+  let only the app in front touch the clipboard since Android 10, so there are two doors:
+  `cmd clipboard`, which some ROMs implement and which gives both directions over adb alone,
+  and scrcpy, whose server passes the phone's clipboard on while it is connected - started here
+  with no window, no video and no audio, a control connection and nothing else.
+* **What cannot be done is said, not faked.** Where Android will not let adb set the clipboard,
+  the text can be typed into whatever has the cursor instead, and that line in the list says
+  `typed`. Where there is no route at all, turning sharing on says so.
+* **Nothing is bounced**: what came from the phone is not sent back to it, and the same text is
+  never sent twice. The first turn after switching on only learns what is already here, so
+  something copied beforehand is not pushed to a phone by surprise.
+* **What was copied stays in the window.** The activity log is told the length only - a log can
+  be saved to a file, and a clipboard can hold a password - and the list goes when the window
+  closes, along with the connection it opened.
+
 ### A backup can be of any user on the phone, or of all of them
 
 A phone can have more than one person on it, and Android keeps each one's files apart. Until

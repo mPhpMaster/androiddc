@@ -406,11 +406,29 @@ $fakeShell = {
     return [PSCustomObject]@{ Lines = @($text -split "`n"); Text = $text; ExitCode = 0 }
 }
 
+# "adb pull -a <file> <file> ... <folder>": the fake writes each file into the
+# folder it was given, and remembers every remote path, because one call now
+# carries a folder's worth instead of one file
+function Get-FakePullFiles { param($ArgumentList) $all = @($ArgumentList); return ,@($all[4..($all.Count - 2)]) }
+function Write-FakePull {
+    param($ArgumentList, [int]$Bytes = 4)
+    $all = @($ArgumentList)
+    $into = $all[-1]
+    foreach ($remote in (Get-FakePullFiles -ArgumentList $all)) {
+        $name = [System.IO.Path]::GetFileName($remote)
+        $target = $(if (Test-Path -LiteralPath $into -PathType Container) { Join-Path $into $name } else { $into })
+        $parent = Split-Path -Parent $target
+        if ($parent -and -not (Test-Path -LiteralPath $parent)) { $null = New-Item -ItemType Directory -Path $parent -Force }
+        [System.IO.File]::WriteAllBytes($target, (New-Object byte[] $Bytes))
+    }
+}
+
 $carried = & {
     function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
     function Invoke-BackupAdb {
         param($ArgumentList, $Caption, $Expected, $OnPoll)
-        $script:fetched += ,(@($ArgumentList)[4])
+        foreach ($one in (Get-FakePullFiles -ArgumentList $ArgumentList)) { $script:fetched += ,$one }
+        Write-FakePull -ArgumentList $ArgumentList
         return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false }
     }
     $script:fetched = @()
@@ -436,7 +454,7 @@ $finished = & {
     function Invoke-BackupAdb {
         param($ArgumentList, $Caption, $Expected, $OnPoll)
         # what the phone would have sent, so the packed backup holds it
-        [System.IO.File]::WriteAllBytes((@($ArgumentList)[5]), (New-Object byte[] 4))
+        Write-FakePull -ArgumentList $ArgumentList
         return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false }
     }
     Resume-PhoneBackup -Serial 'ABC123' -Folder $half
@@ -461,8 +479,8 @@ $brought = & {
     function Invoke-DeviceShell { param($Serial, $CommandArguments) & $fakeShell $Serial $CommandArguments }
     function Invoke-BackupAdb {
         param($ArgumentList, $Caption, $Expected, $OnPoll)
-        $script:again += ,(@($ArgumentList)[4])
-        [System.IO.File]::WriteAllBytes((@($ArgumentList)[5]), (New-Object byte[] 4))
+        foreach ($one in (Get-FakePullFiles -ArgumentList $ArgumentList)) { $script:again += ,$one }
+        Write-FakePull -ArgumentList $ArgumentList
         return [PSCustomObject]@{ ExitCode = 0; Text = '1 file pulled'; Stopped = $false }
     }
     $script:again = @()

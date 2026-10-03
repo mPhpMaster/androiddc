@@ -1,0 +1,76 @@
+<!--
+  Clipboard: what is copied here and on the phone, kept together. The top card
+  turns the sharing on and off and says which way each phone can go; the one
+  below is the monitor - everything that moved, newest first. The classic
+  window has the same under Advanced > Clipboard; the work itself is
+  ..\..\shared\Clipboard.ps1.
+-->
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid.RowDefinitions>
+    <RowDefinition Height="Auto"/>
+    <!-- a floor under the list: a list inside a page that scrolls does not
+         scroll itself, so this page does not scroll and the list keeps its
+         own scrollbar -->
+    <RowDefinition Height="*" MinHeight="120"/>
+  </Grid.RowDefinitions>
+
+  <Border Style="{StaticResource CardPanel}" Margin="0,0,0,12">
+    <StackPanel>
+      <TextBlock Text="SHARE THE CLIPBOARD" Style="{StaticResource Caps}" Margin="0,0,0,3"/>
+      <TextBlock Style="{StaticResource MutedLine}" TextWrapping="Wrap" Margin="0,0,0,8"
+                 Text="What you copy on the phone arrives here, and what you copy here goes to the phone where Android lets it. Each phone is asked which way it can go, and the line below says what it answered."/>
+      <WrapPanel Margin="0,0,0,8">
+        <Button x:Name="ClipboardStart" Style="{StaticResource Primary}" Content="Start sharing" Margin="0,0,8,8"
+                ToolTip="Watches this PC and the selected phones. On a phone that allows it, both directions are kept together; on one that does not, what the phone copies still arrives here"/>
+        <Button x:Name="ClipboardStop" Content="Stop" IsEnabled="False" Margin="0,0,8,8"
+                ToolTip="Stops watching and closes the connection it opened to the phone. Nothing is left running"/>
+        <Button x:Name="ClipboardSend" Content="Send this PC's clipboard" Margin="0,0,8,8"
+                ToolTip="Puts what is on this PC onto the phone picked above, now"/>
+        <Button x:Name="ClipboardTake" Content="Take the phone's" Margin="0,0,8,8"
+                ToolTip="Reads the phone's clipboard onto this PC, now. Only a phone whose shell has &quot;cmd clipboard&quot; can be asked"/>
+        <CheckBox x:Name="ClipboardType" Content="Type it when the phone will not take it" VerticalAlignment="Center" Margin="4,0,0,8"
+                  ToolTip="Where Android does not let adb set the clipboard, the text is typed into whatever has the cursor on the phone instead. That is not the clipboard, and the list says &quot;typed&quot;"/>
+      </WrapPanel>
+      <TextBlock x:Name="ClipboardState" Style="{StaticResource MutedLine}" TextWrapping="Wrap" Text="Not sharing."/>
+    </StackPanel>
+  </Border>
+
+  <Border Grid.Row="1" Style="{StaticResource CardPanel}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <TextBlock Text="WHAT MOVED" Style="{StaticResource Caps}" Margin="0,0,0,6"/>
+      <ListView x:Name="ClipboardList" Grid.Row="1" SelectionMode="Single"
+                ToolTip="Everything that moved while sharing was on, newest first - double-click a line to put it back on this PC's clipboard">
+        <ListView.View>
+          <GridView>
+            <GridViewColumn Header="TIME" Width="100" DisplayMemberBinding="{Binding Time}"/>
+            <GridViewColumn Header="PHONE" Width="170" DisplayMemberBinding="{Binding Phone}"/>
+            <GridViewColumn Header="WAY" Width="120" DisplayMemberBinding="{Binding Way}"/>
+            <GridViewColumn Header="HOW" Width="80" DisplayMemberBinding="{Binding How}"/>
+            <GridViewColumn Header="SIZE" Width="70" DisplayMemberBinding="{Binding Chars}"/>
+            <GridViewColumn Header="WHAT WAS COPIED" Width="420" DisplayMemberBinding="{Binding Line}"/>
+          </GridView>
+        </ListView.View>
+      </ListView>
+      <Grid Grid.Row="2" Margin="0,8,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Button x:Name="ClipboardCopy" Content="Copy this line" Margin="0,0,8,0"
+                ToolTip="Puts the picked line back onto this PC's clipboard"/>
+        <Button x:Name="ClipboardClear" Grid.Column="1" Content="Clear the list"
+                ToolTip="Empties the list. Nothing here is written to disk anyway"/>
+        <TextBlock Grid.Column="2" Margin="14,0,0,0" VerticalAlignment="Center" Style="{StaticResource MutedLine}"
+                   TextTrimming="CharacterEllipsis"
+                   Text="Kept in this window only: a clipboard can hold a password, so the activity log is told the length, not the text."/>
+      </Grid>
+    </Grid>
+  </Border>
+</Grid>

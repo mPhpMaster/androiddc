@@ -187,6 +187,21 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 `adb backup` is **not** used: Android 12 and newer return almost nothing for it. What is inside
 an app cannot be read without root, by this or any other tool.
 
+## The clipboard
+
+| Purpose | Command |
+|---|---|
+| Which way this phone can share | `adb shell cmd clipboard get-primary-clip` - a ROM that implements it answers with the clip, and the phone this was written against answers *No shell command implementation* |
+| Reading the phone's clipboard | the same command, where it is implemented |
+| Setting the phone's clipboard | `adb shell cmd clipboard set-primary-clip --text <text>`, sent base64-encoded like every other line a person typed |
+| Typing it instead | `adb shell input text <text>`, into whatever has the cursor - offered only when the clipboard itself is shut, and named `typed` in the list |
+| What the phone copies, with no shell route | `scrcpy -s <serial> --no-video --no-audio --no-window`, whose server passes the phone's clipboard to this PC whenever it changes. No window, no video, no audio: a control connection and nothing else |
+
+Android has let only the app in front - or the keyboard - touch the clipboard since Android 10,
+which is why there is no third row here. `service call clipboard` answers null whether the
+clipboard is empty or the caller is refused, and `dumpsys clipboard` prints nothing; both were
+measured and neither is used.
+
 ## Factory reset and formatting
 
 | Purpose | Command |

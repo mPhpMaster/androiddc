@@ -52,6 +52,7 @@ list the rules you have set.
 | **Running** | Live process list with memory and state, stop anything |
 | **Wi-Fi / Bluetooth / NFC** | Radios on and off, scan, join or forget a network, paired devices |
 | **Backup** | A copy of the phone on this PC as one `.zip` - files, the apps' APK files, contacts, messages, the call log, settings - with a list of the backups you have, a look inside any of them, and putting one back |
+| **Clipboard** | Share the clipboard with one phone or several: what you copy on the phone arrives here, what you copy here goes over where Android allows, and a list shows everything that moved |
 | **Factory reset** | Any phone back to new, and the memory card in it formatted by the phone itself - each behind two questions and the word typed out, in *Advanced > Device tools* |
 | **Users** | Multi-user: list, switch, add, remove, turn the user switcher on or off |
 | **Shell** | A live adb shell, and a logcat viewer with a level, a filter and save |
