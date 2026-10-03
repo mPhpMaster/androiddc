@@ -46,7 +46,7 @@ function Invoke-WithFakePhone {
 $share = Invoke-WithFakePhone { Start-ClipboardShare -Serial 'ABC123' -Model 'Test phone' }
 Update-ClipboardPage
 Say ("  sharing the {0} way, and the page says so: '{1}'   {2}" -f $share.Route, $ui.ClipboardState.Text, (Mark (
-    $share.Route -eq 'cmd' -and $ui.ClipboardState.Text -match 'Test phone \(cmd\)' -and
+    $share.Route -eq 'cmd' -and $ui.ClipboardState.Text -match 'Test phone \(adb\)' -and
     -not $ui.ClipboardStart.IsEnabled -and $ui.ClipboardStop.IsEnabled)))
 
 $null = Set-Clipboard -Value 'here before sharing'

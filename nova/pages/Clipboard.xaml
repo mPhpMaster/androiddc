@@ -19,7 +19,7 @@
     <StackPanel>
       <TextBlock Text="SHARE THE CLIPBOARD" Style="{StaticResource Caps}" Margin="0,0,0,3"/>
       <TextBlock Style="{StaticResource MutedLine}" TextWrapping="Wrap" Margin="0,0,0,8"
-                 Text="What you copy on the phone arrives here, and what you copy here goes to the phone where Android lets it. Each phone is asked which way it can go, and the line below says what it answered."/>
+                 Text="Text only, both ways: what you copy on the phone arrives here, and what you copy here goes to the phone. A picture or a file cannot cross - Android hands those over as a link that means nothing off the phone, so use the file pages for them. Each phone is asked which way it can go, and the line below says what it answered."/>
       <WrapPanel Margin="0,0,0,8">
         <Button x:Name="ClipboardStart" Style="{StaticResource Primary}" Content="Start sharing" Margin="0,0,8,8"
                 ToolTip="Watches this PC and the selected phones. On a phone that allows it, both directions are kept together; on one that does not, what the phone copies still arrives here"/>
@@ -28,9 +28,9 @@
         <Button x:Name="ClipboardSend" Content="Send this PC's clipboard" Margin="0,0,8,8"
                 ToolTip="Puts what is on this PC onto the phone picked above, now"/>
         <Button x:Name="ClipboardTake" Content="Take the phone's" Margin="0,0,8,8"
-                ToolTip="Reads the phone's clipboard onto this PC, now. Only a phone whose shell has &quot;cmd clipboard&quot; can be asked"/>
+                ToolTip="Reads the phone's clipboard onto this PC, now. A phone that will not let adb near its clipboard cannot be asked"/>
         <CheckBox x:Name="ClipboardType" Content="Type it when the phone will not take it" VerticalAlignment="Center" Margin="4,0,0,8"
-                  ToolTip="Where Android does not let adb set the clipboard, the text is typed into whatever has the cursor on the phone instead. That is not the clipboard, and the list says &quot;typed&quot;"/>
+                  ToolTip="Only for a phone that will not take a clipboard from adb at all: the text is typed into whatever has the cursor on the phone instead. That is not the clipboard, and the list says &quot;typed&quot;"/>
       </WrapPanel>
       <TextBlock x:Name="ClipboardState" Style="{StaticResource MutedLine}" TextWrapping="Wrap" Text="Not sharing."/>
     </StackPanel>

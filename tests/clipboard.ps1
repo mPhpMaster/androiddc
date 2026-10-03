@@ -21,7 +21,13 @@ $fakeShell = {
     $null = $script:asked.Add($command)
     $text = ''
     foreach ($key in @($script:answers.Keys | Sort-Object -Property Length -Descending)) {
-        if ($command -like $key) { $text = $script:answers[$key]; break }
+        if ($command -like $key) {
+            $answer = $script:answers[$key]
+            # a script block is asked: that is how the fake phone keeps a
+            # clipboard, answering with whatever was last written to it
+            $text = $(if ($answer -is [scriptblock]) { & $answer $command } else { $answer })
+            break
+        }
     }
     return [PSCustomObject]@{ Lines = @("$text" -split "`n"); Text = $text; ExitCode = 0 }
 }
@@ -50,8 +56,175 @@ $viaCmd = Invoke-WithFakePhone { Get-ClipboardRoute -Serial 'B' -Again }
 Say ("  a phone whose own shell can: {0}   {1}" -f $viaCmd, (Mark ($viaCmd -eq 'cmd')))
 Say ("  and each one has words for it   {0}" -f (Mark (
     (Get-ClipboardRouteWords -Route 'cmd') -match 'both ways' -and
-    (Get-ClipboardRouteWords -Route 'scrcpy') -match 'arrives by itself' -and
+    (Get-ClipboardRouteWords -Route 'binder') -match 'both ways' -and
+    (Get-ClipboardRouteWords -Route 'scrcpy') -match 'only what the phone copies' -and
     (Get-ClipboardRouteWords -Route 'none') -match 'no way in')))
+
+Say ''
+Say '== the phone''s own clipboard service =='
+# The parcels below are built the way a phone builds them, and printed the way
+# the service tool prints one, so the reader is read against the real thing
+# rather than against the writer in the same file.
+function Add-TestWord {
+    param($List, [int]$Value)
+    foreach ($byte in [BitConverter]::GetBytes($Value)) { $null = $List.Add($byte) }
+}
+function Add-TestText {
+    param($List, [string]$Text, [int]$Width, [switch]$Nothing)
+    if ($Nothing) { Add-TestWord $List -1; return }
+    [byte[]]$raw = $(if ($Width -eq 16) {
+        [System.Text.Encoding]::Unicode.GetBytes($Text)
+    } else {
+        [System.Text.Encoding]::UTF8.GetBytes($Text)
+    })
+    Add-TestWord $List $(if ($Width -eq 16) { $Text.Length } else { $raw.Length })
+    foreach ($byte in $raw) { $null = $List.Add($byte) }
+    $null = $List.Add(0)
+    if ($Width -eq 16) { $null = $List.Add(0) }
+    while ($List.Count % 4 -ne 0) { $null = $List.Add(0) }
+}
+function New-TestClipDump {
+    param([string]$Text, [int]$Width = 8, [int]$Tail = 3, [int]$ItemTail = 5,
+        [string[]]$Mimes = @('text/plain'), [switch]$Description, [switch]$WithLink)
+
+    $bytes = New-Object System.Collections.Generic.List[byte]
+    Add-TestWord $bytes 0                    # nothing was thrown
+    Add-TestWord $bytes 1                    # there is a clip
+    Add-TestWord $bytes 1                    # a plain label
+    Add-TestText $bytes 'text' $Width
+    Add-TestWord $bytes $Mimes.Count
+    foreach ($mime in $Mimes) { Add-TestText $bytes $mime 16 }
+    Add-TestWord $bytes -1                   # no extras
+    Add-TestWord $bytes 0                    # when it was copied, as a long
+    Add-TestWord $bytes 0
+    for ($i = 0; $i -lt $Tail; $i++) { Add-TestWord $bytes 0 }
+    if (-not $Description) {
+        Add-TestWord $bytes 0                # no picture
+        Add-TestWord $bytes 1                # one item
+        Add-TestWord $bytes 1                # plain text
+        Add-TestText $bytes $Text $Width
+        Add-TestText $bytes '' $Width -Nothing
+        for ($i = 0; $i -lt $ItemTail; $i++) {
+            # a link in one of the slots is what a copied picture looks like
+            if ($WithLink -and $i -eq 1) {
+                Add-TestWord $bytes 1
+                Add-TestWord $bytes 0
+                Add-TestText $bytes 'content://media/external/images/media/42' $Width
+            } else {
+                Add-TestWord $bytes 0
+            }
+        }
+    }
+    $all = $bytes.ToArray()
+    $lines = New-Object System.Collections.Generic.List[string]
+    $null = $lines.Add('Result: Parcel(')
+    for ($at = 0; $at -lt $all.Length; $at += 16) {
+        $words = @()
+        for ($spot = $at; $spot -lt [Math]::Min($at + 16, $all.Length); $spot += 4) {
+            $words += ('{0:x8}' -f [BitConverter]::ToUInt32($all, $spot))
+        }
+        $null = $lines.Add(("0x{0:x8}: {1} '................'" -f $at, ($words -join ' ')))
+    }
+    return (($lines -join "`n") + ')')
+}
+function Get-TestClipWritten {
+    # the text out of a parcel this program just wrote, read back with the
+    # same reader the phone's answers go through
+    param([string]$Command)
+
+    $bytes = New-Object System.Collections.Generic.List[byte]
+    Add-TestWord $bytes 0
+    $parts = @("$Command" -split '\s+')
+    for ($i = 0; $i -lt $parts.Count; $i++) {
+        if ($parts[$i] -eq 's16') { break }
+        if ($parts[$i] -eq 'i32' -and $i + 1 -lt $parts.Count -and $parts[$i + 1] -match '^-?\d+$') {
+            Add-TestWord $bytes ([int]$parts[$i + 1])
+        }
+    }
+    foreach ($width in @(8, 16)) {
+        foreach ($tail in @(3, 2, 1, 0, 4)) {
+            foreach ($itemTail in @(5, 3, 4, 2, 6, 1, 0)) {
+                $read = Read-ClipboardParcel -Bytes $bytes.ToArray() -Width $width -Tail $tail -ItemTail $itemTail
+                if ($null -ne $read) { return $read.Text }
+            }
+        }
+    }
+    return $null
+}
+
+$script:fakeClip = 'copied on the phone'
+$script:answers = @{
+    'cmd clipboard get-primary-clip' = 'No shell command implementation.'
+    'service check clipboard'        = 'Service clipboard: found'
+    'am get-current-user'            = '10'
+    'service call clipboard 4*'      = { New-TestClipDump -Text $script:fakeClip }
+    'service call clipboard 1*'      = {
+        param($command)
+        $written = Get-TestClipWritten -Command $command
+        if ($null -ne $written) { $script:fakeClip = $written }
+        "Result: Parcel(`t00000000    '....')"
+    }
+}
+$script:asked.Clear()
+$viaBinder = Invoke-WithFakePhone { Get-ClipboardRoute -Serial 'C' -Again }
+Say ("  a phone with no shell command but a service that answers: {0}   {1}" -f $viaBinder,
+    (Mark ($viaBinder -eq 'binder')))
+Say ("  and it asks about the user in front, not Owner   {0}" -f (Mark (
+    (Get-Asked -Like '*get-current-user*').Count -ge 1 -and
+    (Get-Asked -Like 'service call clipboard 4*i32 10 i32 0').Count -ge 1)))
+Say ("  what it holds: '{0}'   {1}" -f (Invoke-WithFakePhone { Get-PhoneClipboard -Serial 'C' }),
+    (Mark ((Invoke-WithFakePhone { Get-PhoneClipboard -Serial 'C' }) -eq 'copied on the phone')))
+
+# the shape of a parcel is not the same on every Android, so it is learnt
+$script:answers['service call clipboard 4*'] = { New-TestClipDump -Text 'an older phone' -Width 16 -Tail 1 -ItemTail 3 }
+$older = Invoke-WithFakePhone { Get-PhoneClipboard -Serial 'D' }
+$shape = Get-ClipboardShape -Serial 'D'
+Say ("  a parcel in another shape is still read: '{0}' (utf-{1}, {2} and {3} trailing)   {4}" -f $older,
+    $shape.Width, $shape.Tail, $shape.ItemTail, (Mark (
+    $older -eq 'an older phone' -and $shape.Width -eq 16 -and $shape.Tail -eq 1 -and $shape.ItemTail -eq 3)))
+$script:answers['service call clipboard 4*'] = { New-TestClipDump -Text $script:fakeClip }
+
+$script:asked.Clear()
+$put = Invoke-WithFakePhone { Set-PhoneClipboard -Serial 'C' -Text 'sent from this PC' }
+Say ("  sending builds a parcel the phone keeps: '{0}'   {1}" -f $script:fakeClip, (Mark (
+    $put.Ok -and $put.How -eq 'binder' -and $script:fakeClip -eq 'sent from this PC')))
+Say ("  and it was one call, not a hunt   {0}" -f (Mark (
+    (Get-Asked -Like 'service call clipboard 1*').Count -eq 1)))
+
+$hard = "two lines`nand a 'quote' and an & and `$x"
+$null = Invoke-WithFakePhone { Set-PhoneClipboard -Serial 'C' -Text $hard }
+Say ("  text with quotes, an ampersand and a newline crosses whole   {0}" -f (Mark ($script:fakeClip -eq $hard)))
+
+$script:answers['service call clipboard 1*'] = "Result: Parcel(`t fffffffe 00000038   '....')"
+$refused = Invoke-WithFakePhone { Set-PhoneClipboard -Serial 'C' -Text 'nope' }
+Say ("  a phone that throws is not said to have taken it   {0}" -f (Mark (-not $refused.Ok)))
+$script:answers['service call clipboard 1*'] = {
+    param($command)
+    $written = Get-TestClipWritten -Command $command
+    if ($null -ne $written) { $script:fakeClip = $written }
+    "Result: Parcel(`t00000000    '....')"
+}
+
+$script:asked.Clear()
+$huge = Invoke-WithFakePhone { Set-PhoneClipParcel -Serial 'C' -Text ('x' * 70000) }
+Say ("  a clipboard too big for a shell line is refused, not half sent: '{0}'   {1}" -f $huge.Text, (Mark (
+    -not $huge.Ok -and $huge.Text -match 'too much' -and (Get-Asked -Like 'service call*').Count -eq 0)))
+
+# a copied picture: the clipboard holds a link to it, which means nothing here
+$script:answers['service call clipboard 4*'] = { New-TestClipDump -Text 'x' -Mimes @('image/png') -WithLink }
+$script:answers['service call clipboard 5*'] = { New-TestClipDump -Text '' -Mimes @('image/png') -Description }
+$picture = Invoke-WithFakePhone { Get-PhoneClipParcel -Serial 'C' }
+Say ("  a copied picture is seen for what it is: {0}   {1}" -f ($picture.Mimes -join ', '), (Mark (
+    -not $picture.Empty -and $null -eq $picture.Text -and (@($picture.Mimes) -join ',') -eq 'image/png')))
+$script:answers['service call clipboard 4*'] = { New-TestClipDump -Text $script:fakeClip }
+$null = $script:answers.Remove('service call clipboard 5*')
+
+# nothing on it at all, which is also what a refusal looks like
+$script:answers['service call clipboard 4*'] = "Result: Parcel(`t00000000 00000000   '....')"
+$nothing = Invoke-WithFakePhone { Get-PhoneClipParcel -Serial 'C' }
+Say ("  an empty clipboard is empty, not an error   {0}" -f (Mark ($nothing.Empty -and $null -eq $nothing.Text)))
+# back to the phone the sections below were written against
+$script:answers = @{ 'cmd clipboard get-primary-clip' = 'on the phone' }
 
 Say ''
 Say '== reading and writing one =='
@@ -122,7 +295,7 @@ $tabsAdvanced.SelectedTab = $tabClipboard
 Wait-Pumped -Milliseconds 200
 Update-ClipboardUi
 Say ("  it says who it is sharing with: '{0}'   {1}" -f $lblClipState.Text, (Mark (
-    $lblClipState.Text -match 'Test phone \(cmd\)' -and -not $btnClipStart.Enabled -and $btnClipStop.Enabled)))
+    $lblClipState.Text -match 'Test phone \(adb\)' -and -not $btnClipStart.Enabled -and $btnClipStop.Enabled)))
 Update-ClipboardList
 Say ("  the list shows what moved: {0} line(s)   {1}" -f $lstClipboard.Items.Count, (Mark (
     $lstClipboard.Items.Count -eq @(Get-ClipboardEvents).Count -and $lstClipboard.Items.Count -gt 0)))
@@ -155,7 +328,8 @@ if (-not $TestSerial) {
     # without that command the answer is the refusal, not anyone's text
     $route = Get-ClipboardRoute -Serial $TestSerial -Again
     Say ("  this phone: {0} - {1}" -f $route, (Get-ClipboardRouteWords -Route $route))
-    Say ("  which is one of the three ways   {0}" -f (Mark (@('cmd', 'scrcpy', 'none') -contains $route)))
+    Say ("  which is one of the four ways   {0}" -f (Mark (
+        @('cmd', 'binder', 'scrcpy', 'none') -contains $route)))
     Say ("  and nothing was shared with it   {0}" -f (Mark (-not (Test-ClipboardSharing -Serial $TestSerial))))
 }
 

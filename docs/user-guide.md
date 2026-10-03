@@ -226,15 +226,25 @@ it can go, and the line under the buttons says what each one answered.
 
 | What the phone can do | What sharing does |
 |---|---|
-| Its shell has `cmd clipboard` | Both ways. The phone is asked every second and a half, and anything new on this PC is put onto it |
-| It has not | What you copy **on the phone** still arrives here by itself, through a scrcpy connection with no window, no video and no audio. This PC's side has to be sent by hand |
-| Neither, and no scrcpy here | Nothing: it says so rather than sitting quiet |
+| Its clipboard service answers (nearly every phone) | Both ways. The phone is asked every second and a half, and anything new on this PC is put onto it |
+| Its shell has `cmd clipboard` too | The same, by the shorter road |
+| Neither, but scrcpy is here | Only what you copy **on the phone**, and only if scrcpy's own listener fires - on the phone this was written against it never did |
+| Nothing at all | It says so rather than sitting quiet |
+
+**Text only.** A picture or a file does not cross, either way. Android does not put the file on
+the clipboard: it puts a `content://` link to it, which means nothing on this side of the cable.
+When you copy one on the phone the list says what kind it was - *image/png* - rather than going
+quiet. For files and pictures, use the file pages, FTP, or the backup page.
 
 **Sending by hand.** *Send this PC's clipboard* puts what is here onto the phone picked in the
-list. Where Android does not let adb set the clipboard, ticking *Type it when the phone will
+list. If a phone will not take a clipboard from adb at all, ticking *Type it when the phone will
 not take it* types the text into whatever has the cursor on the phone instead - that is not the
 clipboard, and the list says `typed` rather than pretending otherwise. *Take the phone's* reads
-the other way, and only a phone whose shell has `cmd clipboard` can be asked.
+the other way.
+
+Very long clipboards are carried too: a few thousand characters become a few thousand words of
+command, which goes down adb's own input instead of its command line. Past 64 KB it says so
+rather than sending half.
 
 In Nova the header shows **clipboard on** or **clipboard off** beside the FTP indicator: click it
 to open this page, right-click it to start or stop sharing with the phones picked.
@@ -248,10 +258,15 @@ back on this PC's clipboard.
 > window ends the sharing and the list.
 
 **Why Android makes this awkward.** Since Android 10 only the app in front, or the keyboard,
-may read or set the clipboard, so a program on this side of the cable cannot simply ask. Two
-doors are left: a shell command that some ROMs implement (`cmd clipboard`), and scrcpy, whose
-server is allowed to pass the clipboard on while it is connected. AndroidDC tries the first and
-falls back to the second, and says which one it got.
+may read or set the clipboard - for *apps*. The shell that adb gives out is not an app, and the
+phone's own clipboard service will answer it: that is the road this takes, asking the service
+directly for the clip and handing it a new one.
+
+The catch is **which user you ask about**. A phone in its second space is running as another
+user, and Owner's clipboard is both empty and unreadable - which looks exactly like a phone that
+refuses. The first version of this page asked about Owner and so never worked on a phone in its
+second space; it now asks `am get-current-user` first. If you switch spaces while sharing is on,
+stop and start it again.
 
 ### Root / recovery
 

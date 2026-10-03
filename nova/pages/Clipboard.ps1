@@ -36,7 +36,7 @@ function Update-ClipboardPage {
     $words = @()
     foreach ($share in $shares) {
         $who = $(if ("$($share.Model)") { "$($share.Model)" } else { $share.Serial })
-        $words += "$who ($($share.Route))"
+        $words += "$who ($(Get-ClipboardRouteShort -Route $share.Route))"
     }
     $ui.ClipboardState.Text = 'Sharing with ' + ($words -join ', ')
     Update-ClipboardHeader
@@ -145,7 +145,7 @@ $ui.ClipboardList.Add_MouseDoubleClick({ Copy-ClipboardPageRow })
 $ui.PillClipboard.Add_MouseLeftButtonUp({ Show-Page -Page 'clipboard' })
 $ui.PillClipboard.Add_MouseRightButtonUp({ Invoke-ClipboardHeaderToggle })
 
-# the watch holds a scrcpy connection open while it runs: it goes with the window
+# the watch may be holding a scrcpy connection open: it goes with the window
 Register-Cleanup {
     if ($script:clipboardTimer) { try { $script:clipboardTimer.Stop() } catch { } }
     if (Get-Command Stop-AllClipboardShares -ErrorAction SilentlyContinue) { Stop-AllClipboardShares }

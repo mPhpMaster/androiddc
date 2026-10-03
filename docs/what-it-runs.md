@@ -191,16 +191,22 @@ an app cannot be read without root, by this or any other tool.
 
 | Purpose | Command |
 |---|---|
-| Which way this phone can share | `adb shell cmd clipboard get-primary-clip` - a ROM that implements it answers with the clip, and the phone this was written against answers *No shell command implementation* |
-| Reading the phone's clipboard | the same command, where it is implemented |
-| Setting the phone's clipboard | `adb shell cmd clipboard set-primary-clip --text <text>`, sent base64-encoded like every other line a person typed |
-| Typing it instead | `adb shell input text <text>`, into whatever has the cursor - offered only when the clipboard itself is shut, and named `typed` in the list |
-| What the phone copies, with no shell route | `scrcpy -s <serial> --no-video --no-audio --no-window`, whose server passes the phone's clipboard to this PC whenever it changes. No window, no video, no audio: a control connection and nothing else |
+| Whose clipboard it is | `adb shell am get-current-user` - the clipboard belongs to the user in front, which on a phone in its second space is not user 0 |
+| Whether there is a way in | `adb shell service check clipboard`, then one `getPrimaryClip` that must come back without throwing |
+| Reading the phone's clipboard | `adb shell service call clipboard 4 s16 com.android.shell s16 null i32 <user> i32 0` - `getPrimaryClip`, whose answer is a ClipData parcel, printed as words and read here |
+| Setting the phone's clipboard | `adb shell service call clipboard 1 <the parcel, word by word> s16 com.android.shell s16 null i32 <user> i32 0` - `setPrimaryClip`, then read back, because the service takes a parcel it cannot use without saying anything |
+| What kind of thing was copied | `adb shell service call clipboard 5 ...` - `getPrimaryClipDescription`, asked only when the clip is not plain text, so the page can say *image/png* instead of looking idle |
+| A ROM that has the shell command | `adb shell cmd clipboard get-primary-clip` / `set-primary-clip --text <text>`. Tried first and almost never there: the command is not in AOSP |
+| Typing it instead | `adb shell input text <text>`, into whatever has the cursor - offered only when nothing else will take it, and named `typed` in the list |
+| A clipboard too long for a command line | the same `service call`, written to `adb -s <serial> shell` down its own input instead of as arguments. Windows stops a command line at 32767 characters; eighty thousand went through this way |
+| What the phone copies, with no other way in | `scrcpy -s <serial> --no-video --no-audio`, whose server is meant to pass the phone's clipboard on whenever it changes |
 
-Android has let only the app in front - or the keyboard - touch the clipboard since Android 10,
-which is why there is no third row here. `service call clipboard` answers null whether the
-clipboard is empty or the caller is refused, and `dumpsys clipboard` prints nothing; both were
-measured and neither is used.
+Only text crosses. A copied picture or file is a `content://` link that means nothing off the
+phone, so the page says which kind it was and points at the file pages.
+
+Two things that were measured and are **not** used: `dumpsys clipboard` prints nothing, and
+scrcpy's clipboard listener never fired once on the phone this was written against - for either
+user - which is why the scrcpy route is now the last resort rather than the first.
 
 ## Factory reset and formatting
 

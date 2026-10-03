@@ -4,6 +4,35 @@
 
 ## Unreleased
 
+### The shared clipboard now actually crosses
+
+It did not. Turning sharing on and copying something went nowhere in either direction, and the
+reason was not Android being strict - it was this asking the wrong user.
+
+* **The clipboard belongs to the user in front.** A phone in its second space runs as another
+  user, and user 0's clipboard is both empty and unreadable from there - which looks exactly
+  like a phone that refuses, and was read that way. Every question now starts with
+  `am get-current-user`. Switching spaces while sharing is on means stopping and starting it.
+* **It goes through the phone's own clipboard service**, both ways:
+  `service call clipboard` for `getPrimaryClip` and `setPrimaryClip`. That takes a ClipData
+  parcel, and the service tool can only write a parcel as a run of 32-bit words, so the parcel
+  is built here word by word - in a shape read off the phone rather than guessed. Because that
+  shape differs between Android versions, a parcel this reads teaches it the shape to write, and
+  **a write is never believed until it has been read back**.
+* **scrcpy is now the last resort, not the first.** Its clipboard listener never fired once on
+  the phone this was written against, for either user, so what the page used to wait for was
+  never coming. `cmd clipboard` is tried first and is almost never there: it is not in AOSP.
+* **A long clipboard is carried too.** A few thousand characters become a few thousand words of
+  command, and Windows stops a command line at 32767 characters: the line now goes down adb's
+  own input instead. Twenty thousand characters crossed in testing, and past 64 KB it says so
+  rather than sending half.
+* **Text only, and it says so.** A copied picture or file is a `content://` link that means
+  nothing off the phone. Copy one and the list names the kind - *image/png* - and points at the
+  file pages, instead of going quiet as though nothing had been copied.
+
+Measured on the phone itself, both ways, with awkward text - Arabic, newlines, quotes, `&`,
+`$x` - and with the phone's own clipboard saved and put back byte for byte afterwards.
+
 ### The Nova window says more about the phone, and about itself
 
 * **The square beside the phone's name is its make**: a letter in the make's own colour for the

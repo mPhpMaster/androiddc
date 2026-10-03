@@ -2075,7 +2075,7 @@ $btnClipStart.Text = 'Start sharing'
 $btnClipStart.Location = New-Object System.Drawing.Point(12, 22)
 $btnClipStart.Size = New-Object System.Drawing.Size(120, 28)
 $grpClipboard.Controls.Add($btnClipStart)
-$toolTip.SetToolTip($btnClipStart, 'Watches this PC and the selected phones. What you copy on the phone arrives here, and what you copy here goes to the phone where the phone allows it')
+$toolTip.SetToolTip($btnClipStart, 'Watches this PC and the selected phones. Text crosses both ways; a picture or a file cannot, because Android hands those over as a link that means nothing off the phone')
 
 $btnClipStop = New-Object System.Windows.Forms.Button
 $btnClipStop.Text = 'Stop'
@@ -2105,14 +2105,14 @@ $btnClipTake.Text = 'Take the phone''s'
 $btnClipTake.Location = New-Object System.Drawing.Point(188, 58)
 $btnClipTake.Size = New-Object System.Drawing.Size(140, 28)
 $grpClipboard.Controls.Add($btnClipTake)
-$toolTip.SetToolTip($btnClipTake, 'Reads the phone''s clipboard onto this PC, now. Only phones whose shell has "cmd clipboard" can be asked')
+$toolTip.SetToolTip($btnClipTake, 'Reads the phone''s clipboard onto this PC, now. A phone that will not let adb near its clipboard cannot be asked')
 
 $chkClipType = New-Object System.Windows.Forms.CheckBox
 $chkClipType.Text = 'Type it when the phone will not take it'
 $chkClipType.Location = New-Object System.Drawing.Point(336, 62)
 $chkClipType.Size = New-Object System.Drawing.Size(270, 22)
 $grpClipboard.Controls.Add($chkClipType)
-$toolTip.SetToolTip($chkClipType, 'Where Android does not let adb set the clipboard, the text is typed into whatever has the cursor on the phone instead. That is not the clipboard, and the list says "typed"')
+$toolTip.SetToolTip($chkClipType, 'Only for a phone that will not take a clipboard from adb at all: the text is typed into whatever has the cursor on the phone instead. That is not the clipboard, and the list says "typed"')
 
 $lstClipboard = New-Object System.Windows.Forms.ListView
 $lstClipboard.View = 'Details'
@@ -13655,7 +13655,7 @@ function Update-ClipboardUi {
     $words = @()
     foreach ($share in $shares) {
         $who = $(if ("$($share.Model)") { "$($share.Model)" } else { $share.Serial })
-        $words += "$who ($($share.Route))"
+        $words += "$who ($(Get-ClipboardRouteShort -Route $share.Route))"
     }
     $lblClipState.Text = 'Sharing with ' + ($words -join ', ')
 }
@@ -13955,7 +13955,7 @@ $form.Add_FormClosing({
     }
     $screenTimer.Stop()
     $runningTimer.Stop()
-    # the clipboard watch holds a scrcpy connection open while it runs
+    # the clipboard watch may be holding a scrcpy connection open
     $clipboardTimer.Stop()
     Stop-AllClipboardShares
     Stop-AudioListen

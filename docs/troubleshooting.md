@@ -220,6 +220,30 @@ to keep, and contacts are the only part that goes back on a phone.
 it to look again after a restore, but some ROMs take their time; opening the gallery once
 usually does it.
 
+## The clipboard does not cross
+
+**Check which way it says it got in.** The line under the buttons on the Clipboard page names
+each phone and how it is sharing: `adb` is the working one. `scrcpy` means the phone would not
+let adb near its clipboard and only the phone's side may arrive - and on some ROMs scrcpy's
+listener never fires, so nothing does.
+
+**A phone in its second space.** The clipboard belongs to the user in front, and that is not
+user 0 when the phone is in its second space or a work profile. Sharing asks which user is in
+front when it starts, so if you **switch spaces while it is running**, stop it and start it
+again.
+
+**A picture or a file will not cross, either way.** Android does not put the file on the
+clipboard; it puts a `content://` link to it, which means nothing on this side of the cable.
+Copy one on the phone and the list says which kind it was. Use the file pages, FTP or a backup.
+
+**A very long clipboard** is sent down adb's own input rather than as a command line, and past
+64 KB it refuses and says so. If something that big did not arrive, the activity log has the
+reason.
+
+**Nothing in the list at all** means nothing changed on either side since sharing started: what
+was already on a clipboard when you switched on is deliberately not carried over, so copy
+something new to test it.
+
 ## The picture is stale or black
 
 * Press **Capture** once by hand. If the log shows a timeout, the phone is busy or asleep.
