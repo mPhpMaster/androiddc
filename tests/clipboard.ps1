@@ -1,9 +1,12 @@
 # Advanced > Clipboard: which way a phone can share, reading and writing it,
 # the monitor list, and one turn of the watch in each direction.
 #
-# adb is made up throughout - no phone is written to. This PC's own clipboard
-# is used, because that is the thing being shared; what was on it is put back
-# at the end.
+# adb is made up throughout, except for the last section: with a phone
+# attached, that one shares with it for real, because a clipboard that is
+# never carried on a real phone is how the first version of this shipped
+# broken. It writes only the phone's clipboard, saves what was on it first and
+# puts it back at the end. This PC's own clipboard is used throughout, because
+# that is the thing being shared; what was on it is put back at the end too.
 
 $before = $null
 try { $before = Get-Clipboard -Format Text -Raw -ErrorAction Stop } catch { }
@@ -330,7 +333,45 @@ if (-not $TestSerial) {
     Say ("  this phone: {0} - {1}" -f $route, (Get-ClipboardRouteWords -Route $route))
     Say ("  which is one of the four ways   {0}" -f (Mark (
         @('cmd', 'binder', 'scrcpy', 'none') -contains $route)))
-    Say ("  and nothing was shared with it   {0}" -f (Mark (-not (Test-ClipboardSharing -Serial $TestSerial))))
+    Say ("  and nothing was shared with it yet   {0}" -f (Mark (-not (Test-ClipboardSharing -Serial $TestSerial))))
+
+    Say ''
+    Say '== and now something really carried, on that phone =='
+    if (-not (Test-ClipboardAdbRoute -Route $route)) {
+        Say '  SKIPPED - this phone has no two-way route'
+    } else {
+        Say ("  whose clipboard it is: user {0}" -f (Get-ClipboardUser -Serial $TestSerial))
+        $wasOnPhone = Get-PhoneClipboard -Serial $TestSerial
+        $null = Start-ClipboardShare -Serial $TestSerial -Model 'the phone attached'
+        $null = Invoke-ClipboardTick -Quiet          # the first turn only learns
+
+        $mine = 'ADC-pc-' + (Get-Random -Maximum 99999)
+        $null = Set-Clipboard -Value $mine
+        $out = @(Invoke-ClipboardTick -Quiet)
+        Say ("  what this PC copied is on the phone   {0}" -f (Mark (
+            (Get-PhoneClipboard -Serial $TestSerial) -eq $mine -and
+            @($out | Where-Object { $_.Way -eq 'PC -> phone' }).Count -eq 1)))
+
+        # written straight onto the phone's clipboard, which is what copying
+        # something there does
+        $theirs = 'ADC-phone-' + (Get-Random -Maximum 99999)
+        $null = Set-PhoneClipboard -Serial $TestSerial -Text $theirs
+        $back = @(Invoke-ClipboardTick -Quiet)
+        Say ("  what the phone copied is on this PC   {0}" -f (Mark (
+            (Get-ClipboardHere) -eq $theirs -and
+            @($back | Where-Object { $_.Way -eq 'phone -> PC' }).Count -eq 1)))
+        Say ("  and neither is sent back again   {0}" -f (Mark (
+            @(Invoke-ClipboardTick -Quiet).Count -eq 0)))
+
+        $null = Stop-ClipboardShare -Serial $TestSerial
+        if ($null -ne $wasOnPhone -and "$wasOnPhone") {
+            $null = Set-PhoneClipboard -Serial $TestSerial -Text $wasOnPhone
+            Say ("  the phone's own clipboard went back, {0} characters   {1}" -f $wasOnPhone.Length, (Mark (
+                (Get-PhoneClipboard -Serial $TestSerial) -eq $wasOnPhone)))
+        } else {
+            Say '  the phone had no text of its own to put back, so it keeps the test line'
+        }
+    }
 }
 
 Reset-TestClipboard
