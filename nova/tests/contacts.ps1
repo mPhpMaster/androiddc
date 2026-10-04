@@ -231,6 +231,57 @@ try {
     Stop-PhoneCall
     Say ("  End call sends KEYCODE_ENDCALL   {0}" -f (Mark ($script:mockAdb -contains 'input keyevent 6')))
 
+    Say ''
+    Say '== the same contact twice =='
+    $twice = @(
+        [PSCustomObject]@{ Name = 'Ali'; Number = '+92 323 8886800'; RawId = '10'; DataId = '100' },
+        # a copy of 10, spaces and case aside: it goes
+        [PSCustomObject]@{ Name = 'ali '; Number = '+923238886800'; RawId = '11'; DataId = '110' },
+        # the same number again, with one of its own: it stays, and since it
+        # holds everything 10 and 11 hold, both of them go
+        [PSCustomObject]@{ Name = 'Ali'; Number = '+923238886800'; RawId = '12'; DataId = '120' },
+        [PSCustomObject]@{ Name = 'Ali'; Number = '0500000001'; RawId = '12'; DataId = '121' },
+        # one contact holding a number twice: its second row goes
+        [PSCustomObject]@{ Name = 'Mona'; Number = '0533'; RawId = '20'; DataId = '200' },
+        [PSCustomObject]@{ Name = 'Mona'; Number = '053-3'; RawId = '20'; DataId = '201' },
+        # which country a local number is would be a guess: it stays
+        [PSCustomObject]@{ Name = 'Mona'; Number = '+966533'; RawId = '21'; DataId = '210' })
+    $plan = Get-ContactDuplicates -Rows $twice
+    Say ("  contacts that go: {0}; numbers that go: {1}; contacts that stay: {2}" -f (@($plan.Gone) -join ','),
+        (@($plan.Extra) -join ','), $plan.Kept)
+    Say ("  a contact goes only when another that stays holds all it has; one with a number of its own is kept   {0}" -f (Mark (
+        (@($plan.Gone | Sort-Object) -join ',') -eq '10,11' -and $plan.Kept -eq 3)))
+    Say ("  a number twice inside one contact loses its second row, not the contact   {0}" -f (Mark (
+        (@($plan.Extra) -join ',') -eq '201')))
+    Say ("  nothing goes when nothing is there twice   {0}" -f (Mark (
+        @((Get-ContactDuplicates -Rows @($twice[0], $twice[4], $twice[6])).Gone).Count -eq 0)))
+    Say ("  the question counts both kinds   {0}" -f (Mark (
+        (Get-ContactDuplicateQuestion -Plan $plan) -match '2 contact\(s\) are a second copy' -and
+        (Get-ContactDuplicateQuestion -Plan $plan) -match '1 number\(s\) are saved twice')))
+
+    $answer = (@(for ($i = 0; $i -lt $twice.Count; $i++) {
+        $row = $twice[$i]
+        "Row: $i _id=$($row.DataId), display_name=$($row.Name), data1=$($row.Number), raw_contact_id=$($row.RawId)"
+    }) -join "`n")
+    $script:mockReply = {
+        param([string]$Line)
+        if ($Line -match '^content query --uri content://com.android.contacts/data/phones') { return $answer }
+        return ''
+    }
+    $script:mockConfirm = $false
+    Reset-TestRecord
+    Remove-ContactDuplicates
+    Say ("  Remove duplicates asks; No deletes nothing   {0}" -f (Mark ($script:mockAsked.Count -eq 1 -and $script:mockText.Count -eq 0)))
+    $script:mockConfirm = $true
+    Reset-TestRecord
+    Remove-ContactDuplicates
+    $sentAll = ($script:mockText -join ' | ')
+    Say ("  Yes: '{0}'" -f $sentAll)
+    Say ("  the copy goes as a contact and the spare number as a data row, a call each   {0}" -f (Mark (
+        $script:mockText.Count -eq 2 -and
+        $sentAll -match 'content delete --uri content://com\.android\.contacts/raw_contacts --where .?_id IN \(11,10\)' -and
+        $sentAll -match 'content delete --uri content://com\.android\.contacts/data --where .?_id IN \(201\)')))
+
     Say ("  no command reached a real phone   {0}" -f (Mark ($script:mockLeaks.Count -eq 0)))
 } finally {
     Disable-TestMocks

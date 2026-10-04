@@ -601,6 +601,18 @@ names the reason instead of printing the raw code.
 Read from the contacts provider: *Add*, *Edit*, *Delete*, *Call*, *End call*, *Copy*,
 *Export all...*, plus a dial box.
 
+**Remove duplicates** (*Duplicates...* in the classic window) finds what is on the phone twice,
+says how many and names a few, and deletes them only if you say yes:
+
+* a contact that is a copy of another - the same name and the same number. Spaces, dashes and
+  case do not count, so `+92 323 8886800` and `+923238886800` are one; a local `0533...` and an
+  international `+966533...` are not, because which country a local number is would be a guess.
+* a number saved twice inside one contact: its second row goes, not the contact.
+
+A contact goes only when every number it has is kept on another contact, so nothing of its
+own is lost; the oldest copy is the one that stays. It reads the phone itself, not the list,
+so a filter in the box does not change what it finds. Cancel stops it between calls.
+
 ## SMS
 
 Conversations read from the SMS provider: *Send*, *Copy*, *Delete*, *Edit body*,

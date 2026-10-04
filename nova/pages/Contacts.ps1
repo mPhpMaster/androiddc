@@ -166,6 +166,39 @@ function Remove-Contact {
     Update-ContactList
 }
 
+function Remove-ContactDuplicates {
+    # the second copies of contacts, found on the phone itself and deleted after asking
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Write-Log "Looking for contacts that are there twice on $serial ..." $colorStep
+    $plan = Get-ContactDuplicates -Rows (Get-PhoneContactRows -Serial $serial)
+    $many = @($plan.Gone).Count + @($plan.Extra).Count
+    if ($many -eq 0) {
+        Write-Log 'No contact is there twice.' $colorGood
+        Show-Toast -Text 'No duplicates' -Color 'good'
+        return
+    }
+    $sure = Show-Confirm -Title 'Remove duplicates' -Text (Get-ContactDuplicateQuestion -Plan $plan) `
+        -Yes "Delete $many" -Danger
+    if (-not $sure) { return }
+
+    Start-BackupRun
+    try {
+        $gone = Remove-PhoneContactDuplicates -Serial $serial -Plan $plan
+    } finally {
+        Complete-BackupRun
+    }
+    $said = "$($gone.Contacts) contact(s) and $($gone.Numbers) number(s)"
+    if ($gone.Stopped) { Write-Log "Stopped: $said went before it was cancelled." $colorWarn }
+    elseif ($gone.Failed -gt 0) { Write-Log "Removed $said; $($gone.Failed) call(s) were refused." $colorWarn }
+    else {
+        Write-Log "Removed $said; $($plan.Kept) contact(s) stay." $colorGood
+        Show-Toast -Text "$($gone.Contacts + $gone.Numbers) duplicate(s) removed" -Color 'good'
+    }
+    Update-ContactList
+}
+
 function Start-PhoneCall {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -255,6 +288,7 @@ $ui.ContactsDial.Add_KeyDown({
 $ui.ContactsAdd.Add_Click({ Add-Contact })
 $ui.ContactsEdit.Add_Click({ Edit-Contact })
 $ui.ContactsDelete.Add_Click({ Remove-Contact })
+$ui.ContactsDuplicates.Add_Click({ Remove-ContactDuplicates })
 $ui.ContactsCall.Add_Click({ Start-PhoneCall })
 $ui.ContactsEndCall.Add_Click({ Stop-PhoneCall })
 $ui.ContactsCopy.Add_Click({
@@ -265,4 +299,4 @@ $ui.ContactsExport.Add_Click({ Export-Contacts })
 
 Set-ListColumnsSortable -List $ui.ContactsList
 Add-ListContextMenu -List $ui.ContactsList -Buttons @($ui.ContactsCall, $ui.ContactsEndCall, $null,
-    $ui.ContactsEdit, $ui.ContactsDelete, $null, $ui.ContactsCopy, $ui.ContactsExport)
+    $ui.ContactsEdit, $ui.ContactsDelete, $ui.ContactsDuplicates, $null, $ui.ContactsCopy, $ui.ContactsExport)

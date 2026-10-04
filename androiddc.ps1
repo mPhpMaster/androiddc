@@ -2616,6 +2616,12 @@ $btnContactExport.Location = New-Object System.Drawing.Point(600, 294)
 $btnContactExport.Size = New-Object System.Drawing.Size(112, 28)
 $tabContacts.Controls.Add($btnContactExport)
 
+$btnContactDuplicates = New-Object System.Windows.Forms.Button
+$btnContactDuplicates.Text = 'Duplicates...'
+$btnContactDuplicates.Location = New-Object System.Drawing.Point(720, 294)
+$btnContactDuplicates.Size = New-Object System.Drawing.Size(112, 28)
+$tabContacts.Controls.Add($btnContactDuplicates)
+
 $lblDialNumber = New-Object System.Windows.Forms.Label
 $lblDialNumber.Text = 'Dial'
 $lblDialNumber.TextAlign = 'MiddleRight'
@@ -7008,6 +7014,32 @@ function Remove-Contact {
     Update-ContactList
 }
 
+function Remove-ContactDuplicates {
+    # the second copies of contacts, found on the phone itself and deleted after asking
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Write-Log "Looking for contacts that are there twice on $serial ..." $colorStep
+    $plan = Get-ContactDuplicates -Rows (Get-PhoneContactRows -Serial $serial)
+    $many = @($plan.Gone).Count + @($plan.Extra).Count
+    if ($many -eq 0) { Write-Log 'No contact is there twice.' $colorGood; return }
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        (Get-ContactDuplicateQuestion -Plan $plan), 'Remove duplicates', 'YesNo', 'Warning')
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+    Start-BackupRun
+    try {
+        $gone = Remove-PhoneContactDuplicates -Serial $serial -Plan $plan
+    } finally {
+        Complete-BackupRun
+    }
+    $said = "$($gone.Contacts) contact(s) and $($gone.Numbers) number(s)"
+    if ($gone.Stopped) { Write-Log "Stopped: $said went before it was cancelled." $colorWarn }
+    elseif ($gone.Failed -gt 0) { Write-Log "Removed $said; $($gone.Failed) call(s) were refused." $colorWarn }
+    else { Write-Log "Removed $said; $($plan.Kept) contact(s) stay." $colorGood }
+    Update-ContactList
+}
+
 function Start-PhoneCall {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -10571,7 +10603,7 @@ function Update-RightLayout {
 
             # left: everything that acts on the list
             $null = Set-ButtonRowLeft -Left 12 -Top $buttonY -Buttons @($btnContactAdd, $btnContactEdit,
-                $btnContactDelete, $btnContactCopy, $btnContactExport)
+                $btnContactDelete, $btnContactDuplicates, $btnContactCopy, $btnContactExport)
             $left = $btnContactExport.Bounds.Right
 
             # right: the number and the two call buttons, kept as one group
@@ -12733,7 +12765,7 @@ $null = Add-ListContextMenu -List $lstDevices -Buttons @($btnInfo, $btnDeviceScr
 $null = Add-ListContextMenu -List $lstApps -Buttons @($btnAppLaunch, $btnAppNewDisplay, $btnAppStop, $null,
     $btnAppInfo, $btnAppUninstall, $null, $btnAppExport)
 $null = Add-ListContextMenu -List $lstContacts -Buttons @($btnContactCall, $btnContactEndCall, $null,
-    $btnContactEdit, $btnContactDelete, $null, $btnContactCopy, $btnContactExport)
+    $btnContactEdit, $btnContactDelete, $btnContactDuplicates, $null, $btnContactCopy, $btnContactExport)
 $null = Add-ListContextMenu -List $lstSms -Buttons @($btnSmsEdit, $btnSmsCopy, $null, $btnSmsDelete, $btnSmsExport)
 $null = Add-ListContextMenu -List $lstFiles -Buttons @($btnFilePreview, $btnFileDownload, $btnFileMoveToPc, $null,
     $btnFileCompress, $btnFileExtract, $null,
@@ -12805,6 +12837,7 @@ $txtContactFilter.Add_KeyDown({
 $btnContactAdd.Add_Click({ Add-Contact })
 $btnContactEdit.Add_Click({ Edit-Contact })
 $btnContactDelete.Add_Click({ Remove-Contact })
+$btnContactDuplicates.Add_Click({ Remove-ContactDuplicates })
 $btnContactCall.Add_Click({ Start-PhoneCall })
 $btnContactEndCall.Add_Click({ Stop-PhoneCall })
 $btnContactCopy.Add_Click({ Copy-ListSelection -List $lstContacts -Columns @(0, 1) })
@@ -14180,6 +14213,7 @@ $toolTip.SetToolTip($btnContactsRefresh, 'Reads the contacts again (F5)')
 $toolTip.SetToolTip($btnContactAdd, 'Adds a contact to the phone')
 $toolTip.SetToolTip($btnContactEdit, 'Changes the name or number of the selected contact')
 $toolTip.SetToolTip($btnContactDelete, 'Deletes the selected contact from the phone, after asking')
+$toolTip.SetToolTip($btnContactDuplicates, 'Deletes the second copy of every contact that is there twice - same name, same number - after asking')
 $toolTip.SetToolTip($btnContactCall, 'Dials the selected contact on the phone')
 $toolTip.SetToolTip($btnContactEndCall, 'Ends the call on the phone')
 $toolTip.SetToolTip($btnContactCopy, 'Copies the selected rows to the clipboard')

@@ -114,6 +114,7 @@ Windows nor the phone reinterprets.
 | Hang up | `adb shell input keyevent 6` |
 | USSD | the CALL intent with `#` written as `%23` |
 | Contacts | `adb shell content query\|insert\|update\|delete --uri content://com.android.contacts/…` |
+| Deleting contacts, and their duplicates | `content delete --uri content://com.android.contacts/raw_contacts --where "_id IN (...)"` for whole contacts and the same against `.../data` for a number saved twice in one contact - a hundred ids to a clause, several clauses to an adb call |
 | SMS list | `adb shell content query --uri content://sms` |
 | Send SMS | `adb shell am start -a android.intent.action.SENDTO -d sms:<number> --es sms_body <text>`, then the phone's own app sends it |
 

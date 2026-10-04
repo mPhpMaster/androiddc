@@ -39,6 +39,13 @@ own header said 927 contacts was answered "this backup holds no contacts".
 
 ### Smaller things
 
+* **Remove duplicates, on the Contacts page of both windows.** It finds a
+  contact that is a copy of another (same name, same number, spaces and dashes
+  aside) and a number saved twice inside one contact, says how many, and
+  deletes them after you say yes. A contact goes only when every number it has
+  stays on another one. Worked out, without deleting anything, on a phone with
+  943 numbers: 66 copies and 215 doubled numbers would go, leaving 629 -
+  exactly the 629 different ones it had.
 * **Deleting contacts is one call per hundred, and can be stopped.** Deleting
   every contact was one `content delete` - a Java runtime - per contact. Now
   the ids go in batches (`_id IN (...)`), and the busy strip has a **Cancel**.

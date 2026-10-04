@@ -71,12 +71,13 @@ function Get-ContactAnswerLine {
 # ------------------------------------------------------------- deleting ----
 
 function New-ContactDeleteBlock {
-    # one delete, for as many rows as the where clause names
-    param([string[]]$RawIds)
+    # one delete, for as many rows as the where clause names: whole contacts
+    # (raw_contacts), or single numbers out of one (data)
+    param([string[]]$RawIds, [ValidateSet('raw_contacts', 'data')][string]$Table = 'raw_contacts')
 
     $list = (@($RawIds | ForEach-Object { "$_" -replace '\D', '' } | Where-Object { $_ }) -join ',')
     if (-not $list) { return '' }
-    return ('content delete --uri content://com.android.contacts/raw_contacts ' +
+    return ("content delete --uri content://com.android.contacts/$Table " +
         '--where ' + (Quote-DeviceArgument "_id IN ($list)"))
 }
 
@@ -91,7 +92,8 @@ function Remove-PhoneContacts {
         It stops between calls, which is what makes Cancel mean anything: the
         window shows one while this is running.
     #>
-    param([string]$Serial, [string[]]$RawIds, [int]$PerClause = 100)
+    param([string]$Serial, [string[]]$RawIds, [int]$PerClause = 100,
+        [ValidateSet('raw_contacts', 'data')][string]$Table = 'raw_contacts')
 
     $ids = @($RawIds | ForEach-Object { "$_" -replace '\D', '' } | Where-Object { $_ })
     if ($ids.Count -eq 0) { return [PSCustomObject]@{ Deleted = 0; Calls = 0; Failed = 0; Stopped = $false } }
@@ -100,7 +102,7 @@ function Remove-PhoneContacts {
     $counts = New-Object System.Collections.Generic.List[int]
     for ($at = 0; $at -lt $ids.Count; $at += $PerClause) {
         $take = [Math]::Min($PerClause, $ids.Count - $at)
-        $null = $blocks.Add((New-ContactDeleteBlock -RawIds @($ids[$at..($at + $take - 1)])))
+        $null = $blocks.Add((New-ContactDeleteBlock -RawIds @($ids[$at..($at + $take - 1)]) -Table $Table))
         $null = $counts.Add($take)
     }
 
@@ -148,6 +150,149 @@ function Get-ContactDeleteQuestion {
     })
     if ($rows.Count -gt $Show) { $lines += "... and $($rows.Count - $Show) more" }
     return ($head + [Environment]::NewLine + [Environment]::NewLine + ($lines -join [Environment]::NewLine))
+}
+
+# ------------------------------------------------------- the same one twice ----
+
+function Get-ContactKey {
+    <#
+        What makes two numbers the same contact: the name, with its spaces
+        evened out and its case ignored, and the number with only its digits
+        and a leading +. "+92 323 8886800" and "+923238886800" are one; "0532"
+        and "+966532" are not, because which country a local number belongs
+        to is a guess, and a guess here deletes a contact.
+    #>
+    param([string]$Name, [string]$Number)
+
+    $who = (("$Name" -replace '\s+', ' ').Trim()).ToLowerInvariant()
+    $digits = "$Number".Trim()
+    $plus = $digits.StartsWith('+')
+    $digits = $digits -replace '\D', ''
+    if ($plus) { $digits = '+' + $digits }
+    return "$who|$digits"
+}
+
+function Get-ContactDuplicates {
+    <#
+        Which contacts are a second copy of another, out of rows that carry
+        Name, Number and RawId (one row per number, as data/phones answers).
+
+        A contact goes only when every number it holds, under the same name,
+        is also held by a contact that stays - so one with a number of its own
+        is never touched, whatever else it repeats. The oldest copy (the lowest
+        raw id) is the one kept.
+
+        A contact can also hold the same number twice - measured on a phone
+        with 943 numbers: once the copies were gone, 214 numbers were still
+        there twice, every one inside a single contact. Deleting the contact
+        cannot fix that, so the second row of the number goes instead, by its
+        data id (rows without a DataId are left alone).
+
+        Returns Gone (raw ids) and Rows (their rows), Extra (data ids) and
+        ExtraRows, and Kept (how many contacts are left).
+    #>
+    param($Rows)
+
+    $keysOf = @{}
+    $holders = @{}
+    $rowsOf = @{}
+    foreach ($row in @($Rows)) {
+        $raw = "$($row.RawId)" -replace '\D', ''
+        if (-not $raw -or -not "$($row.Number)".Trim()) { continue }
+        $key = Get-ContactKey -Name $row.Name -Number $row.Number
+        if (-not $keysOf.ContainsKey($raw)) {
+            $keysOf[$raw] = New-Object 'System.Collections.Generic.HashSet[string]'
+            $rowsOf[$raw] = New-Object System.Collections.Generic.List[object]
+        }
+        $null = $rowsOf[$raw].Add($row)
+        if ($keysOf[$raw].Add($key)) {
+            if ($holders.ContainsKey($key)) { $holders[$key]++ } else { $holders[$key] = 1 }
+        }
+    }
+
+    $gone = New-Object System.Collections.Generic.List[string]
+    $goneRows = New-Object System.Collections.Generic.List[object]
+    # newest first, so each one weighed has the older copies still standing
+    foreach ($raw in @($keysOf.Keys | Sort-Object { [long]$_ } -Descending)) {
+        $spare = $true
+        foreach ($key in $keysOf[$raw]) { if ($holders[$key] -lt 2) { $spare = $false; break } }
+        if (-not $spare) { continue }
+        foreach ($key in $keysOf[$raw]) { $holders[$key]-- }
+        $null = $gone.Add($raw)
+        foreach ($row in $rowsOf[$raw]) { $null = $goneRows.Add($row) }
+    }
+    $extra = New-Object System.Collections.Generic.List[string]
+    $extraRows = New-Object System.Collections.Generic.List[object]
+    $leaving = @{}
+    foreach ($raw in $gone) { $leaving[$raw] = $true }
+    foreach ($raw in $rowsOf.Keys) {
+        if ($leaving.ContainsKey($raw)) { continue }
+        $seen = @{}
+        $ordered = @($rowsOf[$raw] | Where-Object { $_.PSObject.Properties['DataId'] -and "$($_.DataId)" -match '^\d+$' } |
+            Sort-Object { [long]"$($_.DataId)" })
+        foreach ($row in $ordered) {
+            $key = Get-ContactKey -Name $row.Name -Number $row.Number
+            if ($seen.ContainsKey($key)) { $null = $extra.Add("$($row.DataId)"); $null = $extraRows.Add($row) }
+            else { $seen[$key] = $true }
+        }
+    }
+    return [PSCustomObject]@{ Gone = $gone.ToArray(); Rows = $goneRows.ToArray()
+        Extra = $extra.ToArray(); ExtraRows = $extraRows.ToArray(); Kept = ($keysOf.Count - $gone.Count) }
+}
+
+function Get-PhoneContactRows {
+    # every number in the phone's contacts, read fresh rather than off a list a filter may have cut
+    param([string]$Serial)
+
+    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+        'content query --uri content://com.android.contacts/data/phones --projection _id:display_name:data1:raw_contact_id')).Text
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($row in (Split-BackupRows -Text $text)) {
+        $number = Get-BackupRowValue -Row $row -Column 'data1'
+        if (-not $number) { continue }
+        $null = $rows.Add([PSCustomObject]@{
+            Name = (Get-BackupRowValue -Row $row -Column 'display_name')
+            Number = $number
+            RawId = (Get-BackupRowValue -Row $row -Column 'raw_contact_id')
+            DataId = (Get-BackupRowValue -Row $row -Column '_id') })
+    }
+    return $rows.ToArray()
+}
+
+function Get-ContactDuplicateQuestion {
+    # what is about to go, in words: a few by name, the rest counted
+    param($Plan, [int]$Show = 10)
+
+    $nl = [Environment]::NewLine
+    $rows = @(@($Plan.Rows) + @($Plan.ExtraRows))
+    $lines = @($rows | Select-Object -First $Show | ForEach-Object {
+        $name = "$($_.Name)".Trim()
+        $number = "$($_.Number)".Trim()
+        if ($name) { "$name  $number" } else { $number }
+    })
+    if ($rows.Count -gt $Show) { $lines += "... and $($rows.Count - $Show) more" }
+    $what = @()
+    if (@($Plan.Gone).Count -gt 0) {
+        $what += "$(@($Plan.Gone).Count) contact(s) are a second copy of another one - the same name and the same number."
+    }
+    if (@($Plan.Extra).Count -gt 0) {
+        $what += "$(@($Plan.Extra).Count) number(s) are saved twice inside the same contact."
+    }
+    return (($what -join $nl) + $nl + 'One of each stays; the copies go. A contact with any number of its own is kept, ' +
+        'even when it repeats others.' + $nl + $nl + ($lines -join $nl))
+}
+
+function Remove-PhoneContactDuplicates {
+    # the plan carried out: the spare contacts, then the spare numbers
+    param([string]$Serial, $Plan)
+
+    $contacts = Remove-PhoneContacts -Serial $Serial -RawIds @($Plan.Gone)
+    $numbers = [PSCustomObject]@{ Deleted = 0; Calls = 0; Failed = 0; Stopped = $false }
+    if (-not $contacts.Stopped -and @($Plan.Extra).Count -gt 0) {
+        $numbers = Remove-PhoneContacts -Serial $Serial -RawIds @($Plan.Extra) -Table 'data'
+    }
+    return [PSCustomObject]@{ Contacts = $contacts.Deleted; Numbers = $numbers.Deleted
+        Failed = ($contacts.Failed + $numbers.Failed); Stopped = ($contacts.Stopped -or $numbers.Stopped) }
 }
 
 # -------------------------------------------------- adding, the slow way ----

@@ -55,6 +55,8 @@
         <Button x:Name="ContactsCopy" Content="Copy" Margin="0,0,8,0" ToolTip="Copy the selected rows (name, number)"/>
         <Button x:Name="ContactsExport" Content="Export all..." Margin="0,0,8,0"
                 ToolTip="Save the listed contacts to a CSV or vCard file on this PC"/>
+        <Button x:Name="ContactsDuplicates" Content="Remove duplicates..." Margin="0,0,8,0"
+                ToolTip="Delete the second copy of every contact that is there twice - same name, same number. It asks first"/>
         <Button x:Name="ContactsDelete" Content="Delete" Style="{StaticResource DangerButton}"
                 ToolTip="Delete the selected contacts from the phone"/>
       </WrapPanel>
