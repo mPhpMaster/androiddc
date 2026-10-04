@@ -2,7 +2,12 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.7.0
+
+**Everything a backup takes now goes back.** Messages and the call log join
+the contacts, the files and the apps, in minutes rather than hours; Nova's
+backup page has a tab for each of them and one button for all; and the
+Contacts page can clear out what is on the phone twice.
 
 ### A backup now goes back whole
 
