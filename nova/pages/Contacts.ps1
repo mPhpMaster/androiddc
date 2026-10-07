@@ -184,22 +184,18 @@ function Remove-ContactDuplicates {
         -Yes "Delete $many" -Danger
     if (-not $sure) { return }
 
-    # written before anything is deleted; when it cannot be, nothing is
-    $saved = Save-ContactRemovalBackup -Serial $serial -Plan $plan
-    if (-not $saved) { return }
-    Write-Log "Saved what goes, to put back if it was wrong: $saved" $colorInfo
-    Start-BackupRun
-    try {
-        $gone = Remove-PhoneContactDuplicates -Serial $serial -Plan $plan -SavedTo $saved
-    } finally {
-        Complete-BackupRun
-    }
+    # saved, deleted, checked, and put back if the check finds anything missing
+    $gone = Invoke-ContactDuplicateRemoval -Serial $serial -Plan $plan
+    if (-not $gone.Saved) { Show-Toast -Text 'Nothing deleted: the backup could not be written' -Color 'bad'; return }
     $said = "$($gone.Contacts) contact(s) and $($gone.Numbers) number(s)"
     if ($gone.Stopped) { Write-Log "Stopped: $said went before it was cancelled." $colorWarn }
     elseif ($gone.Failed -gt 0) { Write-Log "Removed $said; $($gone.Failed) call(s) were refused." $colorWarn }
-    else {
-        Write-Log "Removed $said; $($plan.Kept) contact(s) stay. Open the saved backup and press Restore contacts to undo it." $colorGood
-        Show-Toast -Text "$($gone.Contacts + $gone.Numbers) duplicate(s) removed" -Color 'good'
+    elseif ($gone.Lost -gt 0) {
+        Show-Toast -Text $(if ($gone.StillLost -eq 0) { "Checked: $($gone.Lost) put back" } else { "$($gone.StillLost) still missing - see the log" }) `
+            -Color $(if ($gone.StillLost -eq 0) { 'warn' } else { 'bad' })
+    } else {
+        Write-Log "Removed $said; $($plan.Kept) contact(s) stay. The backup taken first: $($gone.Saved)" $colorGood
+        Show-Toast -Text "$($gone.Contacts + $gone.Numbers) duplicate(s) removed, checked" -Color 'good'
     }
     Update-ContactList
 }

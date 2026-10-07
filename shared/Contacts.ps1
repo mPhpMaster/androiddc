@@ -330,10 +330,15 @@ function Get-PhoneContactRichIds {
 }
 
 function Get-PhoneContactPlan {
-    # the plan for one phone, read off the phone itself
+    # the plan for one phone, read off the phone itself, with the address book
+    # as it was (Before) - what the backup holds and the check compares with
     param([string]$Serial)
 
-    return Get-ContactDuplicates -Rows (Get-PhoneContactRows -Serial $Serial) -Rich (Get-PhoneContactRichIds -Serial $Serial)
+    $rows = @(Get-PhoneContactRows -Serial $Serial)
+    $plan = Get-ContactDuplicates -Rows $rows -Rich (Get-PhoneContactRichIds -Serial $Serial)
+    $book = @($rows | Where-Object { $null -ne $_ -and (Test-ContactBookAccount -Type $_.AccountType) })
+    $plan | Add-Member -NotePropertyName Before -NotePropertyValue $book
+    return $plan
 }
 
 function Get-ContactDuplicateQuestion {
@@ -357,23 +362,32 @@ function Get-ContactDuplicateQuestion {
     }
     $text = (($what -join $nl) + $nl + 'One of each stays; the copies go. WhatsApp, Telegram and SIM entries are ' +
         'not touched, and a contact with an email, a photo or a note is kept.' + $nl + $nl + ($lines -join $nl))
-    if ($SavedTo) { $text += $nl + $nl + "What goes is saved first, as a backup you can put back: $SavedTo" }
+    if ($SavedTo) {
+        $text += $nl + $nl + "The whole address book is saved first, as a backup you can put back: $SavedTo. " +
+            'Afterwards the phone is checked, and anything missing that should not be is put back at once.'
+    }
     return $text
 }
 
 function Save-ContactRemovalBackup {
     <#
-        What a removal is about to delete, written first as a backup of its
-        own - a folder beside your other backups, holding personal\contacts.json
-        with each contact's account - so the Backup page lists it, opens it,
-        and Restore contacts puts it back into the account it came from.
+        The whole address book, written before a removal deletes anything - a
+        backup of its own beside your others, holding personal\contacts.json
+        with each number's contact and account - so the Backup page lists it,
+        opens it, and Restore contacts puts back whatever is missing into the
+        account it came from. Not just what is meant to go: what went wrong the
+        first time was what went with it. What the plan removes is written
+        beside it as removed.json, for the record.
+
         Returns the folder, or '' when it could not be written, in which case
         nothing is deleted.
     #>
     param([string]$Serial, $Plan, [string]$Model = '')
 
-    $rows = @(@($Plan.Rows) + @($Plan.ExtraRows))
-    if ($rows.Count -eq 0) { return '' }
+    $removed = @(@($Plan.Rows) + @($Plan.ExtraRows))
+    if ($removed.Count -eq 0) { return '' }
+    $rows = $removed
+    if ($Plan.PSObject.Properties['Before'] -and @($Plan.Before).Count -gt 0) { $rows = @($Plan.Before) }
     if (-not $Model) {
         $Model = "$((Invoke-DeviceShell -Serial $Serial -CommandArguments @('getprop ro.product.model')).Text)".Trim()
     }
@@ -382,16 +396,22 @@ function Save-ContactRemovalBackup {
     if (-not $root -or -not (Test-Path -LiteralPath $root -PathType Container)) {
         $root = Join-Path $env:APPDATA 'AndroidDC\removed contacts'
     }
-    $name = ConvertTo-BackupName -Model $Model -Serial $Serial -Name 'removed duplicates'
+    $name = ConvertTo-BackupName -Model $Model -Serial $Serial -Name 'before removing duplicates'
     $folder = Join-Path $root $name
     try {
+        # Group is the raw contact: the writer puts a contact's numbers back as
+        # one contact, not one contact for each number
         $contacts = @($rows | ForEach-Object {
-            [PSCustomObject]@{ Name = "$($_.Name)"; Number = "$($_.Number)"
+            [PSCustomObject]@{ Name = "$($_.Name)"; Number = "$($_.Number)"; Group = "$($_.RawId)"
+                AccountType = "$($_.AccountType)"; AccountName = "$($_.AccountName)" } })
+        $gone = @($removed | ForEach-Object {
+            [PSCustomObject]@{ Name = "$($_.Name)"; Number = "$($_.Number)"; RawId = "$($_.RawId)"; DataId = "$($_.DataId)"
                 AccountType = "$($_.AccountType)"; AccountName = "$($_.AccountName)" } })
         Save-BackupText -Path (Join-Path $folder 'personal\contacts.json') -Text (ConvertTo-Json -InputObject $contacts -Depth 3)
+        Save-BackupText -Path (Join-Path $folder 'removed.json') -Text (ConvertTo-Json -InputObject $gone -Depth 3)
         Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
             Format = 2; Serial = $Serial; Model = $Model; Android = ''; Created = ([datetime]::Now).ToString('s')
-            Name = 'removed duplicates'; Parts = @('personal')
+            Name = 'before removing duplicates'; Parts = @('personal')
             Personal = [PSCustomObject]@{ Contacts = $contacts.Count; Messages = 0; Calls = 0 }
             Apps = @(); Settings = @(); Bytes = 0; Complete = $true; Stopped = '' }))
     } catch {
@@ -416,6 +436,88 @@ function Remove-PhoneContactDuplicates {
     }
     return [PSCustomObject]@{ Contacts = $contacts.Deleted; Numbers = $numbers.Deleted
         Failed = ($contacts.Failed + $numbers.Failed); Stopped = ($contacts.Stopped -or $numbers.Stopped) }
+}
+
+function Get-ContactBookKeys {
+    # every name and number in the address book, from rows Get-PhoneContactRows reads
+    param($Rows)
+
+    $keys = @{}
+    foreach ($row in @($Rows)) {
+        if ($null -eq $row) { continue }
+        if (-not (Test-ContactBookAccount -Type "$($row.AccountType)")) { continue }
+        $keys[(Get-ContactKey -Name $row.Name -Number $row.Number)] = $true
+    }
+    return $keys
+}
+
+function Invoke-ContactDuplicateRemoval {
+    <#
+        What the Remove duplicates button does once you say yes, in both
+        windows:
+
+          1. the whole address book is saved as a backup - nothing is deleted
+             if that cannot be written;
+          2. the copies go;
+          3. the phone is read again, and every name and number the address
+             book had must still be in it - a copy going leaves the one it
+             copied, so nothing should be missing;
+          4. if anything is, it is put back from the backup straight away, and
+             the log says so.
+
+        Returns Saved, Contacts, Numbers, Failed, Stopped, Lost (what was
+        missing at the check), PutBack, StillLost and Checked.
+    #>
+    param([string]$Serial, $Plan)
+
+    $result = [PSCustomObject]@{ Saved = ''; Contacts = 0; Numbers = 0; Failed = 0; Stopped = $false
+        Lost = 0; PutBack = 0; StillLost = 0; Checked = $false }
+    $saved = Save-ContactRemovalBackup -Serial $Serial -Plan $Plan
+    if (-not $saved) { $result.Failed = 1; return $result }
+    $result.Saved = $saved
+    Write-Log "Remove duplicates: the address book was saved first: $saved" $colorInfo
+
+    # the deleting is a run Cancel can stop; the check and the putting back
+    # after it are not, so a cancelled removal is still checked
+    Start-BackupRun
+    try {
+        $gone = Remove-PhoneContactDuplicates -Serial $Serial -Plan $Plan -SavedTo $saved
+    } finally {
+        Complete-BackupRun
+    }
+    $result.Contacts = $gone.Contacts
+    $result.Numbers = $gone.Numbers
+    $result.Failed = $gone.Failed
+    $result.Stopped = $gone.Stopped
+
+    $before = Get-ContactBookKeys -Rows $Plan.Before
+    if ($before.Count -eq 0) { return $result }
+    $afterRows = @(Get-PhoneContactRows -Serial $Serial)
+    if ($afterRows.Count -eq 0) {
+        # nothing read back is not the same as nothing there: the phone may have gone
+        Write-Log "Remove duplicates: the phone could not be read back to check it. If anything is missing, open $saved and press Restore contacts." $colorWarn
+        return $result
+    }
+    $result.Checked = $true
+    $after = Get-ContactBookKeys -Rows $afterRows
+    $lost = @($before.Keys | Where-Object { -not $after.ContainsKey($_) })
+    $result.Lost = $lost.Count
+    if ($lost.Count -eq 0) {
+        Write-Log "Remove duplicates: checked - all $($before.Count) names and numbers are still in the address book." $colorGood
+        return $result
+    }
+
+    Write-Log "Remove duplicates: $($lost.Count) name(s) and number(s) went that should not have. Putting them back from the backup ..." $colorBad
+    $back = Restore-BackupContacts -Source $saved -Serial $Serial
+    $result.PutBack = $back.Added
+    $again = Get-ContactBookKeys -Rows @(Get-PhoneContactRows -Serial $Serial)
+    $result.StillLost = @($before.Keys | Where-Object { -not $again.ContainsKey($_) }).Count
+    if ($result.StillLost -eq 0) {
+        Write-Log "Remove duplicates: put back - all $($before.Count) names and numbers are in the address book again." $colorGood
+    } else {
+        Write-Log "Remove duplicates: $($result.StillLost) are still missing. Open $saved on the Backup page and press Restore contacts." $colorBad
+    }
+    return $result
 }
 
 # -------------------------------------------------- adding, the slow way ----

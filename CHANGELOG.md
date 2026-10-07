@@ -36,6 +36,17 @@ What *Remove duplicates* does now:
 * Putting contacts back now skips one only when the address book has it - not
   when only a WhatsApp entry has the same name and number.
 
+And it checks its own work. Before deleting it saves the **whole** address
+book, not only what it means to remove - what went wrong the first time was
+what went *with* the copies. After deleting it reads the phone again: every
+name and number the address book had must still be in it, and anything
+missing is put back from that backup at once, with the log saying so. Tried on
+a real phone with test contacts, deleting one by hand in the middle to stand
+for the WhatsApp chain: the check found it and put it back, the copies went,
+the contact with an email and the app entries stayed, and the 1,815 other
+numbers on the phone were exactly as before. A contact put back keeps its
+numbers together as one contact.
+
 
 **Everything a backup takes now goes back.** Messages and the call log join
 the contacts, the files and the apps, in minutes rather than hours; Nova's

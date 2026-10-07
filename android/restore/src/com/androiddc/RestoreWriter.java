@@ -187,13 +187,30 @@ public final class RestoreWriter {
         }
         ArrayList<ContentProviderOperation> ops = new ArrayList<>();
         int added = 0, skipped = 0, waiting = 0;
+        // rows that share a Group (the raw contact they were read from) are
+        // one contact: its later numbers join the contact the first one made
+        String lastGroup = "";
+        int lastBack = -1;
         for (int i = 0; i < rows.length(); i++) {
             JSONObject row = rows.getJSONObject(i);
             String name = row.optString("Name", "");
             String number = row.optString("Number", "");
+            String belongs = row.optString("Group", "");
             if (number.trim().isEmpty() || !have.add(contactKey(name, number))) { skipped++; continue; }
+            if (!belongs.isEmpty() && belongs.equals(lastGroup) && lastBack >= 0) {
+                ops.add(ContentProviderOperation.newInsert(data).withValueBackReference("raw_contact_id", lastBack)
+                        .withValue("mimetype", "vnd.android.cursor.item/phone_v2").withValue("data1", number)
+                        .withValue("data2", 2).build());
+                waiting++;
+                continue;
+            }
+            // the provider refuses a batch of more than 500 operations; a batch
+            // ends only between contacts, so a back reference never crosses one
+            if (ops.size() >= 450) { added += apply(ops, waiting); waiting = 0; System.out.println("ADDED " + added); }
             // the account it came from, when the file says: back into that Google
-            // account it syncs up again; with none it is the phone's own contact
+            // account it syncs up again. With none it goes wherever the phone puts a
+            // new contact - measured: the Redmi keeps it on the phone, the vivo puts
+            // it in its default Google account
             String accountType = row.optString("AccountType", "");
             String accountName = row.optString("AccountName", "");
             if (accountType.isEmpty() || accountName.isEmpty() || !isBookAccount(accountType)) { accountType = null; accountName = null; }
@@ -213,16 +230,23 @@ public final class RestoreWriter {
                     .withValue("mimetype", "vnd.android.cursor.item/phone_v2").withValue("data1", number)
                     .withValue("data2", 2).build());
             waiting++;
-            // the provider refuses a batch of more than 500 operations
-            if (ops.size() >= 450) { added += apply(ops, waiting); waiting = 0; System.out.println("ADDED " + added); }
+            lastGroup = belongs;
+            lastBack = back;
         }
         added += apply(ops, waiting);
         System.out.println("DONE " + added + " " + skipped);
     }
 
-    private static String contactKey(String name, String number) {
-        String digits = number == null ? "" : number.replaceAll("[^0-9+]", "");
-        return (name == null ? "" : name.trim().toLowerCase()) + "|" + digits;
+    /**
+     * The same key the PC side makes (Get-ContactKey): the name with its spaces
+     * evened out and its case ignored, the number as a leading + and digits.
+     */
+    static String contactKey(String name, String number) {
+        String who = name == null ? "" : name.replaceAll("\\s+", " ").trim().toLowerCase();
+        String n = number == null ? "" : number.trim();
+        String digits = n.replaceAll("[^0-9]", "");
+        if (n.startsWith("+")) digits = "+" + digits;
+        return who + "|" + digits;
     }
 
     private Set<String> keys(Uri uri, String[] columns) throws Exception {

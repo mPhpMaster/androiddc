@@ -7028,20 +7028,13 @@ function Remove-ContactDuplicates {
         'Remove duplicates', 'YesNo', 'Warning')
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
 
-    # written before anything is deleted; when it cannot be, nothing is
-    $saved = Save-ContactRemovalBackup -Serial $serial -Plan $plan
-    if (-not $saved) { return }
-    Write-Log "Saved what goes, to put back if it was wrong: $saved" $colorInfo
-    Start-BackupRun
-    try {
-        $gone = Remove-PhoneContactDuplicates -Serial $serial -Plan $plan -SavedTo $saved
-    } finally {
-        Complete-BackupRun
-    }
+    # saved, deleted, checked, and put back if the check finds anything missing
+    $gone = Invoke-ContactDuplicateRemoval -Serial $serial -Plan $plan
+    if (-not $gone.Saved) { return }
     $said = "$($gone.Contacts) contact(s) and $($gone.Numbers) number(s)"
     if ($gone.Stopped) { Write-Log "Stopped: $said went before it was cancelled." $colorWarn }
     elseif ($gone.Failed -gt 0) { Write-Log "Removed $said; $($gone.Failed) call(s) were refused." $colorWarn }
-    else { Write-Log "Removed $said; $($plan.Kept) contact(s) stay. Open the saved backup and press Restore contacts to undo it." $colorGood }
+    elseif ($gone.Lost -eq 0) { Write-Log "Removed $said; $($plan.Kept) contact(s) stay. The backup taken first: $($gone.Saved)" $colorGood }
     Update-ContactList
 }
 

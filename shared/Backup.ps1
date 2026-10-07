@@ -2933,9 +2933,12 @@ function Invoke-BackupWriter {
 
 function Restore-BackupContacts {
     <#
-        The contacts in the backup, into the phone's own contacts (not an
-        account): seconds, and no tap on the phone. The ones it already has,
-        by name and number, are left alone.
+        The contacts in the backup: seconds, and no tap on the phone. One that
+        says which account it was in goes back into that account (a Google
+        one syncs up again); one that does not goes wherever the phone puts a
+        new contact - on the phone itself, or (a vivo, measured) its default
+        Google account. The ones the address book already has, by name and number,
+        are left alone - an app's entry (WhatsApp, Telegram) does not count.
     #>
     param([Alias('Folder')]$Source, [string]$Serial)
 

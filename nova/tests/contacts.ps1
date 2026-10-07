@@ -328,15 +328,58 @@ try {
             $sentAll -match 'content delete --uri content://com\.android\.contacts/data --where .?_id IN \(201\)')))
         $savedFolder = @(Get-ChildItem -LiteralPath $saveRoot -Directory | Select-Object -First 1)
         $savedRows = @()
+        $removedRows = @()
         if ($savedFolder.Count -gt 0) {
             $read = (Get-Content -LiteralPath (Join-Path $savedFolder[0].FullName 'personal\contacts.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
             $savedRows = @($read)
+            $read = (Get-Content -LiteralPath (Join-Path $savedFolder[0].FullName 'removed.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
+            $removedRows = @($read)
         }
-        Say ("  what went was saved first, as a backup: {0}   {1}" -f $(if ($savedFolder.Count) { $savedFolder[0].Name } else { 'nothing' }), (Mark (
-            $savedFolder.Count -eq 1 -and $savedFolder[0].Name -like "AndroidDC-backup-removed-duplicates-Test-Phone-$script:mockSerial-*" -and
-            $savedRows.Count -eq 3 -and @($savedRows | Where-Object { $_.AccountType -eq 'com.google' -and $_.AccountName -eq $me }).Count -eq 3)))
+        # the whole address book: the 8 rows of Google and the phone's own
+        # contacts, not the 2 WhatsApp ones and not just the 3 that go
+        Say ("  the whole address book was saved first, as a backup: {0}   {1}" -f $(if ($savedFolder.Count) { $savedFolder[0].Name } else { 'nothing' }), (Mark (
+            $savedFolder.Count -eq 1 -and $savedFolder[0].Name -like "AndroidDC-backup-before-removing-duplicates-Test-Phone-$script:mockSerial-*" -and
+            $savedRows.Count -eq 8 -and @($savedRows | Where-Object { $_.AccountType -eq 'com.whatsapp' }).Count -eq 0 -and
+            @($savedRows | Where-Object { $_.AccountType -eq 'com.google' -and $_.AccountName -eq $me }).Count -eq 7)))
+        Say ("  each number says which contact it was in, so a contact goes back whole   {0}" -f (Mark (
+            @($savedRows | Where-Object { $_.Group -eq '20' }).Count -eq 2)))
+        Say ("  and what goes is written down beside it: {0} row(s)   {1}" -f $removedRows.Count, (Mark ($removedRows.Count -eq 3)))
+        $checked = @($script:mockAdb | Where-Object { $_ -match '^content query --uri content://com.android.contacts/data/phones' }).Count
+        Say ("  the phone is read again after, to check: {0} read(s) of the numbers   {1}" -f $checked, (Mark ($checked -ge 2)))
         $listed = @(Get-BackupsInFolder -Folder $saveRoot)
         Say ("  and the backups list shows it, to open and put back   {0}" -f (Mark ($listed.Count -eq 1)))
+
+        # something gone that should not have: the check finds it and puts it back
+        $short = (@($answer -split "`n" | Where-Object { $_ -notmatch 'display_name=Sara' -or $_ -match 'account_type=com.whatsapp' }) -join "`n")
+        $script:reads = 0
+        $script:mockReply = {
+            param([string]$Line)
+            if ($Line -match '^content query --uri content://com.android.contacts/data/phones') {
+                $script:reads++
+                # the first read is the plan; after the delete, Sara's real contacts are gone
+                if ($script:reads -eq 1) { return $answer } else { return $short }
+            }
+            if ($Line -match '^content query --uri content://com.android.contacts/data --projection raw_contact_id:mimetype') { return $kinds }
+            if ($Line -match 'getprop ro.product.model') { return 'Test Phone' }
+            return ''
+        }
+        Reset-TestRecord
+        $lostRun = & {
+            function Restore-BackupContacts { param($Source, $Serial) $script:putBackFrom = "$Source"; [PSCustomObject]@{ Added = 2; Failed = 0; Skipped = 0; Stopped = ''; Error = '' } }
+            $script:putBackFrom = ''
+            $plan = Get-PhoneContactPlan -Serial $script:mockSerial
+            $result = Invoke-ContactDuplicateRemoval -Serial $script:mockSerial -Plan $plan
+            [PSCustomObject]@{ Result = $result; From = $script:putBackFrom }
+        }
+        Say ("  a name and number gone that should not be: found ({0}) and put back from the backup just taken   {1}" -f $lostRun.Result.Lost, (Mark (
+            $lostRun.Result.Lost -eq 1 -and $lostRun.Result.PutBack -eq 2 -and $lostRun.From -and $lostRun.From -eq $lostRun.Result.Saved)))
+        $script:mockReply = {
+            param([string]$Line)
+            if ($Line -match '^content query --uri content://com.android.contacts/data/phones') { return $answer }
+            if ($Line -match '^content query --uri content://com.android.contacts/data --projection raw_contact_id:mimetype') { return $kinds }
+            if ($Line -match 'getprop ro.product.model') { return 'Test Phone' }
+            return ''
+        }
 
         # a copy that cannot be written deletes nothing
         Reset-TestRecord
