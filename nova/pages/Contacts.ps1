@@ -200,6 +200,40 @@ function Remove-ContactDuplicates {
     Update-ContactList
 }
 
+function Copy-ContactsToPhone {
+    # this phone's contacts, written on another connected phone
+    $from = Get-TargetSerial
+    if (-not $from) { return }
+    $others = @(Get-OtherReadyPhones -Except $from)
+    if ($others.Count -eq 0) {
+        Write-Log 'Copy: only one phone is connected - connect the one to copy to as well.' $colorWarn
+        Show-Toast -Text 'Connect the other phone first' -Color 'warn'
+        return
+    }
+    $skip = [bool]$ui.ContactsSkipExisting.IsChecked
+    $nl = [Environment]::NewLine
+    $how = ('Only the address book is copied - not WhatsApp, Telegram or SIM entries - and nothing is deleted ' +
+        'on either phone.' + $nl + $nl +
+        $(if ($skip) { 'Contacts it already has (the same name and number) are left out.' }
+          else { 'Every contact is copied, including the ones it already has: those will be there twice.' }) +
+        $nl + $nl + 'They go where that phone puts a new contact. On some phones that is a Google account, ' +
+        'and Google then puts them on every phone signed in to it - this one too, if it shares the account.')
+    if ($others.Count -eq 1) {
+        $to = $others[0]
+        $sure = Show-Confirm -Title 'Copy contacts' -Text ("Copy the contacts on $from to $($to.Label)?" + $nl + $nl + $how) -Yes 'Copy'
+        if (-not $sure) { return }
+    } else {
+        $pick = Show-Choice -Title 'Copy contacts' -Text ("Copy the contacts on $from to which phone?" + $nl + $nl + $how) `
+            -Choices @($others | ForEach-Object { $_.Label })
+        if (-not $pick) { return }
+        $to = @($others | Where-Object { $_.Label -eq $pick })[0]
+    }
+    $result = Copy-PhoneContacts -From $from -To $to.Serial -SkipExisting:$skip
+    if ($result.Stopped) { Show-Toast -Text "Copy stopped: $($result.Stopped)" -Color 'warn' }
+    elseif ($result.Error) { Show-Toast -Text 'The contacts did not go across - see the log' -Color 'bad' }
+    else { Show-Toast -Text "$($result.Added) number(s) copied to $($to.Model), $($result.Skipped) already there" -Color 'good' }
+}
+
 function Start-PhoneCall {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -290,6 +324,7 @@ $ui.ContactsAdd.Add_Click({ Add-Contact })
 $ui.ContactsEdit.Add_Click({ Edit-Contact })
 $ui.ContactsDelete.Add_Click({ Remove-Contact })
 $ui.ContactsDuplicates.Add_Click({ Remove-ContactDuplicates })
+$ui.ContactsCopyTo.Add_Click({ Copy-ContactsToPhone })
 $ui.ContactsCall.Add_Click({ Start-PhoneCall })
 $ui.ContactsEndCall.Add_Click({ Stop-PhoneCall })
 $ui.ContactsCopy.Add_Click({

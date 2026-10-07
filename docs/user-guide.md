@@ -601,6 +601,14 @@ names the reason instead of printing the raw code.
 Read from the contacts provider: *Add*, *Edit*, *Delete*, *Call*, *End call*, *Copy*,
 *Export all...*, plus a dial box.
 
+**Copy to another phone...** (*Copy to phone...* in the classic window) writes this phone's
+contacts on another connected phone, in seconds. With **Skip ones it already has** ticked, a
+contact the other phone already has (same name and number) is left out; unticked, every contact
+is copied, so those are there twice. Only the address book goes - not WhatsApp, Telegram or SIM
+entries - and nothing is deleted on either phone. The contacts land where the other phone puts a
+new contact; on some phones that is a Google account, which puts them on every phone signed in
+to it, this one included if it shares the account.
+
 **Remove duplicates** (*Duplicates...* in the classic window) finds what is on the phone twice,
 says how many and names a few, and deletes them only if you say yes:
 

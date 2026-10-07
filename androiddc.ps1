@@ -43,7 +43,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # half seconds it stands in for start here
 . (Join-Path $scriptRoot 'shared\Splash.ps1')
 # the release this file is; CHANGELOG.md says what each one changed
-$appVersion = '1.7.0'
+$appVersion = '1.7.1'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
@@ -2570,9 +2570,24 @@ $tabContacts.Controls.Add($btnContactsRefresh)
 $lblContactsCount = New-Object System.Windows.Forms.Label
 $lblContactsCount.Text = ''
 $lblContactsCount.ForeColor = [System.Drawing.Color]::DimGray
+# a narrow window gives it little room: it ends in ... rather than under the buttons
+$lblContactsCount.AutoEllipsis = $true
 $lblContactsCount.Location = New-Object System.Drawing.Point(334, 15)
-$lblContactsCount.Size = New-Object System.Drawing.Size(300, 20)
+$lblContactsCount.Size = New-Object System.Drawing.Size(200, 20)
 $tabContacts.Controls.Add($lblContactsCount)
+
+$btnContactCopyTo = New-Object System.Windows.Forms.Button
+$btnContactCopyTo.Text = 'Copy to phone...'
+$btnContactCopyTo.Location = New-Object System.Drawing.Point(540, 10)
+$btnContactCopyTo.Size = New-Object System.Drawing.Size(120, 26)
+$tabContacts.Controls.Add($btnContactCopyTo)
+
+$chkContactSkipExisting = New-Object System.Windows.Forms.CheckBox
+$chkContactSkipExisting.Text = 'Skip ones it already has'
+$chkContactSkipExisting.Checked = $true
+$chkContactSkipExisting.Location = New-Object System.Drawing.Point(668, 14)
+$chkContactSkipExisting.Size = New-Object System.Drawing.Size(170, 20)
+$tabContacts.Controls.Add($chkContactSkipExisting)
 
 $btnContactAdd = New-Object System.Windows.Forms.Button
 $btnContactAdd.Text = 'Add'
@@ -7038,6 +7053,72 @@ function Remove-ContactDuplicates {
     Update-ContactList
 }
 
+function Select-OtherPhone {
+    # one phone out of a list, or $null: the classic window has no choice box of its own
+    param($Phones, [string]$Text)
+
+    $dialog = New-Object System.Windows.Forms.Form
+    $dialog.Text = 'Copy contacts'
+    $dialog.FormBorderStyle = 'FixedDialog'
+    $dialog.StartPosition = 'CenterParent'
+    $dialog.MaximizeBox = $false
+    $dialog.MinimizeBox = $false
+    $dialog.ClientSize = New-Object System.Drawing.Size(460, 260)
+    $label = New-Object System.Windows.Forms.Label
+    $label.Text = $Text
+    $label.SetBounds(12, 10, 436, 70)
+    $dialog.Controls.Add($label)
+    $list = New-Object System.Windows.Forms.ListBox
+    $list.SetBounds(12, 84, 436, 130)
+    foreach ($phone in @($Phones)) { $null = $list.Items.Add($phone.Label) }
+    $list.SelectedIndex = 0
+    $dialog.Controls.Add($list)
+    $ok = New-Object System.Windows.Forms.Button
+    $ok.Text = 'Copy'
+    $ok.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $ok.SetBounds(276, 224, 84, 28)
+    $dialog.Controls.Add($ok)
+    $cancel = New-Object System.Windows.Forms.Button
+    $cancel.Text = 'Cancel'
+    $cancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+    $cancel.SetBounds(364, 224, 84, 28)
+    $dialog.Controls.Add($cancel)
+    $dialog.AcceptButton = $ok
+    $dialog.CancelButton = $cancel
+    try {
+        if ($dialog.ShowDialog($form) -ne [System.Windows.Forms.DialogResult]::OK -or $list.SelectedIndex -lt 0) { return $null }
+        return @($Phones)[$list.SelectedIndex]
+    } finally {
+        $dialog.Dispose()
+    }
+}
+
+function Copy-ContactsToPhone {
+    # this phone's contacts, written on another connected phone
+    $from = Get-TargetSerial
+    if (-not $from) { return }
+    $others = @(Get-OtherReadyPhones -Except $from)
+    if ($others.Count -eq 0) { Write-Log 'Copy: only one phone is connected - connect the one to copy to as well.' $colorWarn; return }
+    $skip = $chkContactSkipExisting.Checked
+    $nl = [Environment]::NewLine
+    $how = ('Only the address book is copied - not WhatsApp, Telegram or SIM entries - and nothing is deleted ' +
+        'on either phone. ' +
+        $(if ($skip) { 'Contacts it already has (the same name and number) are left out.' }
+          else { 'Every contact is copied, including the ones it already has: those will be there twice.' }) +
+        ' ' + 'They go where that phone puts a new contact. On some phones that is a Google account, ' +
+        'and Google then puts them on every phone signed in to it - this one too, if it shares the account.')
+    if ($others.Count -eq 1) {
+        $to = $others[0]
+        $answer = [System.Windows.Forms.MessageBox]::Show(("Copy the contacts on $from to $($to.Label)?" + $nl + $nl + $how),
+            'Copy contacts', 'YesNo', 'Question')
+        if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+    } else {
+        $to = Select-OtherPhone -Phones $others -Text ("Copy the contacts on $from to which phone?" + $nl + $how)
+        if (-not $to) { return }
+    }
+    $null = Copy-PhoneContacts -From $from -To $to.Serial -SkipExisting:$skip
+}
+
 function Start-PhoneCall {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -10619,6 +10700,12 @@ function Update-RightLayout {
             $txtDialNumber.SetBounds(($start + 46), ($buttonY + 2), $boxWidth, 24)
             $btnContactCall.SetBounds(($start + 46 + $boxWidth + 8), $buttonY, 84, 28)
             $btnContactEndCall.SetBounds(($start + 46 + $boxWidth + 100), $buttonY, 92, 28)
+
+            # top right: copying to another phone, its box against the edge; the
+            # count between Refresh and them takes whatever width is left
+            $chkContactSkipExisting.SetBounds(($pageWidth - 12 - 170), 14, 170, 20)
+            $btnContactCopyTo.SetBounds(($chkContactSkipExisting.Left - 8 - 120), 10, 120, 26)
+            $lblContactsCount.SetBounds(334, 15, [Math]::Max(60, ($btnContactCopyTo.Left - 8 - 334)), 20)
         }
     }
 
@@ -12836,6 +12923,7 @@ $btnContactAdd.Add_Click({ Add-Contact })
 $btnContactEdit.Add_Click({ Edit-Contact })
 $btnContactDelete.Add_Click({ Remove-Contact })
 $btnContactDuplicates.Add_Click({ Remove-ContactDuplicates })
+$btnContactCopyTo.Add_Click({ Copy-ContactsToPhone })
 $btnContactCall.Add_Click({ Start-PhoneCall })
 $btnContactEndCall.Add_Click({ Stop-PhoneCall })
 $btnContactCopy.Add_Click({ Copy-ListSelection -List $lstContacts -Columns @(0, 1) })
@@ -14211,6 +14299,8 @@ $toolTip.SetToolTip($btnContactsRefresh, 'Reads the contacts again (F5)')
 $toolTip.SetToolTip($btnContactAdd, 'Adds a contact to the phone')
 $toolTip.SetToolTip($btnContactEdit, 'Changes the name or number of the selected contact')
 $toolTip.SetToolTip($btnContactDelete, 'Deletes the selected contact from the phone, after asking')
+$toolTip.SetToolTip($btnContactCopyTo, "Writes this phone's contacts on another connected phone - the address book only, nothing deleted on either")
+$toolTip.SetToolTip($chkContactSkipExisting, 'Ticked: contacts the other phone already has are left out. Unticked: every contact is copied, so those will be there twice')
 $toolTip.SetToolTip($btnContactDuplicates, 'Deletes the second copy of every contact that is there twice - same name, same number - after asking')
 $toolTip.SetToolTip($btnContactCall, 'Dials the selected contact on the phone')
 $toolTip.SetToolTip($btnContactEndCall, 'Ends the call on the phone')

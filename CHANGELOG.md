@@ -2,7 +2,29 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.7.1
+
+**Update from 1.7.0 if you have it, and do not press *Remove duplicates* there.**
+In 1.7.0 that button could delete real contacts. This release fixes it, makes it
+save the whole address book before it deletes anything, and makes it check
+its own work afterwards and put back anything that should not have gone. And
+contacts can now be copied from one phone to another.
+
+### Copy contacts to another phone
+
+*Copy to another phone...* on the Contacts page of both windows writes this
+phone's contacts on another connected one, in one run of the writer: seconds,
+and no tap on either phone. With two phones connected it names the other; with
+more it asks which. **Skip ones it already has**, ticked to start with, leaves
+out a contact the other phone already has (the same name and number);
+unticked, every contact is copied, so those are there twice.
+
+Only the address book goes - Google accounts and the phone's own contacts, not
+WhatsApp, Telegram or SIM entries - a contact's numbers stay one contact, and
+nothing is deleted on either phone. They land where the other phone puts a new
+contact: measured, a Redmi keeps them on the phone and a vivo puts them in its
+default Google account, which Google then puts on every phone signed in to it.
+The question before it starts says so.
 
 ### Remove duplicates deleted real contacts - fixed, and it keeps a copy now
 

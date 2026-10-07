@@ -2836,15 +2836,23 @@ function Invoke-BackupWriter {
         whatever happens.
     #>
     param($Source, [string]$Serial, [ValidateSet('calls', 'messages', 'contacts')][string]$Kind,
-        [string[]]$Entries, [string]$What)
+        [string[]]$Entries, [string]$What,
+        # rows that are not in a backup - a phone's contacts, read a moment ago -
+        # as the JSON text the writer reads, and how many there are
+        [string]$RowsText = '', [int]$RowsCount = 0,
+        # 'all': contacts the phone already has are added as well
+        [string]$Mode = '',
+        # the word the log starts with: Restore, or Copy
+        [string]$Label = 'Restore')
 
     $empty = [PSCustomObject]@{ Added = 0; Skipped = 0; Total = 0; Stopped = ''; Error = '' }
-    $rows = Get-BackupWriterRows -Source $Source -Entries $Entries -What $What
-    if ($rows.Count -eq 0) { Write-Log "Restore: this backup holds no $What." $colorWarn; return $empty }
+    if ($RowsText) { $rows = [PSCustomObject]@{ Count = $RowsCount; Text = $RowsText } }
+    else { $rows = Get-BackupWriterRows -Source $Source -Entries $Entries -What $What }
+    if ($rows.Count -eq 0) { Write-Log "$Label`: there are no $What." $colorWarn; return $empty }
 
     $dex = Get-RestoreWriterDex
     if (-not $dex) {
-        Write-Log 'Restore: the writer that puts these back could not be found or built.' $colorBad
+        Write-Log "$Label`: the writer that puts these on the phone could not be found or built." $colorBad
         $empty.Error = 'no writer'
         return $empty
     }
@@ -2861,7 +2869,7 @@ function Invoke-BackupWriter {
     # measured on the test phone: calls 39 a second, messages 13 (each one finds its conversation)
     $perSecond = $(switch ($Kind) { 'calls' { 39 } 'messages' { 13 } default { 40 } })
     $minutes = [math]::Ceiling($rows.Count / $perSecond / 60)
-    Write-Log "Restore: $($rows.Count) $What to put back, about $minutes minute(s) ..." $colorStep
+    Write-Log "$Label`: $($rows.Count) $What to write on $Serial, about $minutes minute(s) ..." $colorStep
     Start-BackupRun
     $smsMode = ''
     $result = $null
@@ -2884,7 +2892,7 @@ function Invoke-BackupWriter {
             }
             Write-BackupProgress -Text "$What`: the phone is writing them" -Done 0 -Total $rows.Count
             $result = Invoke-BackupAdb -ArgumentList @('-s', $Serial, 'shell',
-                "CLASSPATH=$remoteDex app_process /system/bin com.androiddc.RestoreWriter $Kind $remoteJson $user 2>&1") `
+                "CLASSPATH=$remoteDex app_process /system/bin com.androiddc.RestoreWriter $Kind $remoteJson $user $Mode 2>&1") `
                 -Caption "$What`: the phone is writing them"
         }
     } finally {
@@ -2921,7 +2929,7 @@ function Invoke-BackupWriter {
         Write-Log "$title stopped ($($out.Stopped)): $($out.Added) put back." $colorWarn
         Send-BackupNotice -Title "$title stopped" -Text "$($out.Stopped). $($out.Added) were put back."
     } elseif ($out.Error) {
-        Write-Log "Restore: the $What did not go back - $($out.Error)" $colorBad
+        Write-Log "$Label`: the $What did not go on the phone - $($out.Error)" $colorBad
     } else {
         Write-Log "  $($out.Added) $What put back, $($out.Skipped) were already there." $colorGood
         Send-BackupNotice -Title "$title restored" -Text "$($out.Added) put back on $Serial, $($out.Skipped) were already there."

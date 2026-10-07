@@ -393,6 +393,68 @@ try {
         $null = Set-BackupFolderPath -Folder ''
     }
 
+    Say ''
+    Say '== copying to another phone =='
+    $copyRows = @(Get-ContactCopyRows -Rows $twice)
+    Say ("  what goes: {0} number(s) - the address book only, never the WhatsApp entries   {1}" -f $copyRows.Count, (Mark (
+        $copyRows.Count -eq 8 -and @($copyRows | Where-Object { $_.Group -in @('5', '6') }).Count -eq 0)))
+    Say ("  a contact's numbers sit together and share a Group, in raw-id order   {0}" -f (Mark (
+        (@($copyRows | ForEach-Object { $_.Group }) -join ',') -eq '10,11,12,20,20,21,30,31')))
+    Say ("  no account is named, so the other phone files them where it files a new contact   {0}" -f (Mark (
+        @($copyRows | Where-Object { $_.PSObject.Properties['AccountType'] }).Count -eq 0)))
+
+    # outside the block: one phone out of it is not an array any more
+    $others = @(& {
+        function Invoke-Adb { param([string[]]$CommandArguments, [int]$TimeoutMs = 0)
+            [PSCustomObject]@{ ExitCode = 0; Text = ("List of devices attached`nAAA111 device usb:1 product:x model:Pixel_8 device:y`n" +
+                "BBB222 unauthorized usb:2`n192.168.1.5:5555 device product:gust model:23108RN04Y device:gust`n"); Lines = @() } }
+        @(Get-OtherReadyPhones -Except 'AAA111')
+    })
+    Say ("  the other phones: {0}   {1}" -f (@($others | ForEach-Object { $_.Label }) -join ' | '), (Mark (
+        $others.Count -eq 1 -and $others[0].Serial -eq '192.168.1.5:5555' -and $others[0].Model -eq '23108RN04Y')))
+
+    $sent = & {
+        function Invoke-BackupWriter { param($Source, [string]$Serial, [string]$Kind, [string[]]$Entries, [string]$What,
+                [string]$RowsText = '', [int]$RowsCount = 0, [string]$Mode = '', [string]$Label = 'Restore')
+            $script:writerCalls += ,[PSCustomObject]@{ Serial = $Serial; Kind = $Kind; Count = $RowsCount; Mode = $Mode; Label = $Label; Text = $RowsText }
+            [PSCustomObject]@{ Added = $RowsCount; Skipped = 0; Total = $RowsCount; Stopped = ''; Error = '' } }
+        $script:writerCalls = @()
+        $null = Copy-PhoneContacts -From $script:mockSerial -To 'OTHER' -SkipExisting
+        $null = Copy-PhoneContacts -From $script:mockSerial -To 'OTHER'
+        $script:writerCalls
+    }
+    Say ("  ticked, it leaves out what the other phone has; unticked, it copies all: '{0}' then '{1}'   {2}" -f $sent[0].Mode, $sent[1].Mode, (Mark (
+        @($sent).Count -eq 2 -and $sent[0].Mode -eq '' -and $sent[1].Mode -eq 'all' -and
+        $sent[0].Serial -eq 'OTHER' -and $sent[0].Kind -eq 'contacts' -and $sent[0].Count -eq 8 -and $sent[0].Label -eq 'Copy' -and
+        $sent[0].Text -notmatch 'whatsapp')))
+    Say ("  and nothing is deleted on either phone   {0}" -f (Mark (@($script:mockText | Where-Object { $_ -match 'content delete' }).Count -eq 0)))
+
+    # the button: one other phone is asked about by name; No copies nothing
+    $pressed = & {
+        function Get-OtherReadyPhones { param([string]$Except) @([PSCustomObject]@{ Serial = 'OTHER'; Model = 'Other phone'; Label = 'Other phone (OTHER)' }) }
+        function Copy-PhoneContacts { param([string]$From, [string]$To, [switch]$SkipExisting)
+            $script:copies += ,"$From>$To skip=$([bool]$SkipExisting)"
+            [PSCustomObject]@{ Added = 3; Skipped = 1; Total = 4; Stopped = ''; Error = '' } }
+        $script:copies = @()
+        $script:mockConfirm = $false
+        Reset-TestRecord
+        Copy-ContactsToPhone
+        $asked = @($script:mockAsked)
+        $script:mockConfirm = $true
+        $ui.ContactsSkipExisting.IsChecked = $true
+        Copy-ContactsToPhone
+        $ui.ContactsSkipExisting.IsChecked = $false
+        Copy-ContactsToPhone
+        $ui.ContactsSkipExisting.IsChecked = $true
+        [PSCustomObject]@{ Asked = $asked; Copies = $script:copies }
+    }
+    Say ("  the button names the other phone and says what it will do; No copies nothing   {0}" -f (Mark (
+        $pressed.Asked.Count -eq 1 -and "$($pressed.Asked[0])" -match 'Other phone \(OTHER\)' -and
+        "$($pressed.Asked[0])" -match 'not WhatsApp' -and "$($pressed.Asked[0])" -match 'Google account' -and
+        @($pressed.Copies)[0] -ne "$script:mockSerial>OTHER skip=False" -and @($pressed.Copies).Count -eq 2)))
+    Say ("  Yes copies, and the box decides: {0}   {1}" -f (@($pressed.Copies) -join ' | '), (Mark (
+        (@($pressed.Copies) -join '|') -eq "$script:mockSerial>OTHER skip=True|$script:mockSerial>OTHER skip=False")))
+
     Say ("  no command reached a real phone   {0}" -f (Mark ($script:mockLeaks.Count -eq 0)))
 } finally {
     Disable-TestMocks

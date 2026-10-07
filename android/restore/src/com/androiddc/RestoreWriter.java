@@ -37,7 +37,9 @@ import java.util.Set;
  * contact the same name and number) is left alone, so running it twice adds
  * nothing the second time.
  *
- * Usage: RestoreWriter calls|messages|contacts file.json [userId]
+ * Usage: RestoreWriter calls|messages|contacts file.json [userId] [all]
+ * "all" (contacts only) adds every contact in the file, including ones the
+ * phone already has; without it those are skipped.
  * Prints TOTAL n, then ADDED n as it goes, then DONE added skipped.
  */
 public final class RestoreWriter {
@@ -59,6 +61,7 @@ public final class RestoreWriter {
         String kind = args[0];
         JSONArray rows = readJson(new File(args[1]));
         int user = args.length > 2 ? Integer.parseInt(args[2]) : 0;
+        boolean all = args.length > 3 && "all".equals(args[3]);
         String authority;
         if ("calls".equals(kind)) authority = "call_log";
         else if ("messages".equals(kind)) authority = "sms";
@@ -75,7 +78,7 @@ public final class RestoreWriter {
             System.out.println("TOTAL " + rows.length());
             if ("calls".equals(kind)) writer.calls(rows);
             else if ("messages".equals(kind)) writer.messages(rows);
-            else writer.contacts(rows);
+            else writer.contacts(rows, all);
         } finally {
             try { invokeByName(manager, "removeContentProviderExternalAsUser", authority, token, user); }
             catch (Throwable ignored) {
@@ -160,11 +163,13 @@ public final class RestoreWriter {
         }
     }
 
-    private void contacts(JSONArray rows) throws Exception {
+    private void contacts(JSONArray rows, boolean all) throws Exception {
         Uri raw = Uri.parse("content://com.android.contacts/raw_contacts");
         Uri data = Uri.parse("content://com.android.contacts/data");
         Set<String> have = new HashSet<>();
-        Cursor cursor = query(Uri.parse("content://com.android.contacts/data/phones"),
+        // with "all" the phone's own contacts are not asked: only the file is
+        // kept from adding the same one twice
+        Cursor cursor = all ? null : query(Uri.parse("content://com.android.contacts/data/phones"),
                 new String[] { "display_name", "data1", "account_type" });
         if (cursor != null) {
             try {

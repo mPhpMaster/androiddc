@@ -179,6 +179,7 @@ PID,NAME`. After `root` or `unroot`, `adb wait-for-device` runs before the phone
 | Which files the phone already has | `adb shell find '/sdcard/<folder>' -type f`, once per folder rather than once per file |
 | Sending a file back | `adb push <file> /sdcard/<path>` |
 | Contacts, messages and calls back | `adb push` of the writer (`android\restore`, one dex) and the backup's JSON to `/data/local/tmp`, then `adb shell CLASSPATH=... app_process /system/bin com.androiddc.RestoreWriter <kind> <file> <user>`, which hands the provider the whole file in batches - one Java runtime for all of it, where `content insert` starts one per row. Both files are removed after |
+| Copying contacts to another phone | `content query --uri content://com.android.contacts/data/phones` on the first phone, then the writer on the other: `app_process ... RestoreWriter contacts <file> <user>` to leave out what it has, or `... <user> all` to write every one |
 | Letting adb write messages for a restore | `adb shell appops get com.android.shell WRITE_SMS`, `appops set ... WRITE_SMS allow` for the run, and `appops set ... WRITE_SMS <what it was>` after |
 | After sending files | `adb shell content call --uri content://media --method scan_volume --arg external_primary`, so the gallery notices them |
 | Installing an app from a backup | `adb install -r <apk>`, or `adb install-multiple -r <base.apk> <split...>` |

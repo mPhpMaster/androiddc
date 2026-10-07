@@ -520,6 +520,69 @@ function Invoke-ContactDuplicateRemoval {
     return $result
 }
 
+# --------------------------------------------- from one phone to another ----
+
+function Get-OtherReadyPhones {
+    # the phones adb can talk to now, apart from the one given: Serial, Model and Label
+    param([string]$Except)
+
+    $text = "$((Invoke-Adb -CommandArguments @('devices', '-l')).Text)"
+    $phones = New-Object System.Collections.Generic.List[object]
+    foreach ($line in ($text -split "`r?`n")) {
+        if ($line -notmatch '^(\S+)\s+device\b(.*)$') { continue }
+        $serial = $Matches[1]
+        $rest = $Matches[2]
+        if ($serial -eq $Except) { continue }
+        $model = $(if ($rest -match 'model:(\S+)') { $Matches[1] -replace '_', ' ' } else { '' })
+        $null = $phones.Add([PSCustomObject]@{ Serial = $serial; Model = $model
+            Label = $(if ($model) { "$model ($serial)" } else { $serial }) })
+    }
+    return $phones.ToArray()
+}
+
+function Get-ContactCopyRows {
+    <#
+        A phone's contacts, ready to be written on another: the address book
+        only - Google accounts and the phone's own contacts, never an app's
+        entry (WhatsApp, Telegram) or the SIM's - one row per number, a
+        contact's numbers next to each other and sharing a Group, so the
+        writer makes them one contact again. No account is named: the phone
+        they land on puts them where it puts a new contact.
+    #>
+    param($Rows)
+
+    $book = @(@($Rows) | Where-Object { $null -ne $_ -and (Test-ContactBookAccount -Type "$($_.AccountType)") })
+    $ordered = @($book | Sort-Object @{ Expression = { [long]("0" + ("$($_.RawId)" -replace '\D', '')) } },
+        @{ Expression = { [long]("0" + ("$($_.DataId)" -replace '\D', '')) } })
+    return @($ordered | ForEach-Object { [PSCustomObject]@{ Name = "$($_.Name)"; Number = "$($_.Number)"; Group = "$($_.RawId)" } })
+}
+
+function Copy-PhoneContacts {
+    <#
+        Every contact on one phone, written on another in one run of the
+        writer. With -SkipExisting a contact the other phone already has (the
+        same name and number, in its address book) is left out; without it
+        every one is written, including those. Either way the same contact is
+        not written twice from the one phone.
+
+        Nothing is deleted on either phone. Returns the writer's answer:
+        Added (numbers written), Skipped, Total, Stopped and Error.
+    #>
+    param([string]$From, [string]$To, [switch]$SkipExisting)
+
+    $rows = @(Get-ContactCopyRows -Rows (Get-PhoneContactRows -Serial $From))
+    if ($rows.Count -eq 0) {
+        Write-Log "Copy: $From has no contacts to copy." $colorWarn
+        return [PSCustomObject]@{ Added = 0; Skipped = 0; Total = 0; Stopped = ''; Error = '' }
+    }
+    $people = @($rows | ForEach-Object { $_.Group } | Sort-Object -Unique).Count
+    Write-Log ("Copy: $people contact(s) ($($rows.Count) numbers) from $From to $To, " +
+        $(if ($SkipExisting) { 'leaving out the ones it already has ...' } else { 'including the ones it already has ...' })) $colorStep
+    $text = ConvertTo-Json -InputObject $rows -Depth 3
+    return Invoke-BackupWriter -Serial $To -Kind 'contacts' -What 'contacts' -RowsText $text -RowsCount $rows.Count `
+        -Mode $(if ($SkipExisting) { '' } else { 'all' }) -Label 'Copy'
+}
+
 # -------------------------------------------------- adding, the slow way ----
 
 function New-ContactRowBlock {
