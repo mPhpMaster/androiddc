@@ -172,20 +172,25 @@ function Remove-ContactDuplicates {
     if (-not $serial) { return }
 
     Write-Log "Looking for contacts that are there twice on $serial ..." $colorStep
-    $plan = Get-ContactDuplicates -Rows (Get-PhoneContactRows -Serial $serial)
+    $plan = Get-PhoneContactPlan -Serial $serial
     $many = @($plan.Gone).Count + @($plan.Extra).Count
     if ($many -eq 0) {
         Write-Log 'No contact is there twice.' $colorGood
         Show-Toast -Text 'No duplicates' -Color 'good'
         return
     }
-    $sure = Show-Confirm -Title 'Remove duplicates' -Text (Get-ContactDuplicateQuestion -Plan $plan) `
+    $sure = Show-Confirm -Title 'Remove duplicates' -Text (
+        Get-ContactDuplicateQuestion -Plan $plan -SavedTo 'the backups folder, as "removed duplicates"') `
         -Yes "Delete $many" -Danger
     if (-not $sure) { return }
 
+    # written before anything is deleted; when it cannot be, nothing is
+    $saved = Save-ContactRemovalBackup -Serial $serial -Plan $plan
+    if (-not $saved) { return }
+    Write-Log "Saved what goes, to put back if it was wrong: $saved" $colorInfo
     Start-BackupRun
     try {
-        $gone = Remove-PhoneContactDuplicates -Serial $serial -Plan $plan
+        $gone = Remove-PhoneContactDuplicates -Serial $serial -Plan $plan -SavedTo $saved
     } finally {
         Complete-BackupRun
     }
@@ -193,7 +198,7 @@ function Remove-ContactDuplicates {
     if ($gone.Stopped) { Write-Log "Stopped: $said went before it was cancelled." $colorWarn }
     elseif ($gone.Failed -gt 0) { Write-Log "Removed $said; $($gone.Failed) call(s) were refused." $colorWarn }
     else {
-        Write-Log "Removed $said; $($plan.Kept) contact(s) stay." $colorGood
+        Write-Log "Removed $said; $($plan.Kept) contact(s) stay. Open the saved backup and press Restore contacts to undo it." $colorGood
         Show-Toast -Text "$($gone.Contacts + $gone.Numbers) duplicate(s) removed" -Color 'good'
     }
     Update-ContactList

@@ -609,8 +609,12 @@ says how many and names a few, and deletes them only if you say yes:
   international `+966533...` are not, because which country a local number is would be a guess.
 * a number saved twice inside one contact: its second row goes, not the contact.
 
-A contact goes only when every number it has is kept on another contact, so nothing of its
-own is lost; the oldest copy is the one that stays. It reads the phone itself, not the list,
+Only the address book is looked at - Google accounts and the phone's own contacts. WhatsApp,
+Telegram, Meet and SIM entries are never deleted and never count as the copy that stays, and a
+copy counts only inside one account. A contact goes only when every number it has is kept on
+another contact of the same account, and never when it holds an email, a photo, a note or a
+birthday. Before anything is deleted, what goes is saved as a backup named *removed
+duplicates*; open it on the Backup page and press *Restore contacts* to undo it. It reads the phone itself, not the list,
 so a filter in the box does not change what it finds. Cancel stops it between calls.
 
 ## SMS

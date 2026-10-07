@@ -14,16 +14,16 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 
 | File | Size | Modified | What it is |
 |---|---:|---|---|
-| `androiddc.ps1` | 629 KB, 14426 lines | 2026-10-04 | The main tool: a WinForms control panel for phones over ADB. Twelve tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery, automation), Apps, Contacts, SMS, Cam / Mic, Files, Running, Radios (Wi-Fi, Bluetooth, NFC), Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
+| `androiddc.ps1` | 630 KB, 14431 lines | 2026-10-07 | The main tool: a WinForms control panel for phones over ADB. Twelve tabs - Device, Tethering, Advanced (mirroring, more options, device tools, root/recovery, automation), Apps, Contacts, SMS, Cam / Mic, Files, Running, Radios (Wi-Fi, Bluetooth, NFC), Users, Shell (shell + logcat). Every list has the same actions on the right mouse button. All adb work runs on a background runspace so the window never freezes. |
 | `androiddc.vbs` | 561 B | 2026-09-15 | Launcher: runs the program hidden, with `-NoProfile -ExecutionPolicy Bypass`, passing its own arguments on (`-Minimized` from the start-with-Windows entry). **This is the file to double-click.** |
 | `androiddc-nova.vbs` | 722 B | 2026-09-15 | Launcher for the Nova window (`nova\androiddc-nova.ps1`), hidden and in STA. Each window has a button that closes it and opens the other. |
 | `start-menu.vbs` | 3.2 KB | 2026-09-15 | Adds *AndroidDC* and *AndroidDC Nova* to the Start menu (All apps), with the AndroidDC icon, pointing at the two launchers in this folder. `/remove` takes them out, `/quiet` shows no message, `/folder:<path>` writes elsewhere (tests). Windows keeps *Pin to Start* for the user. |
 | `start-menu-remove.vbs` | 1.6 KB | 2026-09-15 | The reverse of the above: removes the two Start menu shortcuts, and nothing else. `/quiet`, `/folder:<path>` as above. |
-| `nova\` | 77 files | 2026-10-04 | AndroidDC Nova, the same tool in a newer design: WPF hosted in PowerShell 5.1. `lib\` (adb off the window's thread, the window's helpers), `ui\` (theme and shell), `pages\` (one `.ps1` + `.xaml` per page), `fonts\` (DM Sans, Space Grotesk, OFL), `tests\` (runner, audit, a test per page, a tour of every page), `CONTRACT.md` (how a page is built). |
-| `shared\` | 10 files | 2026-10-04 | Loaded by both windows. `Tray.ps1`: the icon by the clock (a click hides or shows the window, minimizing hides it there, Exit in its menu). `Backup.ps1`: a copy of the phone on this PC (files, APK files, contacts, messages, call log, settings) and putting one back. `Erase.ps1`: formatting - the phone's storage volumes, a memory card formatted by the phone itself, a folder emptied name by name behind a guard, and a factory reset asked for from here or opened on the phone. `Automation.ps1`: starting with Windows (one `AndroidDC` value under the user's Run key, the launcher with `-Minimized`), the actions a rule can run, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone just plugged in from one already there, and the mutex that lets only one window run the rules. |
+| `nova\` | 77 files | 2026-10-07 | AndroidDC Nova, the same tool in a newer design: WPF hosted in PowerShell 5.1. `lib\` (adb off the window's thread, the window's helpers), `ui\` (theme and shell), `pages\` (one `.ps1` + `.xaml` per page), `fonts\` (DM Sans, Space Grotesk, OFL), `tests\` (runner, audit, a test per page, a tour of every page), `CONTRACT.md` (how a page is built). |
+| `shared\` | 10 files | 2026-10-07 | Loaded by both windows. `Tray.ps1`: the icon by the clock (a click hides or shows the window, minimizing hides it there, Exit in its menu). `Backup.ps1`: a copy of the phone on this PC (files, APK files, contacts, messages, call log, settings) and putting one back. `Erase.ps1`: formatting - the phone's storage volumes, a memory card formatted by the phone itself, a folder emptied name by name behind a guard, and a factory reset asked for from here or opened on the phone. `Automation.ps1`: starting with Windows (one `AndroidDC` value under the user's Run key, the launcher with `-Minimized`), the actions a rule can run, the rules file `%APPDATA%\AndroidDC\automation.json`, telling a phone just plugged in from one already there, and the mutex that lets only one window run the rules. |
 | `README.md` | 11 KB | 2026-10-03 | What the project is, how to start it, and the limits Android imposes. Written for GitHub. |
-| `CHANGELOG.md` | 45 KB | 2026-10-04 | What each release changed, starting with 1.0.0 and what the pre-release review fixed. The version is also `$appVersion` at the top of `androiddc.ps1`, and the log shows it at startup. |
-| `docs\` | 9 pages | 2026-10-04 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
+| `CHANGELOG.md` | 47 KB | 2026-10-07 | What each release changed, starting with 1.0.0 and what the pre-release review fixed. The version is also `$appVersion` at the top of `androiddc.ps1`, and the log shows it at startup. |
+| `docs\` | 9 pages | 2026-10-07 | The full documentation: getting-started, user-guide, shortcuts, command-line, what-it-runs, limits, troubleshooting, architecture, roadmap. |
 | `assets\` | 10 files | 2026-09-10 | The logo: `androiddc.svg` (source), `wordmark.png` (README banner), `androiddc.ico` (window icon) and PNGs from 16 to 512 px. |
 | `LICENSE` | 12 KB | 2026-09-10 | Apache License 2.0 for AndroidDC itself. |
 | `gnirehtet-share.ps1` | 13 KB, 418 lines | 2026-09-11 | The command-line reverse-tethering script. Parameters: `-Serial -Dns -Port -Routes -All -Reinstall -StopOnly -ListDevices -DisableWifi -PauseOnError`. |
@@ -81,13 +81,13 @@ and the rules per phone, shared by both windows, in `automation.json` next to it
 957e46b8615f7af5  adb.exe
 120bef587119c6cb  AdbWinApi.dll
 6ca69a2ca0e31309  AdbWinUsbApi.dll
-5af5b9a97c32322a  androiddc.ps1
+793aef7a8bbe652c  androiddc.ps1
 574f70700b74dec2  androiddc.vbs
 95c311cc87896c05  androiddc-nova.vbs
 7179de2b132e78eb  avcodec-62.dll
 7232316acce00371  avformat-62.dll
 3d6170dd68549c6f  avutil-60.dll
-2c401cb921ddcf65  CHANGELOG.md
+a94a4b4225a74d74  CHANGELOG.md
 e394873cd3e2cc3a  disconnected.png
 b5e5354ae222bd71  get-upstream.bat
 63f3fa6196d817aa  get-upstream.ps1
@@ -109,4 +109,4 @@ deacb991ed250971  scrcpy-server
 4cc809d2cd822e18  swresample-6.dll
 ```
 
-Index written 2026-10-04.
+Index written 2026-10-07.

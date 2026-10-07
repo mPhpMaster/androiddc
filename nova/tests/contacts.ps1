@@ -233,54 +233,122 @@ try {
 
     Say ''
     Say '== the same contact twice =='
+    # Every row says which account it is in: the first version did not look,
+    # treated a WhatsApp entry as a copy of the real contact, and deleted the
+    # real one - 257 and 325 contacts off two phones. These rows are that case
+    # and the others the rules exist for.
+    $g = 'com.google'
+    $me = 'someone@example.com'
     $twice = @(
-        [PSCustomObject]@{ Name = 'Ali'; Number = '+92 323 8886800'; RawId = '10'; DataId = '100' },
-        # a copy of 10, spaces and case aside: it goes
-        [PSCustomObject]@{ Name = 'ali '; Number = '+923238886800'; RawId = '11'; DataId = '110' },
-        # the same number again, with one of its own: it stays, and since it
-        # holds everything 10 and 11 hold, both of them go
-        [PSCustomObject]@{ Name = 'Ali'; Number = '+923238886800'; RawId = '12'; DataId = '120' },
-        [PSCustomObject]@{ Name = 'Ali'; Number = '0500000001'; RawId = '12'; DataId = '121' },
+        [PSCustomObject]@{ Name = 'Ali'; Number = '+92 323 8886800'; RawId = '10'; DataId = '100'; AccountType = $g; AccountName = $me },
+        # a copy of 10 in the same account, spaces and case aside: it goes
+        [PSCustomObject]@{ Name = 'ali '; Number = '+923238886800'; RawId = '11'; DataId = '110'; AccountType = $g; AccountName = $me },
+        # WhatsApp's own entry for the same person: never a copy, never deleted
+        [PSCustomObject]@{ Name = 'Ali'; Number = '+923238886800'; RawId = '5'; DataId = '50'; AccountType = 'com.whatsapp'; AccountName = 'WhatsApp' },
+        # the only real contact for Sara, next to WhatsApp's older entry: stays
+        [PSCustomObject]@{ Name = 'Sara'; Number = '0501111111'; RawId = '30'; DataId = '300'; AccountType = $g; AccountName = $me },
+        [PSCustomObject]@{ Name = 'Sara'; Number = '0501111111'; RawId = '6'; DataId = '60'; AccountType = 'com.whatsapp'; AccountName = 'WhatsApp' },
+        # the same name and number in the phone's own contacts: another account, so not a copy
+        [PSCustomObject]@{ Name = 'Sara'; Number = '0501111111'; RawId = '31'; DataId = '310'; AccountType = ''; AccountName = '' },
+        # a copy that holds an email as well (named in -Rich): kept
+        [PSCustomObject]@{ Name = 'Ali'; Number = '+923238886800'; RawId = '12'; DataId = '120'; AccountType = $g; AccountName = $me },
         # one contact holding a number twice: its second row goes
-        [PSCustomObject]@{ Name = 'Mona'; Number = '0533'; RawId = '20'; DataId = '200' },
-        [PSCustomObject]@{ Name = 'Mona'; Number = '053-3'; RawId = '20'; DataId = '201' },
+        [PSCustomObject]@{ Name = 'Mona'; Number = '0533'; RawId = '20'; DataId = '200'; AccountType = $g; AccountName = $me },
+        [PSCustomObject]@{ Name = 'Mona'; Number = '053-3'; RawId = '20'; DataId = '201'; AccountType = $g; AccountName = $me },
         # which country a local number is would be a guess: it stays
-        [PSCustomObject]@{ Name = 'Mona'; Number = '+966533'; RawId = '21'; DataId = '210' })
-    $plan = Get-ContactDuplicates -Rows $twice
-    Say ("  contacts that go: {0}; numbers that go: {1}; contacts that stay: {2}" -f (@($plan.Gone) -join ','),
+        [PSCustomObject]@{ Name = 'Mona'; Number = '+966533'; RawId = '21'; DataId = '210'; AccountType = $g; AccountName = $me })
+    $plan = Get-ContactDuplicates -Rows $twice -Rich @('12')
+    Say ("  contacts that go: {0}; numbers that go: {1}; address-book contacts that stay: {2}" -f (@($plan.Gone) -join ','),
         (@($plan.Extra) -join ','), $plan.Kept)
-    Say ("  a contact goes only when another that stays holds all it has; one with a number of its own is kept   {0}" -f (Mark (
-        (@($plan.Gone | Sort-Object) -join ',') -eq '10,11' -and $plan.Kept -eq 3)))
+    # 12 stays for its email and holds the same number in the same account, so
+    # 10 has nothing of its own either
+    Say ("  the copies in the same account go, and only they   {0}" -f (Mark ((@($plan.Gone | Sort-Object) -join ',') -eq '10,11')))
+    Say ("  a WhatsApp entry is neither deleted nor counted as the copy that stays   {0}" -f (Mark (
+        @($plan.Gone | Where-Object { $_ -in @('5', '6', '30') }).Count -eq 0)))
+    Say ("  the same contact in another account is not a copy   {0}" -f (Mark (
+        @($plan.Gone | Where-Object { $_ -in @('30', '31') }).Count -eq 0)))
+    Say ("  a contact holding more than a name and numbers is kept   {0}" -f (Mark (@($plan.Gone) -notcontains '12')))
     Say ("  a number twice inside one contact loses its second row, not the contact   {0}" -f (Mark (
         (@($plan.Extra) -join ',') -eq '201')))
-    Say ("  nothing goes when nothing is there twice   {0}" -f (Mark (
-        @((Get-ContactDuplicates -Rows @($twice[0], $twice[4], $twice[6])).Gone).Count -eq 0)))
-    Say ("  the question counts both kinds   {0}" -f (Mark (
-        (Get-ContactDuplicateQuestion -Plan $plan) -match '2 contact\(s\) are a second copy' -and
-        (Get-ContactDuplicateQuestion -Plan $plan) -match '1 number\(s\) are saved twice')))
+    $onlyApps = Get-ContactDuplicates -Rows @($twice[2], $twice[4], $twice[3])
+    Say ("  a phone with no contacts at all: nothing to do, and no error   {0}" -f (Mark (
+        @((Get-ContactDuplicates -Rows @()).Gone).Count -eq 0 -and @((Get-ContactDuplicates -Rows $null).Gone).Count -eq 0)))
+    Say ("  with only app entries beside it, the real contact is never the one to go   {0}" -f (Mark (
+        @($onlyApps.Gone).Count -eq 0 -and @($onlyApps.Extra).Count -eq 0)))
+    Say ("  an account type nobody listed is left alone: {0}   {1}" -f ((@('com.google', '', 'com.whatsapp', 'org.telegram.messenger',
+        'USIM Account', 'something.new') | ForEach-Object { "$_=$(Test-ContactBookAccount -Type $_)" }) -join ' '), (Mark (
+        (Test-ContactBookAccount -Type 'com.google') -and (Test-ContactBookAccount -Type '') -and
+        -not (Test-ContactBookAccount -Type 'com.whatsapp') -and -not (Test-ContactBookAccount -Type 'org.telegram.messenger') -and
+        -not (Test-ContactBookAccount -Type 'USIM Account') -and -not (Test-ContactBookAccount -Type 'something.new'))))
+    Say ("  the question counts both kinds and says apps are not touched   {0}" -f (Mark (
+        (Get-ContactDuplicateQuestion -Plan $plan) -match '2 contact\(s\) are a second copy of another one in the same account' -and
+        (Get-ContactDuplicateQuestion -Plan $plan) -match '1 number\(s\) are saved twice' -and
+        (Get-ContactDuplicateQuestion -Plan $plan) -match 'WhatsApp, Telegram and SIM entries are not touched')))
 
     $answer = (@(for ($i = 0; $i -lt $twice.Count; $i++) {
         $row = $twice[$i]
-        "Row: $i _id=$($row.DataId), display_name=$($row.Name), data1=$($row.Number), raw_contact_id=$($row.RawId)"
+        "Row: $i _id=$($row.DataId), raw_contact_id=$($row.RawId), account_type=$($row.AccountType), account_name=$($row.AccountName), data1=$($row.Number), display_name=$($row.Name)"
     }) -join "`n")
+    # what the data table says beyond names and numbers: 12 has an email, and
+    # every contact has the empty note Google keeps on all of them
+    $kinds = (@(
+        'Row: 0 raw_contact_id=12, mimetype=vnd.android.cursor.item/email_v2, data1=ali@example.com',
+        'Row: 1 raw_contact_id=11, mimetype=vnd.android.cursor.item/note, data1=NULL',
+        'Row: 2 raw_contact_id=10, mimetype=vnd.android.cursor.item/nickname, data1=') -join "`n")
     $script:mockReply = {
         param([string]$Line)
         if ($Line -match '^content query --uri content://com.android.contacts/data/phones') { return $answer }
+        if ($Line -match '^content query --uri content://com.android.contacts/data --projection raw_contact_id:mimetype') { return $kinds }
+        if ($Line -match 'getprop ro.product.model') { return 'Test Phone' }
         return ''
     }
-    $script:mockConfirm = $false
-    Reset-TestRecord
-    Remove-ContactDuplicates
-    Say ("  Remove duplicates asks; No deletes nothing   {0}" -f (Mark ($script:mockAsked.Count -eq 1 -and $script:mockText.Count -eq 0)))
-    $script:mockConfirm = $true
-    Reset-TestRecord
-    Remove-ContactDuplicates
-    $sentAll = ($script:mockText -join ' | ')
-    Say ("  Yes: '{0}'" -f $sentAll)
-    Say ("  the copy goes as a contact and the spare number as a data row, a call each   {0}" -f (Mark (
-        $script:mockText.Count -eq 2 -and
-        $sentAll -match 'content delete --uri content://com\.android\.contacts/raw_contacts --where .?_id IN \(11,10\)' -and
-        $sentAll -match 'content delete --uri content://com\.android\.contacts/data --where .?_id IN \(201\)')))
+    $read = Get-PhoneContactPlan -Serial $script:mockSerial
+    Say ("  read off the phone: an email keeps 12, an empty note does not keep 11   {0}" -f (Mark (
+        (@($read.Gone | Sort-Object) -join ',') -eq '10,11' -and (@($read.Extra) -join ',') -eq '201')))
+
+    # where the copy of what goes is written: a folder of the test's own
+    $saveRoot = Join-Path $env:TEMP ('androiddc-removed-' + [Guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $saveRoot -Force
+    $null = Set-BackupFolderPath -Folder $saveRoot
+    try {
+        $script:mockConfirm = $false
+        Reset-TestRecord
+        Remove-ContactDuplicates
+        Say ("  Remove duplicates asks; No deletes nothing and saves nothing   {0}" -f (Mark (
+            $script:mockAsked.Count -eq 1 -and $script:mockText.Count -eq 0 -and
+            @(Get-ChildItem -LiteralPath $saveRoot).Count -eq 0)))
+        $script:mockConfirm = $true
+        Reset-TestRecord
+        Remove-ContactDuplicates
+        $sentAll = ($script:mockText -join ' | ')
+        Say ("  Yes: '{0}'" -f $sentAll)
+        Say ("  the copy goes as a contact and the spare number as a data row, a call each   {0}" -f (Mark (
+            $script:mockText.Count -eq 2 -and
+            $sentAll -match 'content delete --uri content://com\.android\.contacts/raw_contacts --where .?_id IN \(11,10\)' -and
+            $sentAll -match 'content delete --uri content://com\.android\.contacts/data --where .?_id IN \(201\)')))
+        $savedFolder = @(Get-ChildItem -LiteralPath $saveRoot -Directory | Select-Object -First 1)
+        $savedRows = @()
+        if ($savedFolder.Count -gt 0) {
+            $read = (Get-Content -LiteralPath (Join-Path $savedFolder[0].FullName 'personal\contacts.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
+            $savedRows = @($read)
+        }
+        Say ("  what went was saved first, as a backup: {0}   {1}" -f $(if ($savedFolder.Count) { $savedFolder[0].Name } else { 'nothing' }), (Mark (
+            $savedFolder.Count -eq 1 -and $savedFolder[0].Name -like "AndroidDC-backup-removed-duplicates-Test-Phone-$script:mockSerial-*" -and
+            $savedRows.Count -eq 3 -and @($savedRows | Where-Object { $_.AccountType -eq 'com.google' -and $_.AccountName -eq $me }).Count -eq 3)))
+        $listed = @(Get-BackupsInFolder -Folder $saveRoot)
+        Say ("  and the backups list shows it, to open and put back   {0}" -f (Mark ($listed.Count -eq 1)))
+
+        # a copy that cannot be written deletes nothing
+        Reset-TestRecord
+        & {
+            function Save-BackupText { param($Path, $Text) throw 'the disk is full' }
+            Remove-ContactDuplicates
+        }
+        Say ("  when the copy cannot be written, nothing is deleted   {0}" -f (Mark ($script:mockText.Count -eq 0)))
+    } finally {
+        Remove-Item -LiteralPath $saveRoot -Recurse -Force -ErrorAction SilentlyContinue
+        $null = Set-BackupFolderPath -Folder ''
+    }
 
     Say ("  no command reached a real phone   {0}" -f (Mark ($script:mockLeaks.Count -eq 0)))
 } finally {

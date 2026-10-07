@@ -153,6 +153,34 @@ function Get-ContactDeleteQuestion {
 }
 
 # ------------------------------------------------------- the same one twice ----
+# What went wrong the first time, so it is not done again. On a phone a
+# contact is several raw contacts: the address book's own (a Google account,
+# or the phone's), and one more for every app that keeps a copy - WhatsApp,
+# Telegram, Meet - each with the same name and number. The first version of
+# this treated those as copies of each other, kept whichever was oldest, and
+# deleted the rest: often the real Google contact went and a WhatsApp entry
+# stayed. Google then deleted it on every phone on that account, and WhatsApp
+# dropped its own entry soon after, because the number had left the address
+# book. Measured on two phones: 257 and 325 contacts gone.
+#
+# So now: only the address book is looked at (Test-ContactBookAccount);
+# a copy counts only inside one account; a contact holding anything besides a
+# name and numbers is never touched; and what is removed is first written as
+# a backup the Backup page can open and put back.
+
+function Test-ContactBookAccount {
+    <#
+        Whether a raw contact is the address book's own: a Google account or
+        the phone's contacts. App accounts (WhatsApp, Telegram, Meet, Viber...)
+        and the SIM are not, and are neither removed nor counted as a copy.
+        Unknown types are left alone too - a type not listed is never deleted.
+    #>
+    param([string]$Type)
+
+    if (-not "$Type".Trim() -or "$Type" -eq 'null') { return $true }
+    return @('com.google', 'com.android.contacts.default', 'vnd.sec.contact.phone', 'com.android.localphone',
+        'Local Phone Account', 'com.xiaomi', 'com.oppo.contacts.device', 'com.coloros.contacts.device') -contains "$Type"
+}
 
 function Get-ContactKey {
     <#
@@ -174,32 +202,41 @@ function Get-ContactKey {
 
 function Get-ContactDuplicates {
     <#
-        Which contacts are a second copy of another, out of rows that carry
-        Name, Number and RawId (one row per number, as data/phones answers).
+        Which address-book contacts are a second copy of another, out of rows
+        that carry Name, Number, RawId, DataId, AccountType and AccountName
+        (one row per number, as data/phones answers).
 
-        A contact goes only when every number it holds, under the same name,
-        is also held by a contact that stays - so one with a number of its own
-        is never touched, whatever else it repeats. The oldest copy (the lowest
-        raw id) is the one kept.
+        A raw contact goes only when it is in the address book, holds nothing
+        but a name and numbers (-Rich names the ones that hold more), and
+        every number it holds is held, under the same name, by another raw
+        contact of the same account that stays. The oldest copy (the lowest
+        raw id) is the one kept. Rows of any other account are ignored: they
+        are not removed and they do not count as the copy that stays.
 
-        A contact can also hold the same number twice - measured on a phone
-        with 943 numbers: once the copies were gone, 214 numbers were still
-        there twice, every one inside a single contact. Deleting the contact
-        cannot fix that, so the second row of the number goes instead, by its
-        data id (rows without a DataId are left alone).
+        A raw contact can also hold the same number twice; the second row of
+        that number goes, by its data id.
 
         Returns Gone (raw ids) and Rows (their rows), Extra (data ids) and
-        ExtraRows, and Kept (how many contacts are left).
+        ExtraRows, and Kept (address-book contacts left).
     #>
-    param($Rows)
+    param($Rows, [string[]]$Rich = @())
 
+    # not $rich: PowerShell names are not case-sensitive, and that would be
+    # the -Rich parameter itself - measured, as a hashtable cast to an int
+    $protected = @{}
+    foreach ($id in @($Rich)) { $protected["$id"] = $true }
     $keysOf = @{}
     $holders = @{}
     $rowsOf = @{}
     foreach ($row in @($Rows)) {
+        # a phone with no contacts hands back nothing, and @(nothing) is one $null
+        if ($null -eq $row) { continue }
         $raw = "$($row.RawId)" -replace '\D', ''
         if (-not $raw -or -not "$($row.Number)".Trim()) { continue }
-        $key = Get-ContactKey -Name $row.Name -Number $row.Number
+        $type = $(if ($row.PSObject.Properties['AccountType']) { "$($row.AccountType)" } else { '' })
+        $account = $(if ($row.PSObject.Properties['AccountName']) { "$($row.AccountName)" } else { '' })
+        if (-not (Test-ContactBookAccount -Type $type)) { continue }
+        $key = "$type|$account|" + (Get-ContactKey -Name $row.Name -Number $row.Number)
         if (-not $keysOf.ContainsKey($raw)) {
             $keysOf[$raw] = New-Object 'System.Collections.Generic.HashSet[string]'
             $rowsOf[$raw] = New-Object System.Collections.Generic.List[object]
@@ -214,6 +251,7 @@ function Get-ContactDuplicates {
     $goneRows = New-Object System.Collections.Generic.List[object]
     # newest first, so each one weighed has the older copies still standing
     foreach ($raw in @($keysOf.Keys | Sort-Object { [long]$_ } -Descending)) {
+        if ($protected.ContainsKey($raw)) { continue }
         $spare = $true
         foreach ($key in $keysOf[$raw]) { if ($holders[$key] -lt 2) { $spare = $false; break } }
         if (-not $spare) { continue }
@@ -221,6 +259,7 @@ function Get-ContactDuplicates {
         $null = $gone.Add($raw)
         foreach ($row in $rowsOf[$raw]) { $null = $goneRows.Add($row) }
     }
+
     $extra = New-Object System.Collections.Generic.List[string]
     $extraRows = New-Object System.Collections.Generic.List[object]
     $leaving = @{}
@@ -241,11 +280,12 @@ function Get-ContactDuplicates {
 }
 
 function Get-PhoneContactRows {
-    # every number in the phone's contacts, read fresh rather than off a list a filter may have cut
+    # every number in the phone's contacts with the account it is in, read
+    # fresh rather than off a list a filter may have cut
     param([string]$Serial)
 
     $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
-        'content query --uri content://com.android.contacts/data/phones --projection _id:display_name:data1:raw_contact_id')).Text
+        'content query --uri content://com.android.contacts/data/phones --projection _id:raw_contact_id:account_type:account_name:data1:display_name')).Text
     $rows = New-Object System.Collections.Generic.List[object]
     foreach ($row in (Split-BackupRows -Text $text)) {
         $number = Get-BackupRowValue -Row $row -Column 'data1'
@@ -254,14 +294,51 @@ function Get-PhoneContactRows {
             Name = (Get-BackupRowValue -Row $row -Column 'display_name')
             Number = $number
             RawId = (Get-BackupRowValue -Row $row -Column 'raw_contact_id')
-            DataId = (Get-BackupRowValue -Row $row -Column '_id') })
+            DataId = (Get-BackupRowValue -Row $row -Column '_id')
+            AccountType = (Get-BackupRowValue -Row $row -Column 'account_type')
+            AccountName = (Get-BackupRowValue -Row $row -Column 'account_name') })
     }
     return $rows.ToArray()
 }
 
+function Get-PhoneContactRichIds {
+    <#
+        The raw contacts that hold anything besides a name, numbers and the
+        group they are in - an email, a photo, a note with text in it, a
+        birthday, an address.
+        Removing one of those would lose that, so they are never removed.
+    #>
+    param([string]$Serial)
+
+    # data1 last: a note may hold commas, and the last column takes the rest of the row
+    $text = (Invoke-DeviceShell -Serial $Serial -CommandArguments @(
+        'content query --uri content://com.android.contacts/data --projection raw_contact_id:mimetype:data1')).Text
+    $plain = @('vnd.android.cursor.item/name', 'vnd.android.cursor.item/phone_v2', 'vnd.android.cursor.item/group_membership')
+    $rich = @{}
+    foreach ($row in (Split-BackupRows -Text $text)) {
+        $type = Get-BackupRowValue -Row $row -Column 'mimetype'
+        if ($plain -contains $type) { continue }
+        # Google keeps an empty note and an empty nickname on every contact -
+        # measured, 459 of each on 459 contacts - so an empty row holds
+        # nothing to lose. A photo keeps its picture elsewhere than data1.
+        $value = "$(Get-BackupRowValue -Row $row -Column 'data1')".Trim()
+        if ($type -ne 'vnd.android.cursor.item/photo' -and (-not $value -or $value -eq 'NULL')) { continue }
+        $id = Get-BackupRowValue -Row $row -Column 'raw_contact_id'
+        if ($id) { $rich[$id] = $true }
+    }
+    return @($rich.Keys)
+}
+
+function Get-PhoneContactPlan {
+    # the plan for one phone, read off the phone itself
+    param([string]$Serial)
+
+    return Get-ContactDuplicates -Rows (Get-PhoneContactRows -Serial $Serial) -Rich (Get-PhoneContactRichIds -Serial $Serial)
+}
+
 function Get-ContactDuplicateQuestion {
     # what is about to go, in words: a few by name, the rest counted
-    param($Plan, [int]$Show = 10)
+    param($Plan, [int]$Show = 10, [string]$SavedTo = '')
 
     $nl = [Environment]::NewLine
     $rows = @(@($Plan.Rows) + @($Plan.ExtraRows))
@@ -273,19 +350,65 @@ function Get-ContactDuplicateQuestion {
     if ($rows.Count -gt $Show) { $lines += "... and $($rows.Count - $Show) more" }
     $what = @()
     if (@($Plan.Gone).Count -gt 0) {
-        $what += "$(@($Plan.Gone).Count) contact(s) are a second copy of another one - the same name and the same number."
+        $what += "$(@($Plan.Gone).Count) contact(s) are a second copy of another one in the same account - the same name and the same number."
     }
     if (@($Plan.Extra).Count -gt 0) {
         $what += "$(@($Plan.Extra).Count) number(s) are saved twice inside the same contact."
     }
-    return (($what -join $nl) + $nl + 'One of each stays; the copies go. A contact with any number of its own is kept, ' +
-        'even when it repeats others.' + $nl + $nl + ($lines -join $nl))
+    $text = (($what -join $nl) + $nl + 'One of each stays; the copies go. WhatsApp, Telegram and SIM entries are ' +
+        'not touched, and a contact with an email, a photo or a note is kept.' + $nl + $nl + ($lines -join $nl))
+    if ($SavedTo) { $text += $nl + $nl + "What goes is saved first, as a backup you can put back: $SavedTo" }
+    return $text
+}
+
+function Save-ContactRemovalBackup {
+    <#
+        What a removal is about to delete, written first as a backup of its
+        own - a folder beside your other backups, holding personal\contacts.json
+        with each contact's account - so the Backup page lists it, opens it,
+        and Restore contacts puts it back into the account it came from.
+        Returns the folder, or '' when it could not be written, in which case
+        nothing is deleted.
+    #>
+    param([string]$Serial, $Plan, [string]$Model = '')
+
+    $rows = @(@($Plan.Rows) + @($Plan.ExtraRows))
+    if ($rows.Count -eq 0) { return '' }
+    if (-not $Model) {
+        $Model = "$((Invoke-DeviceShell -Serial $Serial -CommandArguments @('getprop ro.product.model')).Text)".Trim()
+    }
+    $root = ''
+    if (Get-Command Get-BackupFolderPath -ErrorAction SilentlyContinue) { $root = Get-BackupFolderPath }
+    if (-not $root -or -not (Test-Path -LiteralPath $root -PathType Container)) {
+        $root = Join-Path $env:APPDATA 'AndroidDC\removed contacts'
+    }
+    $name = ConvertTo-BackupName -Model $Model -Serial $Serial -Name 'removed duplicates'
+    $folder = Join-Path $root $name
+    try {
+        $contacts = @($rows | ForEach-Object {
+            [PSCustomObject]@{ Name = "$($_.Name)"; Number = "$($_.Number)"
+                AccountType = "$($_.AccountType)"; AccountName = "$($_.AccountName)" } })
+        Save-BackupText -Path (Join-Path $folder 'personal\contacts.json') -Text (ConvertTo-Json -InputObject $contacts -Depth 3)
+        Save-BackupText -Path (Join-Path $folder 'manifest.json') -Text (ConvertTo-Json -Depth 6 -InputObject ([ordered]@{
+            Format = 2; Serial = $Serial; Model = $Model; Android = ''; Created = ([datetime]::Now).ToString('s')
+            Name = 'removed duplicates'; Parts = @('personal')
+            Personal = [PSCustomObject]@{ Contacts = $contacts.Count; Messages = 0; Calls = 0 }
+            Apps = @(); Settings = @(); Bytes = 0; Complete = $true; Stopped = '' }))
+    } catch {
+        Write-Log ("Remove duplicates: the copy of what goes could not be written, so nothing was deleted - " +
+            $_.Exception.Message) $colorBad
+        return ''
+    }
+    return $folder
 }
 
 function Remove-PhoneContactDuplicates {
-    # the plan carried out: the spare contacts, then the spare numbers
-    param([string]$Serial, $Plan)
+    # the plan carried out, once it is saved: the spare contacts, then the spare numbers
+    param([string]$Serial, $Plan, [string]$SavedTo)
 
+    if (-not $SavedTo -or -not (Test-Path -LiteralPath (Join-Path $SavedTo 'personal\contacts.json'))) {
+        return [PSCustomObject]@{ Contacts = 0; Numbers = 0; Failed = 1; Stopped = $false }
+    }
     $contacts = Remove-PhoneContacts -Serial $Serial -RawIds @($Plan.Gone)
     $numbers = [PSCustomObject]@{ Deleted = 0; Calls = 0; Failed = 0; Stopped = $false }
     if (-not $contacts.Stopped -and @($Plan.Extra).Count -gt 0) {

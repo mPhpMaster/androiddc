@@ -19,7 +19,9 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -133,14 +135,55 @@ public final class RestoreWriter {
         System.out.println("DONE " + added + " " + skipped);
     }
 
+    /**
+     * Whether a raw contact belongs to the address book itself - a Google
+     * account or the phone's own contacts - rather than to an app that keeps
+     * its own copy of every contact (WhatsApp, Telegram, Meet...) or to a SIM.
+     * Only these count as "the phone already has it": a WhatsApp entry with
+     * the same name and number is not the contact, and once the real one is
+     * gone WhatsApp drops its entry too.
+     */
+    static boolean isBookAccount(String type) {
+        if (type == null || type.isEmpty()) return true;
+        switch (type) {
+            case "com.google":
+            case "com.android.contacts.default":
+            case "vnd.sec.contact.phone":
+            case "com.android.localphone":
+            case "Local Phone Account":
+            case "com.xiaomi":
+            case "com.oppo.contacts.device":
+            case "com.coloros.contacts.device":
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private void contacts(JSONArray rows) throws Exception {
         Uri raw = Uri.parse("content://com.android.contacts/raw_contacts");
         Uri data = Uri.parse("content://com.android.contacts/data");
         Set<String> have = new HashSet<>();
-        Cursor cursor = query(Uri.parse("content://com.android.contacts/data/phones"), new String[] { "display_name", "data1" });
+        Cursor cursor = query(Uri.parse("content://com.android.contacts/data/phones"),
+                new String[] { "display_name", "data1", "account_type" });
         if (cursor != null) {
-            try { while (cursor.moveToNext()) have.add(contactKey(cursor.getString(0), cursor.getString(1))); }
-            finally { cursor.close(); }
+            try {
+                while (cursor.moveToNext()) {
+                    if (isBookAccount(cursor.getString(2))) have.add(contactKey(cursor.getString(0), cursor.getString(1)));
+                }
+            } finally { cursor.close(); }
+        }
+        // each account's default group, so a contact put back into a Google
+        // account lands in "My Contacts" as one made on the phone would
+        Map<String, Long> groups = new HashMap<>();
+        Cursor group = query(Uri.parse("content://com.android.contacts/groups"),
+                new String[] { "_id", "account_type", "account_name", "auto_add", "deleted" });
+        if (group != null) {
+            try {
+                while (group.moveToNext()) {
+                    if (group.getInt(3) == 1 && group.getInt(4) == 0) groups.put(group.getString(1) + "|" + group.getString(2), group.getLong(0));
+                }
+            } finally { group.close(); }
         }
         ArrayList<ContentProviderOperation> ops = new ArrayList<>();
         int added = 0, skipped = 0, waiting = 0;
@@ -149,9 +192,19 @@ public final class RestoreWriter {
             String name = row.optString("Name", "");
             String number = row.optString("Number", "");
             if (number.trim().isEmpty() || !have.add(contactKey(name, number))) { skipped++; continue; }
+            // the account it came from, when the file says: back into that Google
+            // account it syncs up again; with none it is the phone's own contact
+            String accountType = row.optString("AccountType", "");
+            String accountName = row.optString("AccountName", "");
+            if (accountType.isEmpty() || accountName.isEmpty() || !isBookAccount(accountType)) { accountType = null; accountName = null; }
             int back = ops.size();
             ops.add(ContentProviderOperation.newInsert(raw)
-                    .withValue("account_type", null).withValue("account_name", null).build());
+                    .withValue("account_type", accountType).withValue("account_name", accountName).build());
+            Long home = accountType == null ? null : groups.get(accountType + "|" + accountName);
+            if (home != null) {
+                ops.add(ContentProviderOperation.newInsert(data).withValueBackReference("raw_contact_id", back)
+                        .withValue("mimetype", "vnd.android.cursor.item/group_membership").withValue("data1", home).build());
+            }
             if (!name.trim().isEmpty()) {
                 ops.add(ContentProviderOperation.newInsert(data).withValueBackReference("raw_contact_id", back)
                         .withValue("mimetype", "vnd.android.cursor.item/name").withValue("data1", name).build());

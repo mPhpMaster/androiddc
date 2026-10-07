@@ -2,7 +2,40 @@
 
 [← back to the README](README.md)
 
-## 1.7.0
+## Unreleased
+
+### Remove duplicates deleted real contacts - fixed, and it keeps a copy now
+
+**If you used *Remove duplicates* in 1.7.0, contacts may be missing.** It
+treated WhatsApp's, Telegram's and Meet's own entries for a person as copies of
+that person's real contact, kept whichever was oldest, and deleted the rest -
+often the real Google contact, with the WhatsApp entry left behind. Google then
+deleted it on every phone on that account, and WhatsApp dropped its own entry
+too once the number had left the address book. Measured on two phones: 277 and
+330 contacts gone. The dry run before it said nothing would be lost, because it
+counted the WhatsApp entries as the copies that stayed.
+
+To get them back: Google Contacts keeps what was deleted for 30 days
+(*contacts.google.com > Settings > Undo changes*), and any backup the Backup
+page has can put its contacts back.
+
+What *Remove duplicates* does now:
+
+* It looks only at the address book itself - Google accounts and the phone's
+  own contacts. WhatsApp, Telegram, Meet, SIM and any account it does not know
+  are never deleted and never count as the copy that stays.
+* A copy counts only inside one account: the same person in Google and in the
+  phone's own contacts is not a duplicate.
+* A contact holding anything besides a name and numbers - an email, a photo, a
+  note with text in it, a birthday - is never deleted. (Google keeps an empty
+  note and nickname on every contact; empty ones do not count.)
+* What it deletes is first saved as a backup beside your others, named
+  *removed duplicates*. The Backup page opens it and *Restore contacts* puts it
+  back, into the Google account each contact came from. If that copy cannot be
+  written, nothing is deleted.
+* Putting contacts back now skips one only when the address book has it - not
+  when only a WhatsApp entry has the same name and number.
+
 
 **Everything a backup takes now goes back.** Messages and the call log join
 the contacts, the files and the apps, in minutes rather than hours; Nova's
