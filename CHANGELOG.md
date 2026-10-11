@@ -2,7 +2,10 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.7.2
+
+**A way to support the project, for anyone who would like to.** Nothing else
+changes in either window.
 
 * **A way to support the project, if you want to.** *Support the project*
   under the version in Nova's side panel, *Support AndroidDC ...* in the menu
