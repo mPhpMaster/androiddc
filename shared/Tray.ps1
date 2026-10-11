@@ -38,10 +38,24 @@ $script:trayOnOpenRules = $null
 $script:trayRulesItem = $null
 $script:trayShowItem = $null
 $script:trayHideItem = $null
+$script:traySupportItem = $null
 $script:trayFtpItem = $null
 $script:trayGetFtpState = $null
 $script:trayOnOpenFtp = $null
 $script:trayOnToggleFtp = $null
+
+# where a person who likes the tool can give something back. One place, so
+# the tray menu and the windows cannot end up with two different addresses.
+$script:supportUrl = 'https://paypal.me/mfsafadi'
+
+function Open-SupportPage {
+    # the page opens in the browser; nothing is asked, and nothing is sent
+    try {
+        Start-Process -FilePath $script:supportUrl
+    } catch {
+        Write-Log ('The support page could not be opened: ' + $_.Exception.Message + " - it is $script:supportUrl") $colorWarn
+    }
+}
 
 function Initialize-Tray {
     # Title: the icon's tooltip. GetHandle: returns the window's handle. OnExit:
@@ -78,10 +92,13 @@ function Initialize-Tray {
         $script:trayShowItem = $menu.Items.Add('Show the window')
         $script:trayHideItem = $menu.Items.Add('Hide to the tray')
         $null = $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+        $script:traySupportItem = $menu.Items.Add('Support AndroidDC ...')
+        $script:traySupportItem.ToolTipText = 'If the tool helps you: opens the donation page in the browser'
         $exitItem = $menu.Items.Add('Exit')
         $script:trayShowItem.Font = New-Object System.Drawing.Font($script:trayShowItem.Font, [System.Drawing.FontStyle]::Bold)
         $script:trayShowItem.Add_Click({ Show-TrayWindow })
         $script:trayHideItem.Add_Click({ Hide-TrayWindow })
+        $script:traySupportItem.Add_Click({ Open-SupportPage })
         $exitItem.Add_Click({ if ($script:trayOnExit) { Show-TrayWindow; & $script:trayOnExit } })
         $menu.Add_Opening({ Update-TrayMenu })
         Update-TrayMenu

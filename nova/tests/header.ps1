@@ -40,3 +40,17 @@ Say ("  pressing Mirror does something: '{0}'   {1}" -f ($said -split "`n")[0], 
 Say ("  and what it does is Start-Scrcpy's own answer   {0}" -f (Mark (
     $said -match 'Select at least one ready device|scrcpy\.exe was not found')))
 Say ("  which means the Mirroring page was built by the call   {0}" -f (Mark (Test-Built -Key 'mirroring')))
+
+Say ''
+Say '== the support link in the side panel =='
+# it opens the one donation address there is, from a cold start, and nothing else
+$opened = @(& {
+    function Start-Process { param($FilePath) $script:opened += ,"$FilePath" }
+    $script:opened = @()
+    $ui.SideSupport.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+    Wait-Pumped -Milliseconds 200
+    $script:opened
+})
+Say ("  Support the project opens: {0}   {1}" -f ($opened -join ' | '), (Mark (
+    $opened.Count -eq 1 -and $opened[0] -eq 'https://paypal.me/mfsafadi')))
+Say ("  it is on screen, under the version   {0}" -f (Mark ($ui.SideSupport.IsVisible)))

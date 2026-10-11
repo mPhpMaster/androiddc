@@ -2,6 +2,14 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+* **A way to support the project, if you want to.** *Support the project*
+  under the version in Nova's side panel, *Support AndroidDC ...* in the menu
+  of the icon by the clock (both windows), a Sponsor button on the repository
+  page, and a line in the README. Each opens the donation page in the browser
+  and does nothing else: no reminder, no pop-up, nothing locked.
+
 ## 1.7.1
 
 **Update from 1.7.0 if you have it, and do not press *Remove duplicates* there.**

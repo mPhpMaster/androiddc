@@ -168,6 +168,13 @@ Full documentation lives in [`docs/`](docs/):
 | [Troubleshooting](docs/troubleshooting.md) | Symptoms, causes, fixes |
 | [Architecture](docs/architecture.md) | How the script is put together, for contributors |
 
+## Support
+
+AndroidDC is free and stays free, with nothing locked away. If it saves you time and you would
+like to give something back, you can at [paypal.me/mfsafadi](https://paypal.me/mfsafadi) - the
+same link is under *Support the project* in Nova's side panel and in the menu of the icon by the
+clock. Reporting a bug, or saying what you would like it to do, helps just as much.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).

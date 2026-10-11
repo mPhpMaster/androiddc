@@ -1235,6 +1235,7 @@ function Initialize-ShellEvents {
     $script:loadTimer.Add_Tick({ Update-DeviceLoad })
     $script:loadTimer.Start()
     $ui.SideClassic.Add_Click({ Switch-ToClassic })
+    $ui.SideSupport.Add_Click({ Open-SupportPage })
     $ui.DeviceRefresh.Add_Click({ Update-DeviceList })
 
     <#

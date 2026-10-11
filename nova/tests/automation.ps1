@@ -88,7 +88,16 @@ Say ("  no dialog is open, so the device watch runs   {0}" -f (Mark (-not (Test-
 Say ''
 Say '== the icon by the clock =='
 $handle = (New-Object System.Windows.Interop.WindowInteropHelper($script:window)).Handle
-Say ("  there, with Automation, FTP, Show, Hide and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $null -ne $script:trayFtpItem -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 7)))
+Say ("  there, with Automation, FTP, Show, Hide, Support and Exit   {0}" -f (Mark ($null -ne $script:trayIcon -and $script:trayIcon.Visible -and $null -ne $script:trayFtpItem -and $script:trayIcon.ContextMenuStrip.Items.Count -eq 8)))
+# the support item opens the one address there is, and nothing else
+$supportOpened = & {
+    function Start-Process { param($FilePath) $script:opened += ,"$FilePath" }
+    $script:opened = @()
+    $script:traySupportItem.PerformClick()
+    $script:opened
+}
+Say ("  Support opens the donation page: {0}   {1}" -f (@($supportOpened) -join ' | '), (Mark (
+    @($supportOpened).Count -eq 1 -and @($supportOpened)[0] -eq 'https://paypal.me/mfsafadi' -and $script:supportUrl -eq 'https://paypal.me/mfsafadi')))
 
 Say ''
 Say '== the rules set before, seen without opening their page =='

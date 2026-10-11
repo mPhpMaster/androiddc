@@ -65,6 +65,14 @@
                 <TextBlock Text="Classic window" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="12.5"/>
               </StackPanel>
             </Button>
+            <Button x:Name="SideSupport" Style="{StaticResource Ghost}" Foreground="{StaticResource Ink}"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,0" Margin="-8,-6,-8,8"
+                    ToolTip="If the tool helps you: opens the donation page in the browser. Nothing else happens">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xEB52;" Style="{StaticResource Glyph}" FontSize="12" Foreground="{StaticResource Danger}"/>
+                <TextBlock Text="Support the project" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="12.5"/>
+              </StackPanel>
+            </Button>
             <Grid Margin="0,0,0,8">
               <TextBlock Text="Sharing" FontSize="12" Foreground="{StaticResource MutedText}"/>
               <TextBlock x:Name="SideSharing" Text="Off" FontSize="12" FontWeight="Medium"
