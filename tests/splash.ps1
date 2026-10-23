@@ -46,5 +46,41 @@ Say ("  closing twice, and talking to one that is gone, are both quiet   {0}" -f
 Show-Splash -Root 'G:\no-such-folder'
 Say ("  no icon beside the script is not a reason to go without it   {0}" -f (Mark (Test-SplashShown)))
 Close-Splash
+
+Say ''
+Say '== the window it stood in for outlives it =='
+# ShowDialog with no owner given takes the active window as its owner, and
+# while the splash is up that is the splash. Closing it from the window's own
+# Shown handler - which is where both windows close it - destroyed the window
+# with its owner: the classic window vanished before anyone saw it and the
+# program ended quietly, exit code 0, nothing in the log. Measured either way:
+# ShowDialog came back in about 20 ms instead of staying up.
+#
+# This stages that exactly: a real splash, a window shown with ShowDialog, and
+# Close-Splash from its Shown handler. A timer closes the window after a
+# moment, so a window that stayed up reports that moment and one that was torn
+# down reports almost nothing.
+Show-Splash -Root $scriptRoot
+$stage = New-Object System.Windows.Forms.Form
+$stage.Text = 'does the window outlive the splash'
+$stage.Size = New-Object System.Drawing.Size(420, 240)
+$stage.StartPosition = 'CenterScreen'
+$stageTimer = New-Object System.Windows.Forms.Timer
+$stageTimer.Interval = 1200
+$stageTimer.Add_Tick({ $stageTimer.Stop(); $stage.Close() })
+$stage.Add_Shown({
+    $script:splashWasUp = Test-SplashShown
+    Close-Splash
+    $stageTimer.Start()
+})
+$script:splashWasUp = $false
+$watch = [System.Diagnostics.Stopwatch]::StartNew()
+[void]$stage.ShowDialog()
+$upFor = $watch.ElapsedMilliseconds
+$stageTimer.Dispose()
+$stage.Dispose()
+if (Get-Command Clear-Splash -ErrorAction SilentlyContinue) { Clear-Splash }
+Say ("  the splash was still up when the window was painted   {0}" -f (Mark ($script:splashWasUp)))
+Say ("  and the window stayed up ({0} ms) after the splash went   {1}" -f $upFor, (Mark ($upFor -ge 900)))
 $env:ANDROIDDC_NO_SPLASH = $keep
 Say ("  the runner's switch is back   {0}" -f (Mark ("$($env:ANDROIDDC_NO_SPLASH)" -eq "$keep")))

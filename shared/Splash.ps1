@@ -16,7 +16,9 @@
     WinForms anyway, and starting WPF is part of what is being waited for.
 
     Nothing here is allowed to stop the program: a splash that will not open
-    is a splash that is not shown, and the window carries on without it.
+    is a splash that is not shown, and the window carries on without it. That
+    goes for taking it away as well - see Close-Splash, which hides it rather
+    than closing it, because the window it stood in for is owned by it.
 
     Dot-sourced by both windows, before anything else they load.
 #>
@@ -25,6 +27,8 @@ $script:splashForm = $null
 $script:splashLabel = $null
 $script:splashBar = $null
 $script:splashWhat = $null
+# the hidden splash, waiting to be disposed once the window has closed
+$script:splashHidden = $null
 
 function Show-Splash {
     <#
@@ -38,6 +42,8 @@ function Show-Splash {
     if ($Quiet) { return }
     if ($env:ANDROIDDC_NO_SPLASH) { return }
     if ($script:splashForm) { return }
+    # the one before it, if it was never cleared: nothing owns it now
+    Clear-Splash
 
     try {
         $form = New-Object System.Windows.Forms.Form
@@ -154,16 +160,41 @@ function Update-Splash {
 }
 
 function Close-Splash {
-    # when the window it was standing in for is on screen
+    <#
+        When the window it was standing in for is on screen. It is hidden, not
+        closed, and that is the whole point of this function.
+
+        A window shown with ShowDialog and no owner given takes the active
+        window as its owner, and while the splash is up that is the splash. So
+        the window being waited for ends up owned by the splash, and closing
+        the splash from that window's own Shown handler - which is where both
+        windows close it - destroys the window with its owner. Measured on the
+        classic window: ShowDialog came back after 20 ms, the window was never
+        seen, and the program ended quietly with exit code 0 and nothing in the
+        log. Hiding leaves the handle alive, so the window it owns stays; the
+        hidden form is disposed by Clear-Splash once that window has closed.
+
+        Everything a caller can ask about it - Test-SplashShown,
+        Get-SplashState - answers as if it had gone, because for every purpose
+        but owning that window it has.
+    #>
     if (-not $script:splashForm) { return }
-    try {
-        $script:splashForm.Close()
-        $script:splashForm.Dispose()
-    } catch { }
+    try { $script:splashForm.Hide() } catch { }
+    $script:splashHidden = $script:splashForm
     $script:splashForm = $null
     $script:splashLabel = $null
     $script:splashBar = $null
     $script:splashWhat = $null
+}
+
+function Clear-Splash {
+    # the hidden splash, let go of once the window it owned has closed
+    if (-not $script:splashHidden) { return }
+    try {
+        $script:splashHidden.Close()
+        $script:splashHidden.Dispose()
+    } catch { }
+    $script:splashHidden = $null
 }
 
 function Test-SplashShown {

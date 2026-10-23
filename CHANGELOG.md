@@ -2,6 +2,37 @@
 
 [← back to the README](README.md)
 
+## 1.7.3
+
+**Update if you use the classic window: in 1.5.1 to 1.7.2 it could not open.**
+Nova is unaffected and unchanged.
+
+### The classic window would not open at all
+
+Since **1.5.1** the classic window has started, built itself, and quit without
+ever appearing: no window, no message, no line in the log, exit code 0. Nova
+was unaffected, which is why it went unnoticed for four releases.
+
+The splash was the cause. A window shown with `ShowDialog()` and no owner
+given takes the *active* window as its owner, and while the splash is up that
+is the splash - so the window being waited for ends up owned by it. Both
+windows close the splash from their own Shown handler, which is the right
+moment to close it and the one moment that destroys the window with its owner.
+Measured: `ShowDialog` returned after 20 ms instead of staying up. Nova
+survived it because its window is WPF.
+
+`Close-Splash` now hides the splash instead of closing it, which leaves the
+handle alive, and a new `Clear-Splash` disposes it once the window it owned
+has closed. Everything else answers as before: `Test-SplashShown` says it has
+gone, because for every purpose but owning that window it has.
+
+**Nothing caught it because every test turns the splash off** (the runner sets
+`ANDROIDDC_NO_SPLASH`), so the one thing the tests never exercised was the one
+thing that broke. The splash test now stages the real startup - a real splash,
+a window shown with `ShowDialog`, and `Close-Splash` from its Shown handler -
+and fails if that window does not outlive it. Proven both ways: it reports
+50 ms against the old code and 1,241 ms against the new.
+
 ## 1.7.2
 
 **A way to support the project, for anyone who would like to.** Nothing else

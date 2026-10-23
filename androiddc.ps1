@@ -43,7 +43,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # half seconds it stands in for start here
 . (Join-Path $scriptRoot 'shared\Splash.ps1')
 # the release this file is; CHANGELOG.md says what each one changed
-$appVersion = '1.7.2'
+$appVersion = '1.7.3'
 $packageName = 'com.genymobile.gnirehtet'
 $settingsPath = Join-Path $env:APPDATA 'AndroidDC\settings.json'
 $legacySettingsPath = Join-Path $env:APPDATA 'gnirehtet-gui\settings.json'
@@ -14494,6 +14494,7 @@ try {
     Update-Splash -Text 'Opening ...' -Percent 95
 [void]$form.ShowDialog()
 } finally {
+    if (Get-Command Clear-Splash -ErrorAction SilentlyContinue) { Clear-Splash }
     Stop-PhoneProxy -Quiet
     if ($script:relayProcess) { Stop-Sharing -Quiet }
     foreach ($file in $script:previewFiles) {

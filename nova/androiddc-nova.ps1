@@ -252,6 +252,7 @@ $script:window.Add_ContentRendered({
 try {
     [void]$script:window.ShowDialog()
 } finally {
+    if (Get-Command Clear-Splash -ErrorAction SilentlyContinue) { Clear-Splash }
     foreach ($pattern in @("androiddc-nova-$PID.*")) {
         Get-ChildItem -Path $env:TEMP -Filter $pattern -ErrorAction SilentlyContinue |
             Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
