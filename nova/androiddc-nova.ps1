@@ -106,6 +106,9 @@ if (Test-Path -LiteralPath $clipboardScript -PathType Leaf) { . $clipboardScript
 # deleting contacts in batches, and contacts as one vCard file the phone imports
 $contactsScript = Join-Path $script:toolsRoot 'shared\Contacts.ps1'
 if (Test-Path -LiteralPath $contactsScript -PathType Leaf) { . $contactsScript }
+# reading the saved Wi-Fi passwords without root (android\wifipw)
+$wifiScript = Join-Path $script:toolsRoot 'shared\Wifi.ps1'
+if (Test-Path -LiteralPath $wifiScript -PathType Leaf) { . $wifiScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen

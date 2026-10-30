@@ -124,6 +124,7 @@ Windows nor the phone reinterprets.
 |---|---|
 | Wi-Fi scan and networks | `adb shell cmd wifi start-scan\|list-scan-results\|list-networks` |
 | Join / forget | `adb shell cmd wifi connect-network <ssid> <type> [<password>]`, `forget-network <id>` |
+| Saved Wi-Fi passwords | `adb push` a small reader (`android\wifipw`, one dex) to `/data/local/tmp`, then `adb shell CLASSPATH=... app_process /system/bin com.androiddc.WifiPw`, which asks the Wi-Fi service for the privileged network list as the shell and prints each SSID and password; the dex is removed after. Works on Android 8-12 and Android TV; Android 13+ returns nothing to the shell without root |
 | Bluetooth paired list | `adb shell dumpsys bluetooth_manager` |
 | NFC state | `adb shell dumpsys nfc` |
 | Users | `adb shell pm list users`, `am get-current-user`, `am switch-user`, `pm create-user`, `pm remove-user`, `pm get-max-users` |

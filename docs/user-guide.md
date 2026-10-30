@@ -715,10 +715,17 @@ is doing right away.
 ### Wi-Fi
 
 State line, **Wi-Fi on/off**, **Scan**, **Saved networks**, the list (SSID, security, signal,
-BSSID, saved id), a password box with *show*, **Connect**, **Forget**, **Status**, and
-**Wi-Fi settings** to open that screen on the phone.
+BSSID, saved id), a password box with *show*, **Connect**, **Forget**, **Status**,
+**Wi-Fi settings** to open that screen on the phone, and **Passwords** (Nova: *Show passwords*).
 
 Joining a saved network needs no password. Joining a new one does — type it in the box first.
+
+**Passwords** shows the passwords the phone has saved, in a window of their own: hidden behind
+dots until you tick *Show passwords*, with a Copy on each and a Copy all. They are shown there
+only - never written to the log, saved, or sent anywhere. It reads them without root, by running
+a small program as the adb shell (which alone may read them). It works on Android 8 to 12 and on
+Android TV; from Android 13 the Wi-Fi service no longer hands them to the shell, so the window
+says it would need root instead of showing an empty list.
 
 ### Bluetooth
 

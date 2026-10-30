@@ -286,6 +286,132 @@ function Show-WifiStatus {
     }
 }
 
+function Show-SavedWifiPasswords {
+    <#
+        The passwords the phone has saved, read without root (shared\Wifi.ps1),
+        shown in a window and nowhere else: not the log, not a file, not sent
+        anywhere. Each row has its own Copy, there is a Copy all, and a single
+        Show/Hide for the lot - hidden to start, so a shoulder does not read
+        them. On a phone that will not give them up (Android 13+), the window
+        says so plainly instead.
+    #>
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Write-Log "Reading the saved Wi-Fi passwords on $serial ..." $colorStep
+    $res = Get-SavedWifiPasswords -Serial $serial
+
+    $dialog = New-DialogWindow -Title 'Saved Wi-Fi passwords' -Width 520
+    if ($res.Status -ne 'Ok') {
+        $null = Add-DialogText -Dialog $dialog -Text (Get-WifiPasswordHint -Status $res.Status)
+        if ($res.Status -eq 'Error' -and $res.Error) { $null = Add-DialogText -Dialog $dialog -Text $res.Error -Muted }
+        $null = Add-DialogButton -Dialog $dialog -Text 'Close' -Style 'Primary' -IsDefault -IsCancel `
+            -OnClick { param($s, $e) [System.Windows.Window]::GetWindow($s).Close() }
+        $null = $dialog.ShowDialog()
+        return
+    }
+
+    $built = Add-WifiPasswordRows -Dialog $dialog -Result $res -Serial $serial
+    $script:wifiPwRows = $res.Rows
+
+    $null = Add-DialogButton -Dialog $dialog -Text 'Copy all' -OnClick {
+        param($s, $e)
+        $lines = foreach ($r in $script:wifiPwRows) { if (-not $r.IsOpen) { "$($r.Ssid)`t$($r.Password)" } }
+        try { [System.Windows.Clipboard]::SetText((@($lines) -join [Environment]::NewLine)); Show-Toast -Text 'All passwords copied' -Color 'good' } catch { }
+    }
+    $null = Add-DialogButton -Dialog $dialog -Text 'Close' -Style 'Primary' -IsDefault -IsCancel `
+        -OnClick { param($s, $e) [System.Windows.Window]::GetWindow($s).Close() }
+    $null = $dialog.ShowDialog()
+    # not kept in memory once the window is gone
+    $script:wifiPwRows = $null
+}
+
+$WifiPwDot = [string][char]0x2022       # the bullet a hidden password shows
+
+function Add-WifiPasswordRows {
+    <#
+        Fills a dialog's body with one row per saved network - the name, the
+        password (hidden behind bullets until Show is ticked), and a Copy - and
+        a single "Show passwords" box that reveals the lot. Built apart from
+        showing the window so it can be tested without a modal dialog blocking.
+
+        Returns the password cells and the Show checkbox, for a test to flip
+        and read; the real password lives on each cell's Tag, never on screen
+        until Show.
+    #>
+    param($Dialog, $Result, [string]$Serial = '')
+
+    $null = Add-DialogText -Dialog $Dialog -Text (
+        "$($Result.Count) saved network(s)$(if ($Serial) { " on $Serial" }). " + (Get-WifiPasswordHint -Status 'Ok')) -Muted
+
+    $cells = New-Object System.Collections.Generic.List[object]
+    $body = $Dialog.FindName('DialogBody')
+    foreach ($row in $Result.Rows) {
+        $grid = New-Object System.Windows.Controls.Grid
+        $grid.Margin = New-Object System.Windows.Thickness(0, 2, 0, 2)
+        foreach ($w in @('*', 'Auto')) {
+            $col = New-Object System.Windows.Controls.ColumnDefinition
+            if ($w -eq '*') { $col.Width = New-Object System.Windows.GridLength(1, 'Star') } else { $col.Width = [System.Windows.GridLength]::Auto }
+            $null = $grid.ColumnDefinitions.Add($col)
+        }
+
+        $inner = New-Object System.Windows.Controls.Grid
+        foreach ($w in @('*', 'Auto')) {
+            $col = New-Object System.Windows.Controls.ColumnDefinition
+            if ($w -eq '*') { $col.Width = New-Object System.Windows.GridLength(1, 'Star') } else { $col.Width = [System.Windows.GridLength]::Auto }
+            $null = $inner.ColumnDefinitions.Add($col)
+        }
+        [System.Windows.Controls.Grid]::SetColumn($inner, 0)
+        $null = $grid.Children.Add($inner)
+
+        $name = New-Object System.Windows.Controls.TextBlock
+        $name.Text = $row.Ssid
+        $name.TextTrimming = 'CharacterEllipsis'
+        $name.VerticalAlignment = 'Center'
+        $name.Margin = New-Object System.Windows.Thickness(0, 0, 12, 0)
+        [System.Windows.Controls.Grid]::SetColumn($name, 0)
+        $null = $inner.Children.Add($name)
+
+        $pw = New-Object System.Windows.Controls.TextBox
+        $pw.IsReadOnly = $true
+        $pw.BorderThickness = New-Object System.Windows.Thickness(0)
+        $pw.Background = 'Transparent'
+        $pw.Width = 190
+        $pw.VerticalAlignment = 'Center'
+        $pw.FontFamily = New-Object System.Windows.Media.FontFamily('Consolas')
+        $pw.Tag = $row.Password          # the real one; the box shows dots until Show
+        $pw.Text = $(if ($row.IsOpen) { '(open network)' } else { $WifiPwDot * 10 })
+        [System.Windows.Controls.Grid]::SetColumn($pw, 1)
+        $null = $inner.Children.Add($pw)
+        if (-not $row.IsOpen) { $null = $cells.Add($pw) }
+
+        $copy = New-Object System.Windows.Controls.Button
+        $copy.Content = 'Copy'
+        $copy.Margin = New-Object System.Windows.Thickness(8, 0, 0, 0)
+        $copy.Tag = $row.Password
+        $copy.IsEnabled = (-not $row.IsOpen)
+        $copy.Add_Click({
+            param($s, $e)
+            try { [System.Windows.Clipboard]::SetText([string]$s.Tag); Show-Toast -Text 'Password copied' -Color 'good' } catch { }
+        })
+        [System.Windows.Controls.Grid]::SetColumn($copy, 1)
+        $null = $grid.Children.Add($copy)
+
+        $null = $body.Children.Add($grid)
+    }
+
+    $show = New-Object System.Windows.Controls.CheckBox
+    $show.Content = 'Show passwords'
+    $show.Margin = New-Object System.Windows.Thickness(0, 10, 0, 0)
+    # the cells are captured so a test (and the box) can reach them
+    $show.Tag = $cells
+    $show.Add_Checked({ param($s, $e) foreach ($c in $s.Tag) { $c.Text = [string]$c.Tag } })
+    $show.Add_Unchecked({ param($s, $e) foreach ($c in $s.Tag) { $c.Text = $WifiPwDot * 10 } })
+    $null = $body.Children.Add($show)
+
+    return [PSCustomObject]@{ Cells = $cells.ToArray(); Show = $show }
+}
+
 # --------------------------------------------------------------- Bluetooth ----
 
 function Get-BluetoothConnections {
@@ -448,6 +574,7 @@ $ui.RadiosWifiOn.Add_Click({ Set-WifiRadio -On $true })
 $ui.RadiosWifiOff.Add_Click({ Set-WifiRadio -On $false })
 $ui.RadiosWifiScan.Add_Click({ Update-WifiList -Scan })
 $ui.RadiosWifiSaved.Add_Click({ Update-WifiList -Saved })
+$ui.RadiosWifiPasswords.Add_Click({ Show-SavedWifiPasswords })
 $ui.RadiosWifiConnect.Add_Click({ Connect-WifiNetwork })
 $ui.RadiosWifiForget.Add_Click({ Remove-WifiNetwork })
 $ui.RadiosWifiStatus.Add_Click({ Show-WifiStatus })

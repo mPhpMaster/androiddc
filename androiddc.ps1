@@ -59,6 +59,7 @@ Update-Splash -Text 'Reading the shared parts ...' -Percent 10
 . (Join-Path $scriptRoot 'shared\Backup.ps1')
 . (Join-Path $scriptRoot 'shared\Erase.ps1')
 . (Join-Path $scriptRoot 'shared\Contacts.ps1')
+. (Join-Path $scriptRoot 'shared\Wifi.ps1')
 . (Join-Path $scriptRoot 'shared\Clipboard.ps1')
 . (Join-Path $scriptRoot 'shared\Ftp.ps1')
 . (Join-Path $scriptRoot 'shared\FtpClassicPage.ps1')
@@ -3248,6 +3249,13 @@ $btnWifiSaved.Text = 'Saved networks'
 $btnWifiSaved.Location = New-Object System.Drawing.Point(708, 10)
 $btnWifiSaved.Size = New-Object System.Drawing.Size(120, 28)
 $tabWifi.Controls.Add($btnWifiSaved)
+
+$btnWifiPasswords = New-Object System.Windows.Forms.Button
+$btnWifiPasswords.Text = 'Passwords'
+$btnWifiPasswords.Location = New-Object System.Drawing.Point(708, 302)
+$btnWifiPasswords.Size = New-Object System.Drawing.Size(88, 28)
+$tabWifi.Controls.Add($btnWifiPasswords)
+$toolTip.SetToolTip($btnWifiPasswords, 'Show the passwords of the networks this phone has saved. Shown in a window only, never written to the log. Works on Android 8-12 and Android TV; not on Android 13+ without root')
 
 $lblWifiPass = New-Object System.Windows.Forms.Label
 $lblWifiPass.Text = 'Password'
@@ -9441,6 +9449,120 @@ function Show-WifiStatus {
     }
 }
 
+function Show-SavedWifiPasswords {
+    <#
+        The passwords the phone has saved, read without root (shared\Wifi.ps1),
+        in a window of their own - hidden behind dots until Show is ticked, with
+        a Copy per row and a Copy all. They are never written to the log, saved,
+        or sent anywhere. On a phone that will not give them up (Android 13+),
+        the window says so instead.
+    #>
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    Write-Log "Reading the saved Wi-Fi passwords on $serial ..." $colorStep
+    $res = Get-SavedWifiPasswords -Serial $serial
+
+    if ($res.Status -ne 'Ok') {
+        $text = Get-WifiPasswordHint -Status $res.Status
+        if ($res.Status -eq 'Error' -and $res.Error) { $text += [Environment]::NewLine + [Environment]::NewLine + $res.Error }
+        [void][System.Windows.Forms.MessageBox]::Show($text, 'Saved Wi-Fi passwords', 'OK', 'Information')
+        return
+    }
+
+    $window = New-WifiPasswordWindow -Result $res -Serial $serial
+    [void]$window.ShowDialog($form)
+    $window.Dispose()
+}
+
+function New-WifiPasswordWindow {
+    <#
+        Builds the Saved-Wi-Fi-passwords window from an Ok result: a list with
+        the names and the passwords (hidden behind dots until Show is ticked),
+        a Copy per selection and a Copy all. Built apart from showing so it can
+        be tested without a modal blocking. The real password rides on each
+        item's Tag; the cell shows dots until Show.
+    #>
+    param($Result, [string]$Serial = '')
+
+    $window = New-Object System.Windows.Forms.Form
+    $window.Text = "Saved Wi-Fi passwords$(if ($Serial) { "  -  $Serial" })"
+    $window.Size = New-Object System.Drawing.Size(560, 460)
+    $window.StartPosition = 'CenterParent'
+    $window.ShowIcon = $false
+    $window.MinimizeBox = $false
+
+    $hint = New-Object System.Windows.Forms.Label
+    $hint.Text = Get-WifiPasswordHint -Status 'Ok'
+    $hint.SetBounds(12, 10, 524, 34)
+    $hint.ForeColor = [System.Drawing.Color]::DimGray
+    $window.Controls.Add($hint)
+
+    $list = New-Object System.Windows.Forms.ListView
+    $list.Name = 'WifiPwList'
+    $list.View = 'Details'
+    $list.FullRowSelect = $true
+    $list.HideSelection = $false
+    $list.SetBounds(12, 50, 524, 320)
+    $list.Anchor = 'Top, Bottom, Left, Right'
+    $null = $list.Columns.Add('SSID', 250)
+    $null = $list.Columns.Add('Password', 250)
+    $window.Controls.Add($list)
+
+    $dot = [string][char]0x2022
+    foreach ($row in $Result.Rows) {
+        $item = New-Object System.Windows.Forms.ListViewItem($row.Ssid)
+        $item.Tag = $row.Password
+        $null = $item.SubItems.Add($(if ($row.IsOpen) { '(open network)' } else { $dot * 10 }))
+        $null = $list.Items.Add($item)
+    }
+
+    $show = New-Object System.Windows.Forms.CheckBox
+    $show.Name = 'WifiPwShow'
+    $show.Text = 'Show passwords'
+    $show.SetBounds(12, 382, 150, 24)
+    $show.Anchor = 'Bottom, Left'
+    $show.Add_CheckedChanged({
+        foreach ($item in $list.Items) {
+            if ("$($item.SubItems[1].Text)" -eq '(open network)') { continue }
+            $item.SubItems[1].Text = $(if ($show.Checked) { [string]$item.Tag } else { $dot * 10 })
+        }
+    }.GetNewClosure())
+    $window.Controls.Add($show)
+
+    $copy = New-Object System.Windows.Forms.Button
+    $copy.Text = 'Copy selected'
+    $copy.SetBounds(180, 380, 110, 28)
+    $copy.Anchor = 'Bottom, Left'
+    $copy.Add_Click({
+        $picked = @($list.SelectedItems)
+        if ($picked.Count -eq 0) { return }
+        $lines = foreach ($item in $picked) { "$($item.Text)`t$($item.Tag)" }
+        try { [System.Windows.Forms.Clipboard]::SetText((@($lines) -join [Environment]::NewLine)) } catch { }
+    }.GetNewClosure())
+    $window.Controls.Add($copy)
+
+    $copyAll = New-Object System.Windows.Forms.Button
+    $copyAll.Text = 'Copy all'
+    $copyAll.SetBounds(298, 380, 90, 28)
+    $copyAll.Anchor = 'Bottom, Left'
+    $copyAll.Add_Click({
+        $lines = foreach ($item in $list.Items) { if ("$($item.Tag)") { "$($item.Text)`t$($item.Tag)" } }
+        try { [System.Windows.Forms.Clipboard]::SetText((@($lines) -join [Environment]::NewLine)) } catch { }
+    }.GetNewClosure())
+    $window.Controls.Add($copyAll)
+
+    $close = New-Object System.Windows.Forms.Button
+    $close.Text = 'Close'
+    $close.SetBounds(446, 380, 90, 28)
+    $close.Anchor = 'Bottom, Right'
+    $close.Add_Click({ $window.Close() }.GetNewClosure())
+    $window.Controls.Add($close)
+    $window.AcceptButton = $close
+
+    return $window
+}
+
 function Update-BluetoothList {
     $serial = Get-TargetSerial
     if (-not $serial) { return }
@@ -10468,7 +10590,7 @@ function Update-RadioLayout {
         $lblWifiPass.SetBounds(14, ($rowY + 4), 64, 20)
         $txtWifiPass.SetBounds(82, ($rowY + 1), 180, 24)
         $chkWifiShowPass.SetBounds(270, ($rowY + 3), 60, 22)
-        $null = Set-ButtonRowLeft -Buttons @($btnWifiConnect, $btnWifiForget, $btnWifiStatus, $btnWifiSettings) -Left 336 -Top $rowY
+        $null = Set-ButtonRowLeft -Buttons @($btnWifiConnect, $btnWifiForget, $btnWifiStatus, $btnWifiSettings, $btnWifiPasswords) -Left 336 -Top $rowY
     }
 
     $width = $tabBt.ClientSize.Width
@@ -12701,6 +12823,7 @@ $btnWifiSaved.Add_Click({ Update-WifiList -Saved })
 $btnWifiConnect.Add_Click({ Connect-WifiNetwork })
 $btnWifiForget.Add_Click({ Remove-WifiNetwork })
 $btnWifiStatus.Add_Click({ Show-WifiStatus })
+$btnWifiPasswords.Add_Click({ Show-SavedWifiPasswords })
 $btnWifiSettings.Add_Click({ Open-DeviceSettingsScreen -Action 'android.settings.WIFI_SETTINGS' })
 $chkWifiShowPass.Add_CheckedChanged({
     $txtWifiPass.UseSystemPasswordChar = -not $chkWifiShowPass.Checked

@@ -2,6 +2,23 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### Show the saved Wi-Fi passwords, without root
+
+The Wi-Fi tab of both windows has a **Passwords** button (**Show passwords** in Nova). It
+shows the passwords the phone has saved, in a window of their own: hidden behind dots until you
+tick *Show passwords*, with a Copy on each and a Copy all. They are shown there only - never
+written to the log, saved, or sent anywhere.
+
+It reads them without root by running a small program (`android\wifipw`, one dex) as the adb
+shell, which alone may read a saved key, the way the FTP server and the restore writer are run.
+Measured: an Android TV on Android 11 gave up all 23 of its saved passwords in 1.4 s. From
+Android 13 the Wi-Fi service no longer hands them to the shell, and there is no root-free way;
+the window says so plainly instead of showing an empty list (measured on Android 13 and 15).
+`dumpsys wifi` hides the password and the `/data/misc/wifi` files need root, so this is the
+only way without it.
+
 ## 1.7.3
 
 **Update if you use the classic window: in 1.5.1 to 1.7.2 it could not open.**

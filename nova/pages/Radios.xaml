@@ -39,8 +39,10 @@
               <Button x:Name="RadiosWifiOn" Content="Wi-Fi on" Margin="0,0,8,0" ToolTip="Turn Wi-Fi on"/>
               <Button x:Name="RadiosWifiOff" Content="Wi-Fi off" Margin="0,0,8,0" ToolTip="Turn Wi-Fi off"/>
               <Button x:Name="RadiosWifiScan" Content="Scan" Margin="0,0,8,0" ToolTip="Ask the phone to scan and list what it can see"/>
-              <Button x:Name="RadiosWifiSaved" Content="Saved networks"
+              <Button x:Name="RadiosWifiSaved" Content="Saved networks" Margin="0,0,8,0"
                       ToolTip="List the networks saved on the phone (F5 does this too)"/>
+              <Button x:Name="RadiosWifiPasswords" Content="Show passwords..."
+                      ToolTip="Show the passwords of the networks this phone has saved. Shown in a window only, never written to the log. Works on Android 8-12 and Android TV; not on Android 13+ without root"/>
             </WrapPanel>
           </Grid>
 

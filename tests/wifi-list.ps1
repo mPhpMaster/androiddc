@@ -36,3 +36,54 @@ if (-not $TestSerial) {
         Say ("strongest first, saved-only last   {0}" -f (Mark (($values -join ',') -eq ($sorted -join ','))))
     }
 }
+
+Say ''
+Say '== the saved-passwords window (built, not shown) =='
+# New-WifiPasswordWindow builds the window from a result; the passwords are
+# hidden behind dots until Show is ticked, and the real one rides on each row's
+# Tag so Copy can reach it without it ever being on screen. Built here with a
+# made-up Ok result, so no phone and no real passwords are involved.
+$dot = [string][char]0x2022
+$okRes = [PSCustomObject]@{ Status = 'Ok'; Count = 2; Error = ''; Rows = @(
+    [PSCustomObject]@{ Ssid = 'Home 2.4'; Password = 'secret12'; IsOpen = $false },
+    [PSCustomObject]@{ Ssid = 'Cafe Open'; Password = ''; IsOpen = $true }) }
+$win = New-WifiPasswordWindow -Result $okRes -Serial 'TEST-SERIAL'
+$list = $win.Controls.Find('WifiPwList', $true)[0]
+$show = $win.Controls.Find('WifiPwShow', $true)[0]
+Say ("  two rows, the window built   {0}" -f (Mark ($null -ne $list -and $list.Items.Count -eq 2)))
+$pwCell = { ($list.Items | ForEach-Object { "$($_.SubItems[1].Text)" }) -join '|' }
+$hiddenOpen = (& $pwCell)
+Say ("  at open the password is dots, the open network says so, and nothing shows the real key   {0}" -f (Mark (
+    $hiddenOpen -match ([regex]::Escape($dot * 10)) -and $hiddenOpen -match '\(open network\)' -and $hiddenOpen -notmatch 'secret12')))
+Say ("  the real password is on the row's Tag, not on screen   {0}" -f (Mark ("$($list.Items[0].Tag)" -eq 'secret12')))
+$show.Checked = $true
+Say ("  ticking Show reveals the saved key (the open one stays its note)   {0}" -f (Mark (
+    "$($list.Items[0].SubItems[1].Text)" -eq 'secret12' -and "$($list.Items[1].SubItems[1].Text)" -eq '(open network)')))
+$show.Checked = $false
+Say ("  unticking hides it again   {0}" -f (Mark ("$($list.Items[0].SubItems[1].Text)" -eq ($dot * 10))))
+$win.Dispose()
+
+Say ''
+Say '== the hint line, by what the phone allows =='
+Say ("  Android 13+ is told it needs root, not called an error   {0}" -f (Mark (
+    (Get-WifiPasswordHint -Status 'Unsupported') -match 'Android 13' -and (Get-WifiPasswordHint -Status 'Unsupported') -match 'root')))
+Say ("  each status has its own words   {0}" -f (Mark (
+    (Get-WifiPasswordHint -Status 'Ok') -and (Get-WifiPasswordHint -Status 'Empty') -and
+    (Get-WifiPasswordHint -Status 'NoDex') -and (Get-WifiPasswordHint -Status 'Masked'))))
+
+Say ''
+Say '== reading the passwords off the phone (reads only) =='
+if (-not $TestSerial) {
+    Say 'SKIPPED - no phone given'
+} else {
+    $res = Get-SavedWifiPasswords -Serial $TestSerial
+    # counts and the status only - never a password
+    $withPw = @($res.Rows | Where-Object { -not $_.IsOpen }).Count
+    Say ("  status '{0}', {1} network(s), {2} with a password   {3}" -f $res.Status, $res.Count, $withPw, (Mark (
+        $res.Status -in @('Ok', 'Unsupported', 'Masked', 'Empty'))))
+    if ($res.Status -eq 'Ok') {
+        Say ("  every row has a name, and the open ones alone have no password   {0}" -f (Mark (
+            @($res.Rows | Where-Object { -not $_.Ssid }).Count -eq 0 -and
+            @($res.Rows | Where-Object { -not $_.IsOpen -and -not $_.Password }).Count -eq 0)))
+    }
+}

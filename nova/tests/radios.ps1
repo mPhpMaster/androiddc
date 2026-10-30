@@ -287,6 +287,65 @@ try {
     $opened = if (Get-Command Open-DeviceSettingsScreen -ErrorAction SilentlyContinue) { $script:mockAdb -contains 'am start -a android.settings.WIFI_SETTINGS' } else { $script:mockAdb.Count -eq 0 }
     Say ("  Wi-Fi settings goes through the Users page, or says it is missing   {0}" -f (Mark $opened))
 
+    Say ''
+    Say '== saved Wi-Fi passwords, read without root (made-up phone) =='
+    # the reader (android\wifipw) prints STATUS then one NET line per network;
+    # an app_process/linker warning carries neither marker and must be ignored.
+    # An Arabic SSID (built from char codes so this file stays ASCII) must survive.
+    $arabic = [string]([char]0x0634 + [char]0x0628 + [char]0x0643 + [char]0x062A + [char]0x064A)
+    $dot = '^' + ([string][char]0x2022) + '+$'      # "all bullets" as an ASCII-source regex
+    $script:mockReply = {
+        param([string]$Line)
+        if ($Line -match 'app_process .*com\.androiddc\.WifiPw') {
+            return @(
+                'WARNING: linker: something on stderr that is not a row',
+                "STATUS`tOK",
+                "NET`tHome 2.4`tsecret12",
+                "NET`t$arabic`tpass-arabic",
+                "NET`tCafe Open`t")
+        }
+        return ''
+    }
+    Reset-TestRecord
+    $res = Get-SavedWifiPasswords -Serial $script:mockSerial
+    Say ("  the reader is pushed, run, and removed   {0}" -f (Mark (
+        @($script:mockAdb | Where-Object { $_ -match 'app_process /system/bin com\.androiddc\.WifiPw' }).Count -eq 1 -and
+        @($script:mockAdb | Where-Object { $_ -match 'rm -f .*androiddc-wifipw\.dex' }).Count -eq 1)))
+    Say ("  status Ok, three rows, the warning line ignored   {0}" -f (Mark ($res.Status -eq 'Ok' -and $res.Count -eq 3)))
+    Say ("  the Arabic name survived, and its password came whole   {0}" -f (Mark (
+        @($res.Rows | Where-Object { $_.Ssid -eq $arabic -and $_.Password -eq 'pass-arabic' }).Count -eq 1)))
+    Say ("  the open network is marked open with no password   {0}" -f (Mark (
+        @($res.Rows | Where-Object { $_.Ssid -eq 'Cafe Open' -and $_.IsOpen -and -not $_.Password }).Count -eq 1)))
+    $leaked = @($script:logLines | Where-Object { "$($_.Text)" -match 'secret12|pass-arabic' }).Count
+    Say ("  no password was written to the log   {0}" -f (Mark ($leaked -eq 0)))
+
+    $script:mockReply = { param([string]$Line) if ($Line -match 'WifiPw') { return "STATUS`tUNSUPPORTED" } return '' }
+    Say ("  Android 13+ answers Unsupported, not an error   {0}" -f (Mark (
+        (Get-SavedWifiPasswords -Serial $script:mockSerial).Status -eq 'Unsupported')))
+    $script:mockReply = { param([string]$Line) if ($Line -match 'WifiPw') { return @("STATUS`tOK", "NET`tA`t*", "NET`tB`t*") } return '' }
+    Say ("  a phone that masks every key is reported Masked   {0}" -f (Mark (
+        (Get-SavedWifiPasswords -Serial $script:mockSerial).Status -eq 'Masked')))
+    $script:mockReply = { param([string]$Line) if ($Line -match 'WifiPw') { return 'some linker noise only' } return '' }
+    $none = Get-SavedWifiPasswords -Serial $script:mockSerial
+    Say ("  output with neither STATUS nor NET is an error, not a false empty   {0}" -f (Mark (
+        $none.Status -eq 'Error' -and $none.Count -eq 0)))
+
+    # the window itself: build it (without showing) and check the masking
+    $okRes = [PSCustomObject]@{ Status = 'Ok'; Count = 2; Error = ''; Rows = @(
+        [PSCustomObject]@{ Ssid = 'Home'; Password = 'secret12'; IsOpen = $false },
+        [PSCustomObject]@{ Ssid = 'Open'; Password = ''; IsOpen = $true }) }
+    $dialog = New-DialogWindow -Title 'Saved Wi-Fi passwords' -Width 520
+    $built = Add-WifiPasswordRows -Dialog $dialog -Result $okRes -Serial $script:mockSerial
+    $cellText = { ($built.Cells | ForEach-Object { "$($_.Text)" }) -join '|' }
+    $hiddenAtOpen = @($built.Cells | Where-Object { "$($_.Text)" -notmatch $dot }).Count -eq 0
+    Say ("  one password cell (the open one has none), hidden behind bullets at open   {0}" -f (Mark (
+        $built.Cells.Count -eq 1 -and $hiddenAtOpen -and (& $cellText) -notmatch 'secret12')))
+    Say ("  the real password is kept on the cell, not on screen   {0}" -f (Mark ("$($built.Cells[0].Tag)" -eq 'secret12')))
+    $built.Show.IsChecked = $true
+    Say ("  ticking Show reveals it   {0}" -f (Mark ((& $cellText) -eq 'secret12')))
+    $built.Show.IsChecked = $false
+    Say ("  unticking hides it again   {0}" -f (Mark ((& $cellText) -match $dot)))
+
     Say ("  no command reached a real phone   {0}" -f (Mark ($script:mockLeaks.Count -eq 0)))
 } finally {
     Disable-TestMocks
