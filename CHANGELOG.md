@@ -2,7 +2,10 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.8.0
+
+**Show the saved Wi-Fi passwords of a phone, without root.** The one change in this
+release; both windows gain it.
 
 ### Show the saved Wi-Fi passwords, without root
 
