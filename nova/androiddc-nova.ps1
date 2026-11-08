@@ -109,6 +109,9 @@ if (Test-Path -LiteralPath $contactsScript -PathType Leaf) { . $contactsScript }
 # reading the saved Wi-Fi passwords without root (android\wifipw)
 $wifiScript = Join-Path $script:toolsRoot 'shared\Wifi.ps1'
 if (Test-Path -LiteralPath $wifiScript -PathType Leaf) { . $wifiScript }
+# the phone camera as a Windows camera (windows\vcam)
+$vcamScript = Join-Path $script:toolsRoot 'shared\VirtualCamera.ps1'
+if (Test-Path -LiteralPath $vcamScript -PathType Leaf) { . $vcamScript }
 if ($SettingsFile) { $script:settingsPath = $SettingsFile }
 # a window far off screen is not a place to remember
 $script:keepWindowPlace = -not $OffScreen

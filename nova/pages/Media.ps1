@@ -201,6 +201,56 @@ function Stop-Camera {
     Write-Log "Stopped $stopped camera window(s)." $colorInfo
 }
 
+# ------------------------------------------------------------ as PC camera ----
+
+function Get-PcCameraChoice {
+    # the camera the card above points at: a facing, or an id from the list;
+    # with neither, the front one, which is what a webcam usually is
+    $facing = "$($ui.MediaCameraFacing.SelectedItem)"
+    if ($facing -and $facing -ne 'by id') { return @{ Id = ''; Facing = $facing } }
+    if ("$($ui.MediaCamera.SelectedItem)" -match '^(\d+)') { return @{ Id = $Matches[1]; Facing = '' } }
+    return @{ Id = ''; Facing = 'front' }
+}
+
+function Start-PcCamera {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $state = Get-VCamState
+    if ($state.Need -eq 'register') {
+        $ok = Show-Confirm -Title 'Register AndroidDC Camera' -Yes 'Register' -Text ($state.Message +
+            "`r`n`r`nWindows asks for administrator rights once. After that the camera turns on and off without asking.")
+        if (-not $ok) { return }
+        if (-not (Register-VCam -Dll $state.Dll)) { Write-Log 'The camera was not registered (the administrator prompt was refused or failed).' $colorBad; return }
+        $state = Get-VCamState
+    }
+    if (-not $state.Ready) { Write-Log $state.Message $colorBad; return }
+
+    $choice = Get-PcCameraChoice
+    $which = if ($choice.Id) { "camera $($choice.Id)" } else { "the $($choice.Facing) camera" }
+    Write-Log "Turning on AndroidDC Camera with $which of $serial ..." $colorStep
+    $ui.MediaVCamStart.IsEnabled = $false
+    try {
+        $result = Start-VCam -Serial $serial -CameraId $choice.Id -Facing $choice.Facing -Mirror:([bool]$ui.MediaVCamMirror.IsChecked)
+        if (-not $result.Ok -and $result.Message -match 'size') {
+            Write-Log 'This camera has no 1280x720; trying the size the phone picks ...' $colorWarn
+            $result = Start-VCam -Serial $serial -CameraId $choice.Id -Facing $choice.Facing -Size 'auto' -Mirror:([bool]$ui.MediaVCamMirror.IsChecked)
+        }
+    } finally {
+        Update-MediaButtons
+    }
+    if ($result.Ok) {
+        Write-Log ($result.Message + ' Pick "AndroidDC Camera" in the app.') $colorGood
+    } else {
+        Write-Log ('AndroidDC Camera did not start: ' + $result.Message) $colorBad
+    }
+}
+
+function Stop-PcCamera {
+    if (Stop-VCam) { Write-Log 'AndroidDC Camera is off.' $colorInfo }
+    Update-MediaButtons
+}
+
 # ------------------------------------------------------------------- audio ----
 
 function Update-AudioCodecList {
@@ -380,6 +430,12 @@ function Update-MediaButtons {
     $ui.MediaListen.IsEnabled = -not $playing
     $ui.MediaRecordAudio.IsEnabled = -not $playing
     $ui.MediaListenStop.IsEnabled = $playing
+
+    # the PC camera: Use while off, Stop while on; one that ended by itself
+    # (the phone was unplugged) gives Use back
+    $on = (Get-Command Test-VCamRunning -ErrorAction SilentlyContinue) -and (Test-VCamRunning)
+    $ui.MediaVCamStart.IsEnabled = -not $on
+    $ui.MediaVCamStop.IsEnabled = $on
 }
 
 function Reset-MediaForDevice {
@@ -439,6 +495,9 @@ $ui.MediaCameraBrowse.Add_Click({
     }
 })
 
+$ui.MediaVCamStart.Add_Click({ Start-PcCamera })
+$ui.MediaVCamStop.Add_Click({ Stop-PcCamera })
+
 $ui.MediaListen.Add_Click({ Start-AudioListen })
 $ui.MediaListenStop.Add_Click({ Stop-AudioListen })
 $ui.MediaRecordAudio.Add_Click({ Start-AudioListen -ToFile })
@@ -458,4 +517,5 @@ Register-Setting -Name 'Media.AudioBuffer' -Get { $ui.MediaAudioBuffer.Text } -S
 Register-Cleanup {
     Stop-AudioListen
     if (@($script:cameraProcesses).Count -gt 0) { Stop-Camera }
+    if (Get-Command Stop-VCam -ErrorAction SilentlyContinue) { $null = Stop-VCam }
 }

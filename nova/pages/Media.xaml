@@ -92,6 +92,32 @@
         </StackPanel>
       </Border>
 
+      <!-- ================================================ as PC camera == -->
+      <Border Style="{StaticResource CardPanel}" Margin="0,14,0,0">
+        <StackPanel>
+          <WrapPanel Margin="0,0,0,10">
+            <TextBlock Text="AS A PC CAMERA" Style="{StaticResource Caps}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+            <TextBlock Text="The phone camera as a webcam for any app: Teams, Zoom, Meet, OBS, the Camera app"
+                       Style="{StaticResource MutedLine}" VerticalAlignment="Center"/>
+          </WrapPanel>
+          <WrapPanel>
+            <Button x:Name="MediaVCamStart" Style="{StaticResource Primary}" Margin="0,0,8,6"
+                    ToolTip="Turn on &quot;AndroidDC Camera&quot; in Windows, showing the camera chosen above">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE714;" Style="{StaticResource Glyph}" FontSize="12"/>
+                <TextBlock Text="Use as PC camera" Margin="8,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Button>
+            <Button x:Name="MediaVCamStop" Content="Stop PC camera" Margin="0,0,8,6" IsEnabled="False"
+                    ToolTip="Turn &quot;AndroidDC Camera&quot; off; apps using it lose the picture"/>
+            <CheckBox x:Name="MediaVCamMirror" Content="Mirror" VerticalAlignment="Center" Margin="4,0,0,6"
+                      ToolTip="Flip the picture left to right"/>
+          </WrapPanel>
+          <TextBlock x:Name="MediaVCamHint" Style="{StaticResource MutedLine}" Margin="0,6,0,0" TextWrapping="Wrap"
+                     Text="Apps list it as &quot;AndroidDC Camera&quot;: the camera picked above (Facing, or the list), 1280x720, 30 fps. Windows 11; the first time asks once for administrator rights to register it."/>
+        </StackPanel>
+      </Border>
+
       <!-- ======================================================== audio == -->
       <Border Style="{StaticResource CardPanel}" Margin="0,14,0,0">
         <StackPanel>

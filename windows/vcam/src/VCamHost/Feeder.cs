@@ -50,8 +50,9 @@ namespace AndroidDC.VCam
             options.Append("scid=").Append(scid)
                 .Append(" log_level=info video_source=camera video_codec=h264 audio=false control=false")
                 .Append(" tunnel_forward=true raw_stream=true cleanup=true")
-                .Append(" camera_size=").Append(CameraSize)
                 .Append(" camera_fps=").Append(CameraFps);
+            // "auto": the phone has no 1280x720, let scrcpy pick; the picture is fitted anyway
+            if (!string.IsNullOrEmpty(CameraSize) && CameraSize != "auto") options.Append(" camera_size=").Append(CameraSize);
             if (!string.IsNullOrEmpty(CameraId)) options.Append(" camera_id=").Append(CameraId);
             else if (!string.IsNullOrEmpty(CameraFacing)) options.Append(" camera_facing=").Append(CameraFacing);
 

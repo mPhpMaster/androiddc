@@ -132,6 +132,42 @@ if ($null -eq $first -or $first.State -ne 'device' -or -not $script:scrcpyPath) 
 }
 
 Say ''
+Say '== as a PC camera =='
+Say ("  Use on, Stop off, nothing running   {0}" -f (Mark ($ui.MediaVCamStart.IsEnabled -and -not $ui.MediaVCamStop.IsEnabled -and -not (Test-VCamRunning))))
+$keepFacing = "$($ui.MediaCameraFacing.SelectedItem)"
+$ui.MediaCameraFacing.SelectedItem = 'back'
+$choice = Get-PcCameraChoice
+Say ("  a facing picks by facing   {0}" -f (Mark ($choice.Facing -eq 'back' -and -not $choice.Id)))
+$ui.MediaCameraFacing.SelectedItem = 'by id'
+$null = $ui.MediaCamera.Items.Add('2  -  front  1920x1080')
+$ui.MediaCamera.SelectedItem = '2  -  front  1920x1080'
+$choice = Get-PcCameraChoice
+Say ("  by id takes the listed id   {0}" -f (Mark ($choice.Id -eq '2' -and -not $choice.Facing)))
+$ui.MediaCamera.Items.Remove('2  -  front  1920x1080')
+$ui.MediaCamera.SelectedIndex = 0
+$choice = Get-PcCameraChoice
+$first = Get-SelectedDevice
+if ("$($ui.MediaCamera.SelectedItem)" -notmatch '^\d') {
+    Say ("  nothing listed: the front camera   {0}" -f (Mark ($choice.Facing -eq 'front' -and -not $choice.Id)))
+}
+$ui.MediaCameraFacing.SelectedItem = $keepFacing
+$state = Get-VCamState
+Say ("  state: need '{0}'" -f $state.Need)
+if ($state.Ready -and $null -ne $first -and $first.State -eq 'device') {
+    # streams the phone camera for a few seconds; nothing on the phone changes
+    $ui.MediaCameraFacing.SelectedItem = 'front'
+    Start-PcCamera
+    Say ("  on: Use off, Stop on   {0}" -f (Mark ((Test-VCamRunning) -and -not $ui.MediaVCamStart.IsEnabled -and $ui.MediaVCamStop.IsEnabled)))
+    $peek = @(& (Join-Path $state.Folder 'AndroidDC.VCamHost.exe') peek 2>&1 | ForEach-Object { "$_" })
+    Say ("  an app sees the phone: {0}   {1}" -f ($peek -join ' '), (Mark ($LASTEXITCODE -eq 0)))
+    Stop-PcCamera
+    Say ("  off: Use on, Stop off   {0}" -f (Mark (-not (Test-VCamRunning) -and $ui.MediaVCamStart.IsEnabled -and -not $ui.MediaVCamStop.IsEnabled)))
+    $ui.MediaCameraFacing.SelectedItem = $keepFacing
+} else {
+    Say '  not registered here, or no ready phone - the start is skipped'
+}
+
+Say ''
 Say '== the picture =='
 foreach ($size in @('default', 'min')) {
     Set-WindowSize $size
