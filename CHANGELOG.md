@@ -2,7 +2,9 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.9.1
+
+**Front or back for the PC camera, and switching while it is on.** The one change in this release; both windows gain it.
 
 ### Front or back, for the PC camera
 
