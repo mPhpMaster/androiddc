@@ -357,3 +357,18 @@ Please include:
 * `adb.exe --version` and `scrcpy.exe --version`;
 * the phone's model and `ro.build.version.release`;
 * whether the phone was locked or unlocked at the time.
+
+## "AndroidDC Camera" does not start or an app does not list it
+
+- **Needs Windows 11** - Windows 10 has no virtual cameras. The log says so.
+- **Needs the .NET 8 runtime** (free, from https://dotnet.microsoft.com/download/dotnet/8.0) -
+  the log says so and gives this link.
+- **The administrator prompt was refused** - the camera is registered with Windows once; press
+  *Use as PC camera* again and accept the prompt. Moving the AndroidDC folder means registering
+  again from the new place (it asks again).
+- **The app was open before the camera was turned on** - some apps read the camera list only
+  when they start, or when you open their camera settings. Pick *AndroidDC Camera* there again.
+- **Grey bars instead of the phone** - the camera is on but no picture has arrived from the
+  phone: it was unplugged, or its camera is used by an app on the phone. Stop and start again.
+- **"did not start: ..."** - the reason is the phone's own (from scrcpy's server), for example a
+  camera id the phone does not have. Press *List cameras* and pick one from the list.

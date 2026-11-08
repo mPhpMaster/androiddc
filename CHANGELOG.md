@@ -2,6 +2,27 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### The phone camera as a PC camera
+
+Cam / Mic (Camera & mic in Nova) has an **As a PC camera** box: **Use as PC camera** turns on
+a Windows camera called *AndroidDC Camera* that shows the phone's camera, so Teams, Zoom,
+Meet in a browser, OBS or the Camera app can pick it like any webcam. **Stop PC camera** turns
+it off, *Mirror* flips it. It uses the camera chosen above (by facing or from the list; the
+front one when nothing is picked), at 1280x720 and 30 fps, and falls back to the size the
+phone picks when the camera has no 1280x720.
+
+It is a Windows 11 virtual camera (Media Foundation), written for this in C#
+(`windows\vcam`): scrcpy's server streams the camera as H.264, Windows' own decoder turns it
+into pictures, and the camera hands them to the app. No driver, no OBS. The first use asks
+once for administrator rights, to register the camera with Windows; after that it turns on
+and off without asking. It needs Windows 11 and the free .NET 8 runtime.
+
+Measured on a Redmi 13C (Android 15): the camera appears in Windows' list in about 5 s, the
+phone's picture 1.7-2.2 s after the start, 30 fps in and out, and an app that opens the
+camera while it is on sees the phone within 0.2-0.7 s.
+
 ## 1.8.0
 
 **Show the saved Wi-Fi passwords of a phone, without root.** The one change in this

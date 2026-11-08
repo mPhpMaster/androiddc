@@ -60,6 +60,7 @@ Update-Splash -Text 'Reading the shared parts ...' -Percent 10
 . (Join-Path $scriptRoot 'shared\Erase.ps1')
 . (Join-Path $scriptRoot 'shared\Contacts.ps1')
 . (Join-Path $scriptRoot 'shared\Wifi.ps1')
+. (Join-Path $scriptRoot 'shared\VirtualCamera.ps1')
 . (Join-Path $scriptRoot 'shared\Clipboard.ps1')
 . (Join-Path $scriptRoot 'shared\Ftp.ps1')
 . (Join-Path $scriptRoot 'shared\FtpClassicPage.ps1')
@@ -2931,6 +2932,35 @@ $btnListCameraSizes.Location = New-Object System.Drawing.Point(348, 52)
 $btnListCameraSizes.Size = New-Object System.Drawing.Size(70, 26)
 $grpCamera.Controls.Add($btnListCameraSizes)
 $toolTip.SetToolTip($btnListCameraSizes, 'Ask the phone which camera sizes it supports')
+
+# The phone camera as a Windows camera ("AndroidDC Camera", shared\VirtualCamera.ps1)
+$grpPcCamera = New-Object System.Windows.Forms.GroupBox
+$grpPcCamera.Text = 'As a PC camera  (a webcam for any app: Teams, Zoom, Meet, OBS)'
+$tabCamera.Controls.Add($grpPcCamera)
+
+$btnPcCameraStart = New-Object System.Windows.Forms.Button
+$btnPcCameraStart.Text = 'Use as PC camera'
+$btnPcCameraStart.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+$btnPcCameraStart.Size = New-Object System.Drawing.Size(150, 30)
+$grpPcCamera.Controls.Add($btnPcCameraStart)
+$toolTip.SetToolTip($btnPcCameraStart, 'Turn on "AndroidDC Camera" in Windows, showing the camera chosen above')
+
+$btnPcCameraStop = New-Object System.Windows.Forms.Button
+$btnPcCameraStop.Text = 'Stop PC camera'
+$btnPcCameraStop.Size = New-Object System.Drawing.Size(130, 30)
+$btnPcCameraStop.Enabled = $false
+$grpPcCamera.Controls.Add($btnPcCameraStop)
+$toolTip.SetToolTip($btnPcCameraStop, 'Turn "AndroidDC Camera" off; apps using it lose the picture')
+
+$chkPcCameraMirror = New-Object System.Windows.Forms.CheckBox
+$chkPcCameraMirror.Text = 'Mirror'
+$grpPcCamera.Controls.Add($chkPcCameraMirror)
+$toolTip.SetToolTip($chkPcCameraMirror, 'Flip the picture left to right')
+
+$lblPcCameraHint = New-Object System.Windows.Forms.Label
+$lblPcCameraHint.Text = 'Apps list it as "AndroidDC Camera": the camera picked above (Facing, or the list), 1280x720, 30 fps. Windows 11; the first time asks once for administrator rights.'
+$lblPcCameraHint.ForeColor = [System.Drawing.Color]::DimGray
+$grpPcCamera.Controls.Add($lblPcCameraHint)
 
 Update-Splash -Text 'Building the file pages ...' -Percent 62
 # --- tab: file browser / transfer --------------------------------------------
@@ -7904,6 +7934,66 @@ function Stop-Camera {
     Write-Log "Stopped $stopped camera window(s)." $colorInfo
 }
 
+# --- the phone camera as a PC camera (shared\VirtualCamera.ps1) -------------------
+
+function Get-PcCameraChoice {
+    # the camera the box above points at: a facing, or an id from the list;
+    # with neither, the front one, which is what a webcam usually is
+    $facing = "$($cmbCameraFacing.SelectedItem)"
+    if ($facing -and $facing -ne 'by id') { return @{ Id = ''; Facing = $facing } }
+    if ("$($cmbCamera.SelectedItem)" -match '^(\d+)') { return @{ Id = $Matches[1]; Facing = '' } }
+    return @{ Id = ''; Facing = 'front' }
+}
+
+function Update-PcCameraButtons {
+    # Use while off, Stop while on; one that ended by itself (the phone was
+    # unplugged) gives Use back
+    $on = Test-VCamRunning
+    $btnPcCameraStart.Enabled = -not $on
+    $btnPcCameraStop.Enabled = $on
+}
+
+function Start-PcCamera {
+    $serial = Get-TargetSerial
+    if (-not $serial) { return }
+
+    $state = Get-VCamState
+    if ($state.Need -eq 'register') {
+        $answer = [System.Windows.Forms.MessageBox]::Show($form, ($state.Message +
+            "`r`n`r`nWindows asks for administrator rights once. After that the camera turns on and off without asking."),
+            'Register AndroidDC Camera', [System.Windows.Forms.MessageBoxButtons]::OKCancel, [System.Windows.Forms.MessageBoxIcon]::Information)
+        if ($answer -ne [System.Windows.Forms.DialogResult]::OK) { return }
+        if (-not (Register-VCam -Dll $state.Dll)) { Write-Log 'The camera was not registered (the administrator prompt was refused or failed).' $colorBad; return }
+        $state = Get-VCamState
+    }
+    if (-not $state.Ready) { Write-Log $state.Message $colorBad; return }
+
+    $choice = Get-PcCameraChoice
+    $which = if ($choice.Id) { "camera $($choice.Id)" } else { "the $($choice.Facing) camera" }
+    Write-Log "Turning on AndroidDC Camera with $which of $serial ..." $colorStep
+    $btnPcCameraStart.Enabled = $false
+    $result = $null
+    try {
+        $result = Start-VCam -Serial $serial -CameraId $choice.Id -Facing $choice.Facing -Mirror:$chkPcCameraMirror.Checked
+        if (-not $result.Ok -and $result.Message -match 'size') {
+            Write-Log 'This camera has no 1280x720; trying the size the phone picks ...' $colorWarn
+            $result = Start-VCam -Serial $serial -CameraId $choice.Id -Facing $choice.Facing -Size 'auto' -Mirror:$chkPcCameraMirror.Checked
+        }
+    } finally {
+        Update-PcCameraButtons
+    }
+    if ($result -and $result.Ok) {
+        Write-Log ($result.Message + ' Pick "AndroidDC Camera" in the app.') $colorGood
+    } elseif ($result) {
+        Write-Log ('AndroidDC Camera did not start: ' + $result.Message) $colorBad
+    }
+}
+
+function Stop-PcCamera {
+    if (Stop-VCam) { Write-Log 'AndroidDC Camera is off.' $colorInfo }
+    Update-PcCameraButtons
+}
+
 # --- file browser ------------------------------------------------------------
 
 function Format-FileSize {
@@ -10268,7 +10358,12 @@ function Update-CamMicLayout {
     $null = Set-ButtonRowLeft -Left 12 -Top 186 -Buttons @($btnCameraStart, $btnCameraFront, $btnCameraBack,
         $btnCameraStop, $btnCameraCommand)
 
-    $grpAudio.SetBounds(12, 226, $inner, 154)
+    $grpPcCamera.SetBounds(12, 226, $inner, 86)
+    $null = Set-ButtonRowLeft -Left 12 -Top 22 -Buttons @($btnPcCameraStart, $btnPcCameraStop)
+    $chkPcCameraMirror.SetBounds(($btnPcCameraStop.Bounds.Right + 14), 27, 80, 22)
+    $lblPcCameraHint.SetBounds(12, 58, [Math]::Max(200, $inner - 24), 18)
+
+    $grpAudio.SetBounds(12, 320, $inner, 154)
     $lblAudioSource.SetBounds(12, 30, 50, 20)
     $cmbAudioSource.SetBounds(66, 26, 200, 24)
     $null = Set-ButtonRowLeft -Left 274 -Top 25 -Buttons @($btnListen, $btnListenStop, $btnRecordAudio)
@@ -12696,6 +12791,8 @@ $btnCameraStart.Add_Click({ Start-Camera })
 $btnCameraFront.Add_Click({ Start-Camera -Facing 'front' })
 $btnCameraBack.Add_Click({ Start-Camera -Facing 'back' })
 $btnCameraStop.Add_Click({ Stop-Camera })
+$btnPcCameraStart.Add_Click({ Start-PcCamera })
+$btnPcCameraStop.Add_Click({ Stop-PcCamera })
 $btnCameraCommand.Add_Click({
     $serial = Get-SelectedSerial
     Write-Log ('scrcpy ' + ((Get-CameraArguments -Serial $serial) -join ' ')) $colorStep
@@ -14522,6 +14619,8 @@ $form.Add_FormClosing({
     $clipboardTimer.Stop()
     Stop-AllClipboardShares
     Stop-AudioListen
+    # the PC camera goes with the window (the host would also stop on its own)
+    $null = Stop-VCam
     Stop-LiveShell -Quiet
     Stop-Logcat -Quiet
     # Never leave the machine pointing at a proxy that dies with this window.

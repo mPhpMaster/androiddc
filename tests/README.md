@@ -34,6 +34,8 @@ exit code is the number of tests that failed or did not finish.
 | `screenshots` | no | Pictures of the pages at the smallest size, for a person to look at — the layout test cannot see text cut off inside a label |
 | `file-rows` | no | A search hit keeps its own file name, the filter takes `[ ]` literally, *Compress* finds what it packs from one folder or several. The functions that would reach a phone are replaced inside the test |
 | `wifi-list` | no, uses one if given | Strongest network first by the number, not the text; with a phone, the list it gives as well (read only, no scan) |
+| `vcam` | no, uses one if given | Run on its own (`powershell -File tests\vcam.ps1 [-Serial <serial>] [-CameraId 1] [-Register]`): what the PC camera needs, its command line, and the camera's own self-test - listed by Windows, the test pattern arriving unchanged, 30 fps, a picture from the desktop reaching it. With a phone: its camera feeds it, an app opening it sees the phone, and Stop removes it from the list |
+| `pc-camera` | yes | Cam / Mic, *As a PC camera*: the box between the camera buttons and the audio box, the camera it picks, and a real start - an app opening *AndroidDC Camera* sees the phone - then Stop |
 | `audio` | yes | The encoder list read from the phone and following the codec, the command line, the file name for each codec, a real *Listen*, the choices remembered |
 | `apps` | yes | Names read once and kept, read again when the apps change, a non-ASCII name arriving whole, the filter, the export, *Start app* |
 | `root` | yes | The Root page reads the phone on opening, its marks belong to one phone, `jdwp` stops by itself, `emu` explains its silence |

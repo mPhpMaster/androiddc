@@ -640,6 +640,15 @@ extra — and the app sends it.
 camera as a video source with a chosen id, facing, size, fps, aspect ratio, high-speed mode
 or torch. The phone screen is untouched. Needs Android 12 or newer.
 
+**As a PC camera** - **Use as PC camera** turns on a Windows camera, *AndroidDC Camera*,
+showing the camera picked above (by *Facing*, or from the list; the front camera when
+nothing is picked). Any app that takes a webcam can use it: Teams, Zoom, Meet in a browser,
+OBS, the Camera app. It runs at 1280x720 and 30 fps; a camera without 1280x720 is tried
+again at the size the phone picks. *Mirror* flips it left to right. **Stop PC camera** turns
+it off, and closing AndroidDC turns it off too. With no phone picture (yet) it shows grey
+bars. Needs Windows 11 and the free .NET 8 runtime; the first time, Windows asks once for
+administrator rights to register the camera.
+
 **Microphone / audio** — pick a source (`mic`, `mic-voice-communication`, `output`,
 `playback`, `voice-call`, …), then **Listen** to hear it on the PC speakers, **Stop audio**,
 or **Record audio...** to write it to a file.
