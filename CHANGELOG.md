@@ -2,7 +2,9 @@
 
 [← back to the README](README.md)
 
-## Unreleased
+## 1.9.0
+
+**The phone camera as a PC camera.** The one change in this release; both windows gain it.
 
 ### The phone camera as a PC camera
 
