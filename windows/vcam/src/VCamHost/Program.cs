@@ -2,7 +2,9 @@
 //
 //   probe        is the virtual camera supported here, and is the source registered?
 //   run          turn the camera on; it stays on until this process ends,
-//                a line "stop" arrives on stdin, or the stop event is set
+//                a line "stop" arrives on stdin, or the stop event is set;
+//                a line "switch front|back|id N [WxH|auto]" changes the
+//                phone camera while the Windows camera stays on
 //   selftest     turn it on, read frames back the way a camera app does,
 //                check the test pattern, the frame rate and the shared picture
 //
@@ -116,21 +118,59 @@ namespace AndroidDC.VCam
             };
         }
 
-        /// <summary>Feeds on a background thread; reports with FEEDING / FEED-ERROR lines.</summary>
-        private static Thread StartFeeding(Feeder feeder, EventWaitHandle stop)
+        private static readonly object outLock = new object();
+        private static void Say(string line) { lock (outLock) { Console.WriteLine(line); Console.Out.Flush(); } }
+
+        // the feeder now feeding the camera; a switch replaces it
+        private static volatile Feeder current;
+
+        /// <summary>
+        /// Feeds on a background thread; reports with FEEDING / FEED-ERROR lines.
+        /// When the current feeder's picture ends the camera goes off. A feeder
+        /// that never started after a switch leaves the camera on (grey bars),
+        /// so the caller can switch again, back to the camera that worked.
+        /// </summary>
+        private static Thread StartFeeding(Feeder feeder, EventWaitHandle stop, bool switched)
         {
             var t = new Thread(() =>
             {
-                try { feeder.Run(s => { Console.WriteLine(s); Console.Out.Flush(); }); }
-                catch (Exception e)
-                {
-                    Console.WriteLine("FEED-ERROR " + e.Message.Replace('\r', ' ').Replace('\n', ' '));
-                    Console.Out.Flush();
-                }
-                if (stop != null) stop.Set();   // no phone picture any more: turn the camera off
+                try { feeder.Run(Say); }
+                catch (Exception e) { Say("FEED-ERROR " + e.Message.Replace('\r', ' ').Replace('\n', ' ')); }
+                if (stop != null && ReferenceEquals(current, feeder) && (feeder.Started || !switched))
+                    stop.Set();   // no phone picture any more: turn the camera off
             }) { IsBackground = true, Name = "feeder" };
             t.Start();
             return t;
+        }
+
+        /// <summary>
+        /// "switch front|back|id N [WxH|auto]": another camera of the same phone.
+        /// The Windows camera stays on, so an app using it keeps it.
+        /// </summary>
+        private static void Switch(string line, EventWaitHandle stop, ref Thread feeding)
+        {
+            var parts = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            Feeder old = current;
+            if (old == null) { Say("SWITCH-ERROR no phone is feeding the camera"); return; }
+            string id = null, facing = null, size = null;
+            int i = 1;
+            if (parts.Length > 2 && parts[1].Equals("id", StringComparison.OrdinalIgnoreCase)) { id = parts[2]; i = 3; }
+            else if (parts.Length > 1) { facing = parts[1].ToLowerInvariant(); i = 2; }
+            if (parts.Length > i) size = parts[i];
+            if (id == null && facing != "front" && facing != "back" && facing != "external")
+            {
+                Say("SWITCH-ERROR say front, back or id N");
+                return;
+            }
+            Say("SWITCHING " + (id != null ? "id " + id : facing));
+            var next = old.WithCamera(id, facing, size);
+            current = next;
+            // the old one first ends on its own thread, so it no longer writes
+            // the picture when its share closes
+            old.Stop();
+            if (feeding != null) feeding.Join(5000);
+            old.Dispose();
+            feeding = StartFeeding(next, stop, true);
         }
 
         private static int Run(string[] args)
@@ -140,13 +180,12 @@ namespace AndroidDC.VCam
             {
                 if (!fresh) { Console.WriteLine("ALREADY " + FriendlyName + " is on"); return 3; }
                 IntPtr camera = Create();
-                Feeder feeder = null;
+                Thread feeding = null;
                 try
                 {
-                    Console.WriteLine("READY " + FriendlyName);
-                    Console.Out.Flush();
-                    feeder = MakeFeeder(args);
-                    if (feeder != null) StartFeeding(feeder, stop);
+                    Say("READY " + FriendlyName);
+                    current = MakeFeeder(args);
+                    if (current != null) feeding = StartFeeding(current, stop, false);
                     if (Console.IsInputRedirected)
                     {
                         new Thread(() =>
@@ -155,7 +194,16 @@ namespace AndroidDC.VCam
                             {
                                 string line;
                                 while ((line = Console.ReadLine()) != null)
-                                    if (line.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase)) break;
+                                {
+                                    // Windows PowerShell starts what it writes with a BOM
+                                    line = line.Trim().TrimStart('﻿').Trim();
+                                    if (line.Equals("stop", StringComparison.OrdinalIgnoreCase)) break;
+                                    if (line.StartsWith("switch", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        try { Switch(line, stop, ref feeding); }
+                                        catch (Exception e) { Say("SWITCH-ERROR " + e.Message.Replace('\r', ' ').Replace('\n', ' ')); }
+                                    }
+                                }
                             }
                             catch { }
                             stop.Set();   // "stop", or the parent went away
@@ -165,13 +213,21 @@ namespace AndroidDC.VCam
                 }
                 finally
                 {
-                    if (feeder != null) feeder.Dispose();
+                    Feeder last = current;
+                    current = null;
+                    if (last != null)
+                    {
+                        last.Stop();
+                        if (feeding != null) feeding.Join(3000);
+                        last.Dispose();
+                    }
                     Destroy(camera);
                 }
             }
-            Console.WriteLine("STOPPED");
+            Say("STOPPED");
             return 0;
         }
+
         // ---------------------------------------------------------------- peek
         /// <summary>Opens the camera that is already on, like an app would, and says what it shows.</summary>
         private static int Peek(string[] args)
@@ -294,7 +350,7 @@ namespace AndroidDC.VCam
                     using (feeder)
                     {
                         watch.Restart();
-                        StartFeeding(feeder, null);
+                        StartFeeding(feeder, null, false);
                         bool phone = false;
                         while (!phone && watch.ElapsedMilliseconds < 20000)
                         {

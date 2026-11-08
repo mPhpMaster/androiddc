@@ -641,8 +641,11 @@ camera as a video source with a chosen id, facing, size, fps, aspect ratio, high
 or torch. The phone screen is untouched. Needs Android 12 or newer.
 
 **As a PC camera** - **Use as PC camera** turns on a Windows camera, *AndroidDC Camera*,
-showing the camera picked above (by *Facing*, or from the list; the front camera when
-nothing is picked). Any app that takes a webcam can use it: Teams, Zoom, Meet in a browser,
+showing the phone camera chosen in its *Camera* box: **Front** (the default), **Back**, or
+**As picked above** (by *Facing*, or from the list; the front camera when nothing is
+picked). Changing *Camera* while it is on switches between them without turning the Windows
+camera off, so the app using it keeps it; the other camera's picture follows in about two
+seconds, and a camera that does not start leaves the one that worked. Any app that takes a webcam can use it: Teams, Zoom, Meet in a browser,
 OBS, the Camera app. It runs at 1280x720 and 30 fps; a camera without 1280x720 is tried
 again at the size the phone picks. *Mirror* flips it left to right. **Stop PC camera** turns
 it off, and closing AndroidDC turns it off too. With no phone picture (yet) it shows grey

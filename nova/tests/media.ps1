@@ -134,6 +134,13 @@ if ($null -eq $first -or $first.State -ne 'device' -or -not $script:scrcpyPath) 
 Say ''
 Say '== as a PC camera =='
 Say ("  Use on, Stop off, nothing running   {0}" -f (Mark ($ui.MediaVCamStart.IsEnabled -and -not $ui.MediaVCamStop.IsEnabled -and -not (Test-VCamRunning))))
+Say ("  Camera offers Front, Back, As picked above; Front first   {0}" -f (Mark ((@($ui.MediaVCamWhich.Items) -join ',') -eq 'Front,Back,As picked above' -and "$($ui.MediaVCamWhich.SelectedItem)" -eq 'Front')))
+$choice = Get-PcCameraChoice
+Say ("  Front picks the front camera   {0}" -f (Mark ($choice.Facing -eq 'front' -and -not $choice.Id)))
+$ui.MediaVCamWhich.SelectedItem = 'Back'
+$choice = Get-PcCameraChoice
+Say ("  Back picks the back camera, nothing starts while off   {0}" -f (Mark ($choice.Facing -eq 'back' -and -not $choice.Id -and -not (Test-VCamRunning))))
+$ui.MediaVCamWhich.SelectedItem = 'As picked above'
 $keepFacing = "$($ui.MediaCameraFacing.SelectedItem)"
 $ui.MediaCameraFacing.SelectedItem = 'back'
 $choice = Get-PcCameraChoice
@@ -155,14 +162,20 @@ $state = Get-VCamState
 Say ("  state: need '{0}'" -f $state.Need)
 if ($state.Ready -and $null -ne $first -and $first.State -eq 'device') {
     # streams the phone camera for a few seconds; nothing on the phone changes
-    $ui.MediaCameraFacing.SelectedItem = 'front'
+    $ui.MediaVCamWhich.SelectedItem = 'Front'
     Start-PcCamera
     Say ("  on: Use off, Stop on   {0}" -f (Mark ((Test-VCamRunning) -and -not $ui.MediaVCamStart.IsEnabled -and $ui.MediaVCamStop.IsEnabled)))
     $peek = @(& (Join-Path $state.Folder 'AndroidDC.VCamHost.exe') peek 2>&1 | ForEach-Object { "$_" })
     Say ("  an app sees the phone: {0}   {1}" -f ($peek -join ' '), (Mark ($LASTEXITCODE -eq 0)))
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $ui.MediaVCamWhich.SelectedItem = 'Back'
+    Say ("  Back while on: switched in {0} ms, still on   {1}" -f $watch.ElapsedMilliseconds, (Mark ((Test-VCamRunning) -and $script:vcamCamera.Facing -eq 'back' -and $script:pcCameraShown -eq 1)))
+    $peek = @(& (Join-Path $state.Folder 'AndroidDC.VCamHost.exe') peek 2>&1 | ForEach-Object { "$_" })
+    Say ("  an app sees the back camera: {0}   {1}" -f ($peek -join ' '), (Mark ($LASTEXITCODE -eq 0)))
+    $ui.MediaVCamWhich.SelectedItem = 'Front'
+    Say ("  Front again   {0}" -f (Mark ((Test-VCamRunning) -and $script:vcamCamera.Facing -eq 'front')))
     Stop-PcCamera
     Say ("  off: Use on, Stop off   {0}" -f (Mark (-not (Test-VCamRunning) -and $ui.MediaVCamStart.IsEnabled -and -not $ui.MediaVCamStop.IsEnabled)))
-    $ui.MediaCameraFacing.SelectedItem = $keepFacing
 } else {
     Say '  not registered here, or no ready phone - the start is skipped'
 }

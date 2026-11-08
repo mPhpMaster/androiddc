@@ -28,6 +28,8 @@
 $script:vcamProcess = $null
 $script:vcamLines = New-Object System.Collections.Generic.List[string]
 $script:vcamPending = $null
+# the camera the host feeds now: Id, Facing, Size (for a switch that fails)
+$script:vcamCamera = $null
 
 function Get-VCamFolder {
     # the shipped binaries; built from windows\vcam\src when they are missing
@@ -169,6 +171,7 @@ function Start-VCam {
         Read-VCamLines
         $last = if ($script:vcamLines.Count) { $script:vcamLines[$script:vcamLines.Count - 1] } else { '' }
         if ($last -like 'FEEDING*') {
+            $script:vcamCamera = @{ Id = $CameraId; Facing = $Facing; Size = $Size }
             return [pscustomobject]@{ Ok = $true; Message = 'AndroidDC Camera is on, showing the phone camera.'; Lines = @($script:vcamLines) }
         }
         foreach ($line in $script:vcamLines) {
@@ -187,6 +190,60 @@ function Start-VCam {
     }
     Stop-VCam | Out-Null
     return [pscustomobject]@{ Ok = $false; Message = 'No picture from the phone camera in time.'; Lines = @($script:vcamLines) }
+}
+
+function Send-VCamSwitch {
+    # one "switch" to the host; waits (pumping the window) for the new camera's picture
+    param([string]$CameraId, [string]$Facing, [string]$Size, [int]$TimeoutMs = 20000)
+    Read-VCamLines
+    $from = $script:vcamLines.Count
+    $which = if ($CameraId) { 'id ' + $CameraId } else { $Facing }
+    try { $script:vcamProcess.StandardInput.WriteLine("switch $which $Size"); $script:vcamProcess.StandardInput.Flush() }
+    catch { return [pscustomobject]@{ Ok = $false; Message = 'The camera host is not listening.' } }
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($watch.ElapsedMilliseconds -lt $TimeoutMs) {
+        Wait-Pumped -Milliseconds 100
+        Read-VCamLines
+        for ($i = $from; $i -lt $script:vcamLines.Count; $i++) {
+            $line = $script:vcamLines[$i]
+            if ($line -like 'FEEDING*') { return [pscustomobject]@{ Ok = $true; Message = '' } }
+            if ($line -like 'FEED-ERROR *' -or $line -like 'SWITCH-ERROR *') {
+                return [pscustomobject]@{ Ok = $false; Message = ($line -replace '^(FEED-ERROR|SWITCH-ERROR) ', '') }
+            }
+        }
+        if (-not (Test-VCamRunning)) { return [pscustomobject]@{ Ok = $false; Message = 'The camera host ended.' } }
+    }
+    return [pscustomobject]@{ Ok = $false; Message = 'No picture from that camera in time.' }
+}
+
+function Switch-VCam {
+    <#
+        Changes the phone camera while AndroidDC Camera is on (front, back, or
+        an id). The Windows camera stays on, so an app using it keeps it; the
+        picture shows grey bars for the second or two the phone takes. A
+        camera without 1280x720 is tried again at the size the phone picks;
+        one that does not start at all puts the camera that worked back.
+        Returns Ok and Message.
+    #>
+    param([string]$CameraId, [string]$Facing)
+    if (-not (Test-VCamRunning)) { return [pscustomobject]@{ Ok = $false; Message = 'AndroidDC Camera is not on.' } }
+    $previous = $script:vcamCamera
+    $result = Send-VCamSwitch -CameraId $CameraId -Facing $Facing -Size '1280x720'
+    $size = '1280x720'
+    if (-not $result.Ok -and $result.Message -match 'size' -and (Test-VCamRunning)) {
+        $size = 'auto'
+        $result = Send-VCamSwitch -CameraId $CameraId -Facing $Facing -Size 'auto'
+    }
+    if ($result.Ok) {
+        $script:vcamCamera = @{ Id = $CameraId; Facing = $Facing; Size = $size }
+        $which = if ($CameraId) { "camera $CameraId" } else { "the $Facing camera" }
+        return [pscustomobject]@{ Ok = $true; Message = "AndroidDC Camera now shows $which." }
+    }
+    if ($previous -and (Test-VCamRunning)) {
+        $back = Send-VCamSwitch -CameraId $previous.Id -Facing $previous.Facing -Size $previous.Size
+        if ($back.Ok) { return [pscustomobject]@{ Ok = $false; Message = $result.Message + ' - kept the camera it showed before.' } }
+    }
+    return [pscustomobject]@{ Ok = $false; Message = $result.Message }
 }
 
 function Stop-VCam {

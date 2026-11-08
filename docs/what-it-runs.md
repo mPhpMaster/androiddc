@@ -144,6 +144,7 @@ Windows nor the phone reinterprets.
 | Camera sound | `--audio-source=mic` with *mic* ticked, otherwise `--no-audio` |
 | As a PC camera, once | `regsvr32 /s windows\vcam\bin\AndroidDC.VirtualCamera.comhost.dll`, as administrator (one UAC prompt): registers the camera with Windows |
 | As a PC camera | `windows\vcam\bin\AndroidDC.VCamHost.exe run -s <serial> --camera-id <id>` (or `--camera-facing`) `--camera-size 1280x720` [`--mirror`]. It turns the camera on (`MFCreateVirtualCamera`, for this Windows session only), then `adb push scrcpy-server /data/local/tmp/scrcpy-server.jar`, `adb forward tcp:0 localabstract:scrcpy_<id>`, and `adb shell CLASSPATH=... app_process / com.genymobile.scrcpy.Server 4.1 video_source=camera raw_stream=true audio=false control=false ...`; it reads the H.264 stream, decodes it with Windows' decoder and hands the pictures to the camera. Stop removes the forward and the camera |
+| As a PC camera, *Camera* changed while on | the line `switch front` (or `switch back`, `switch id <id>`) and the size on the host's input: it stops the phone's server and starts it again with the other camera (`camera_facing=` or `camera_id=`), on a new forward; the Windows camera stays on |
 | Listen | `scrcpy --no-video --no-window --audio-source=<source>` |
 | Record audio | `scrcpy --no-video --no-playback --audio-source=<source> --record=<file>` |
 | Audio options, when set | `--audio-codec=<codec>`, `--audio-encoder=<name>`, `--audio-bit-rate=<rate>`, `--audio-buffer=<ms>`, and `--audio-dup` for *Listen* with the `output` source only |

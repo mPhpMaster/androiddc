@@ -35,6 +35,20 @@ namespace AndroidDC.VCam
 
         public long Frames { get { return Interlocked.Read(ref frames); } }
 
+        /// <summary>The phone's picture reached here at least once.</summary>
+        public volatile bool Started;
+
+        /// <summary>The same phone and settings, another camera (an id, or a facing).</summary>
+        public Feeder WithCamera(string id, string facing, string size)
+        {
+            return new Feeder
+            {
+                Adb = Adb, Server = Server, Serial = Serial, ServerVersion = ServerVersion,
+                CameraId = id, CameraFacing = facing, CameraSize = size ?? CameraSize,
+                CameraFps = CameraFps, Mirror = Mirror,
+            };
+        }
+
         /// <summary>Runs until Stop or until the phone's stream ends. Throws with a reason on failure.</summary>
         public void Run(Action<string> status)
         {
@@ -73,6 +87,7 @@ namespace AndroidDC.VCam
             shell.BeginErrorReadLine();
 
             NetworkStream stream = Connect(port);
+            Started = true;
             status("FEEDING");
 
             using (var decoder = new H264Decoder())

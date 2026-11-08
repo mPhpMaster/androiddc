@@ -101,8 +101,11 @@
                        Style="{StaticResource MutedLine}" VerticalAlignment="Center"/>
           </WrapPanel>
           <WrapPanel>
+            <TextBlock Text="Camera" VerticalAlignment="Center" Margin="0,0,8,6"/>
+            <ComboBox x:Name="MediaVCamWhich" Width="140" Margin="0,0,12,6" VerticalAlignment="Center"
+                      ToolTip="The phone camera Windows gets: front, back, or the one picked above (Facing, or the list). Changing it while on switches without turning the camera off."/>
             <Button x:Name="MediaVCamStart" Style="{StaticResource Primary}" Margin="0,0,8,6"
-                    ToolTip="Turn on &quot;AndroidDC Camera&quot; in Windows, showing the camera chosen above">
+                    ToolTip="Turn on &quot;AndroidDC Camera&quot; in Windows, showing the camera chosen beside it">
               <StackPanel Orientation="Horizontal">
                 <TextBlock Text="&#xE714;" Style="{StaticResource Glyph}" FontSize="12"/>
                 <TextBlock Text="Use as PC camera" Margin="8,0,0,0" VerticalAlignment="Center"/>
@@ -114,7 +117,7 @@
                       ToolTip="Flip the picture left to right"/>
           </WrapPanel>
           <TextBlock x:Name="MediaVCamHint" Style="{StaticResource MutedLine}" Margin="0,6,0,0" TextWrapping="Wrap"
-                     Text="Apps list it as &quot;AndroidDC Camera&quot;: the camera picked above (Facing, or the list), 1280x720, 30 fps. Windows 11; the first time asks once for administrator rights to register it."/>
+                     Text="Apps list it as &quot;AndroidDC Camera&quot;, 1280x720, 30 fps. Change Camera while it is on to switch between front and back; the app keeps the camera. Windows 11; the first time asks once for administrator rights to register it."/>
         </StackPanel>
       </Border>
 

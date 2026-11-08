@@ -2,6 +2,21 @@
 
 [← back to the README](README.md)
 
+## Unreleased
+
+### Front or back, for the PC camera
+
+The *As a PC camera* box has its own **Camera** choice: **Front** (the default), **Back**, or
+**As picked above** (the camera box's *Facing* or list, as before). Changing it while the
+camera is on switches the phone camera without turning *AndroidDC Camera* off, so Teams or
+Zoom keep it; the picture comes back from the other camera in 1.5-2.3 s (measured on a
+Redmi 13C). A camera that does not start leaves the one that worked, and the box goes back
+to it.
+
+The camera host takes a `switch front|back|id N` line on its input for this, and ignores the
+byte-order mark Windows PowerShell puts before the first line it writes - which had made the
+first line it was sent go unread.
+
 ## 1.9.0
 
 **The phone camera as a PC camera.** The one change in this release; both windows gain it.

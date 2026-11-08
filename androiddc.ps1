@@ -2938,12 +2938,24 @@ $grpPcCamera = New-Object System.Windows.Forms.GroupBox
 $grpPcCamera.Text = 'As a PC camera  (a webcam for any app: Teams, Zoom, Meet, OBS)'
 $tabCamera.Controls.Add($grpPcCamera)
 
+$lblPcCameraWhich = New-Object System.Windows.Forms.Label
+$lblPcCameraWhich.Text = 'Camera:'
+$lblPcCameraWhich.TextAlign = 'MiddleLeft'
+$grpPcCamera.Controls.Add($lblPcCameraWhich)
+
+$cmbPcCameraWhich = New-Object System.Windows.Forms.ComboBox
+$cmbPcCameraWhich.DropDownStyle = 'DropDownList'
+$null = $cmbPcCameraWhich.Items.AddRange(@('Front', 'Back', 'As picked above'))
+$cmbPcCameraWhich.SelectedIndex = 0
+$grpPcCamera.Controls.Add($cmbPcCameraWhich)
+$toolTip.SetToolTip($cmbPcCameraWhich, 'The phone camera Windows gets: front, back, or the one picked above (Facing, or the list). Changing it while on switches without turning the camera off.')
+
 $btnPcCameraStart = New-Object System.Windows.Forms.Button
 $btnPcCameraStart.Text = 'Use as PC camera'
 $btnPcCameraStart.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
 $btnPcCameraStart.Size = New-Object System.Drawing.Size(150, 30)
 $grpPcCamera.Controls.Add($btnPcCameraStart)
-$toolTip.SetToolTip($btnPcCameraStart, 'Turn on "AndroidDC Camera" in Windows, showing the camera chosen above')
+$toolTip.SetToolTip($btnPcCameraStart, 'Turn on "AndroidDC Camera" in Windows, showing the camera chosen beside it')
 
 $btnPcCameraStop = New-Object System.Windows.Forms.Button
 $btnPcCameraStop.Text = 'Stop PC camera'
@@ -2958,7 +2970,7 @@ $grpPcCamera.Controls.Add($chkPcCameraMirror)
 $toolTip.SetToolTip($chkPcCameraMirror, 'Flip the picture left to right')
 
 $lblPcCameraHint = New-Object System.Windows.Forms.Label
-$lblPcCameraHint.Text = 'Apps list it as "AndroidDC Camera": the camera picked above (Facing, or the list), 1280x720, 30 fps. Windows 11; the first time asks once for administrator rights.'
+$lblPcCameraHint.Text = 'Apps list it as "AndroidDC Camera", 1280x720, 30 fps. Change Camera while on to switch front/back. Windows 11; the first time asks once for administrator rights.'
 $lblPcCameraHint.ForeColor = [System.Drawing.Color]::DimGray
 $grpPcCamera.Controls.Add($lblPcCameraHint)
 
@@ -7936,9 +7948,17 @@ function Stop-Camera {
 
 # --- the phone camera as a PC camera (shared\VirtualCamera.ps1) -------------------
 
+$script:pcCameraShown = 0      # the Camera entry the running camera shows
+$script:pcCameraRevert = $false
+
 function Get-PcCameraChoice {
-    # the camera the box above points at: a facing, or an id from the list;
-    # with neither, the front one, which is what a webcam usually is
+    # Front or Back as chosen in the box; "As picked above" is the camera the
+    # box above points at: a facing, or an id from the list; with neither,
+    # the front one, which is what a webcam usually is
+    switch ("$($cmbPcCameraWhich.SelectedItem)") {
+        'Front' { return @{ Id = ''; Facing = 'front' } }
+        'Back' { return @{ Id = ''; Facing = 'back' } }
+    }
     $facing = "$($cmbCameraFacing.SelectedItem)"
     if ($facing -and $facing -ne 'by id') { return @{ Id = ''; Facing = $facing } }
     if ("$($cmbCamera.SelectedItem)" -match '^(\d+)') { return @{ Id = $Matches[1]; Facing = '' } }
@@ -7983,6 +8003,7 @@ function Start-PcCamera {
         Update-PcCameraButtons
     }
     if ($result -and $result.Ok) {
+        $script:pcCameraShown = $cmbPcCameraWhich.SelectedIndex
         Write-Log ($result.Message + ' Pick "AndroidDC Camera" in the app.') $colorGood
     } elseif ($result) {
         Write-Log ('AndroidDC Camera did not start: ' + $result.Message) $colorBad
@@ -7992,6 +8013,27 @@ function Start-PcCamera {
 function Stop-PcCamera {
     if (Stop-VCam) { Write-Log 'AndroidDC Camera is off.' $colorInfo }
     Update-PcCameraButtons
+}
+
+function Switch-PcCamera {
+    # Camera changed while on: the phone camera changes, the Windows camera
+    # stays on, so the app using it keeps it
+    if ($script:pcCameraRevert -or -not (Test-VCamRunning)) { return }
+    $choice = Get-PcCameraChoice
+    $which = if ($choice.Id) { "camera $($choice.Id)" } else { "the $($choice.Facing) camera" }
+    Write-Log "Switching AndroidDC Camera to $which ..." $colorStep
+    $cmbPcCameraWhich.Enabled = $false
+    try { $result = Switch-VCam -CameraId $choice.Id -Facing $choice.Facing }
+    finally { $cmbPcCameraWhich.Enabled = $true; Update-PcCameraButtons }
+    if ($result.Ok) {
+        $script:pcCameraShown = $cmbPcCameraWhich.SelectedIndex
+        Write-Log $result.Message $colorGood
+    } else {
+        Write-Log ('Could not switch: ' + $result.Message) $colorBad
+        # the box says what the camera shows
+        $script:pcCameraRevert = $true
+        try { $cmbPcCameraWhich.SelectedIndex = $script:pcCameraShown } finally { $script:pcCameraRevert = $false }
+    }
 }
 
 # --- file browser ------------------------------------------------------------
@@ -10359,7 +10401,9 @@ function Update-CamMicLayout {
         $btnCameraStop, $btnCameraCommand)
 
     $grpPcCamera.SetBounds(12, 226, $inner, 86)
-    $null = Set-ButtonRowLeft -Left 12 -Top 22 -Buttons @($btnPcCameraStart, $btnPcCameraStop)
+    $lblPcCameraWhich.SetBounds(12, 26, 54, 22)
+    $cmbPcCameraWhich.SetBounds(68, 25, 120, 24)
+    $null = Set-ButtonRowLeft -Left 200 -Top 22 -Buttons @($btnPcCameraStart, $btnPcCameraStop)
     $chkPcCameraMirror.SetBounds(($btnPcCameraStop.Bounds.Right + 14), 27, 80, 22)
     $lblPcCameraHint.SetBounds(12, 58, [Math]::Max(200, $inner - 24), 18)
 
@@ -12793,6 +12837,7 @@ $btnCameraBack.Add_Click({ Start-Camera -Facing 'back' })
 $btnCameraStop.Add_Click({ Stop-Camera })
 $btnPcCameraStart.Add_Click({ Start-PcCamera })
 $btnPcCameraStop.Add_Click({ Stop-PcCamera })
+$cmbPcCameraWhich.Add_SelectedIndexChanged({ Switch-PcCamera })
 $btnCameraCommand.Add_Click({
     $serial = Get-SelectedSerial
     Write-Log ('scrcpy ' + ((Get-CameraArguments -Serial $serial) -join ' ')) $colorStep

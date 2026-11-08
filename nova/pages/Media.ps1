@@ -203,9 +203,17 @@ function Stop-Camera {
 
 # ------------------------------------------------------------ as PC camera ----
 
+$script:pcCameraShown = 0      # the Camera entry the running camera shows
+$script:pcCameraRevert = $false
+
 function Get-PcCameraChoice {
-    # the camera the card above points at: a facing, or an id from the list;
-    # with neither, the front one, which is what a webcam usually is
+    # Front or Back as chosen in the card; "As picked above" is the camera the
+    # card above points at: a facing, or an id from the list; with neither,
+    # the front one, which is what a webcam usually is
+    switch ("$($ui.MediaVCamWhich.SelectedItem)") {
+        'Front' { return @{ Id = ''; Facing = 'front' } }
+        'Back' { return @{ Id = ''; Facing = 'back' } }
+    }
     $facing = "$($ui.MediaCameraFacing.SelectedItem)"
     if ($facing -and $facing -ne 'by id') { return @{ Id = ''; Facing = $facing } }
     if ("$($ui.MediaCamera.SelectedItem)" -match '^(\d+)') { return @{ Id = $Matches[1]; Facing = '' } }
@@ -240,6 +248,7 @@ function Start-PcCamera {
         Update-MediaButtons
     }
     if ($result.Ok) {
+        $script:pcCameraShown = $ui.MediaVCamWhich.SelectedIndex
         Write-Log ($result.Message + ' Pick "AndroidDC Camera" in the app.') $colorGood
     } else {
         Write-Log ('AndroidDC Camera did not start: ' + $result.Message) $colorBad
@@ -249,6 +258,27 @@ function Start-PcCamera {
 function Stop-PcCamera {
     if (Stop-VCam) { Write-Log 'AndroidDC Camera is off.' $colorInfo }
     Update-MediaButtons
+}
+
+function Switch-PcCamera {
+    # Camera changed while on: the phone camera changes, the Windows camera
+    # stays on, so the app using it keeps it
+    if ($script:pcCameraRevert -or -not (Test-VCamRunning)) { return }
+    $choice = Get-PcCameraChoice
+    $which = if ($choice.Id) { "camera $($choice.Id)" } else { "the $($choice.Facing) camera" }
+    Write-Log "Switching AndroidDC Camera to $which ..." $colorStep
+    $ui.MediaVCamWhich.IsEnabled = $false
+    try { $result = Switch-VCam -CameraId $choice.Id -Facing $choice.Facing }
+    finally { $ui.MediaVCamWhich.IsEnabled = $true; Update-MediaButtons }
+    if ($result.Ok) {
+        $script:pcCameraShown = $ui.MediaVCamWhich.SelectedIndex
+        Write-Log $result.Message $colorGood
+    } else {
+        Write-Log ('Could not switch: ' + $result.Message) $colorBad
+        # the card says what the camera shows
+        $script:pcCameraRevert = $true
+        try { $ui.MediaVCamWhich.SelectedIndex = $script:pcCameraShown } finally { $script:pcCameraRevert = $false }
+    }
 }
 
 # ------------------------------------------------------------------- audio ----
@@ -456,6 +486,8 @@ Set-MediaItems -Combo $ui.MediaCamera -Items @($script:mediaNoCameraYet)
 $ui.MediaCamera.SelectedIndex = 0
 Set-MediaItems -Combo $ui.MediaCameraFacing -Items @('by id', 'back', 'front', 'external')
 $ui.MediaCameraFacing.SelectedIndex = 0
+Set-MediaItems -Combo $ui.MediaVCamWhich -Items @('Front', 'Back', 'As picked above')
+$ui.MediaVCamWhich.SelectedIndex = 0
 Set-MediaItems -Combo $ui.MediaCameraSize -Items $script:mediaCameraSizes
 $ui.MediaCameraSize.Text = '1920x1080'
 Set-MediaItems -Combo $ui.MediaCameraFps -Items @('30', '24', '20', '15', '10')
@@ -497,6 +529,7 @@ $ui.MediaCameraBrowse.Add_Click({
 
 $ui.MediaVCamStart.Add_Click({ Start-PcCamera })
 $ui.MediaVCamStop.Add_Click({ Stop-PcCamera })
+$ui.MediaVCamWhich.Add_SelectionChanged({ Switch-PcCamera })
 
 $ui.MediaListen.Add_Click({ Start-AudioListen })
 $ui.MediaListenStop.Add_Click({ Stop-AudioListen })
