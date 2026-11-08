@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The camera's media source. Windows' Frame Server service loads it
+       through comhost.dll, so it is registered once with regsvr32. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>AndroidDC.VirtualCamera</AssemblyName>
+    <RootNamespace>AndroidDC.VCam</RootNamespace>
+    <EnableComHosting>true</EnableComHosting>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RollForward>LatestMajor</RollForward>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\MfInterop.cs" Link="MfInterop.cs" />
+    <Compile Include="..\Shared\FrameShare.cs" Link="FrameShare.cs" />
+    <Compile Include="..\Shared\Pattern.cs" Link="Pattern.cs" />
+  </ItemGroup>
+
+</Project>

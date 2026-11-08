@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Turns the virtual camera on and off, feeds it, and tests it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>AndroidDC.VCamHost</AssemblyName>
+    <RootNamespace>AndroidDC.VCam</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\MfInterop.cs" Link="MfInterop.cs" />
+    <Compile Include="..\Shared\FrameShare.cs" Link="FrameShare.cs" />
+    <Compile Include="..\Shared\Pattern.cs" Link="Pattern.cs" />
+  </ItemGroup>
+
+</Project>
