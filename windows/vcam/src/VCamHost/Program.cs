@@ -35,11 +35,11 @@ namespace AndroidDC.VCam
                 switch (mode)
                 {
                     case "probe": return Probe();
-                    case "run": return Run();
-                    case "selftest": return SelfTest();
+                    case "run": return Run(args);
+                    case "selftest": return SelfTest(args);
                     case "list": Verbose = true; FindDevice("\u0001"); return 0;
                     default:
-                        Console.WriteLine("usage: AndroidDC.VCamHost probe|run|selftest");
+                        Console.WriteLine("usage: AndroidDC.VCamHost probe|run|selftest|list  [-s serial [--camera-id N|--camera-facing front|back] [--camera-size WxH] [--mirror] [--adb path] [--server path]]");
                         return 2;
                 }
             }
@@ -91,36 +91,88 @@ namespace AndroidDC.VCam
             Marshal.Release(camera);
         }
 
-        private static int Run()
+        private static string Option(string[] args, string name)
         {
-            IntPtr camera = Create();
-            using (var stop = new EventWaitHandle(false, EventResetMode.ManualReset, StopEventName))
+            int i = Array.IndexOf(args, name);
+            return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        }
+
+        private static Feeder MakeFeeder(string[] args)
+        {
+            string serial = Option(args, "-s");
+            if (serial == null) return null;
+            string root = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+            return new Feeder
             {
-                Console.WriteLine("READY " + FriendlyName);
-                Console.Out.Flush();
-                var reader = new Thread(() =>
+                Serial = serial,
+                Adb = Option(args, "--adb") ?? System.IO.Path.Combine(root, "adb.exe"),
+                Server = Option(args, "--server") ?? System.IO.Path.Combine(root, "scrcpy-server"),
+                ServerVersion = Option(args, "--server-version") ?? "4.1",
+                CameraId = Option(args, "--camera-id"),
+                CameraFacing = Option(args, "--camera-facing"),
+                CameraSize = Option(args, "--camera-size") ?? "1280x720",
+                Mirror = Array.IndexOf(args, "--mirror") >= 0,
+            };
+        }
+
+        /// <summary>Feeds on a background thread; reports with FEEDING / FEED-ERROR lines.</summary>
+        private static Thread StartFeeding(Feeder feeder, EventWaitHandle stop)
+        {
+            var t = new Thread(() =>
+            {
+                try { feeder.Run(s => { Console.WriteLine(s); Console.Out.Flush(); }); }
+                catch (Exception e)
                 {
-                    try
+                    Console.WriteLine("FEED-ERROR " + e.Message.Replace('\r', ' ').Replace('\n', ' '));
+                    Console.Out.Flush();
+                }
+                if (stop != null) stop.Set();   // no phone picture any more: turn the camera off
+            }) { IsBackground = true, Name = "feeder" };
+            t.Start();
+            return t;
+        }
+
+        private static int Run(string[] args)
+        {
+            bool fresh;
+            using (var stop = new EventWaitHandle(false, EventResetMode.ManualReset, StopEventName, out fresh))
+            {
+                if (!fresh) { Console.WriteLine("ALREADY " + FriendlyName + " is on"); return 3; }
+                IntPtr camera = Create();
+                Feeder feeder = null;
+                try
+                {
+                    Console.WriteLine("READY " + FriendlyName);
+                    Console.Out.Flush();
+                    feeder = MakeFeeder(args);
+                    if (feeder != null) StartFeeding(feeder, stop);
+                    if (Console.IsInputRedirected)
                     {
-                        string line;
-                        while ((line = Console.ReadLine()) != null)
-                            if (line.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase)) break;
+                        new Thread(() =>
+                        {
+                            try
+                            {
+                                string line;
+                                while ((line = Console.ReadLine()) != null)
+                                    if (line.Trim().Equals("stop", StringComparison.OrdinalIgnoreCase)) break;
+                            }
+                            catch { }
+                            stop.Set();   // "stop", or the parent went away
+                        }) { IsBackground = true }.Start();
                     }
-                    catch { }
-                    // stdin closed or "stop": with a parent that went away, stop too
-                    stop.Set();
-                }) { IsBackground = true };
-                if (!Console.IsInputRedirected) reader = null;
-                if (reader != null) reader.Start();
-                stop.WaitOne();
+                    stop.WaitOne();
+                }
+                finally
+                {
+                    if (feeder != null) feeder.Dispose();
+                    Destroy(camera);
+                }
             }
-            Destroy(camera);
             Console.WriteLine("STOPPED");
             return 0;
         }
-
         // ---------------------------------------------------------------- selftest
-        private static int SelfTest()
+        private static int SelfTest(string[] args)
         {
             IntPtr camera = IntPtr.Zero;
             IMFSourceReader reader = null;
@@ -151,7 +203,7 @@ namespace AndroidDC.VCam
                 Marshal.ReleaseComObject(type);
                 Console.WriteLine("format " + (size >> 32) + "x" + (size & 0xFFFFFFFF) + " " + (subtype == Mf.MFVideoFormat_NV12 ? "NV12" : subtype.ToString()));
 
-                var y = new byte[FrameShare.Width * FrameShare.Height];
+                var y = new byte[FrameShare.FrameBytes];
                 string detail;
 
                 // 1. the test pattern arrives unchanged
@@ -200,6 +252,40 @@ namespace AndroidDC.VCam
                         ok &= back;
                     }
                 }
+                // 5. with a phone: its camera reaches the virtual camera
+                Feeder feeder = MakeFeeder(args);
+                if (feeder != null)
+                {
+                    using (feeder)
+                    {
+                        watch.Restart();
+                        StartFeeding(feeder, null);
+                        bool phone = false;
+                        while (!phone && watch.ElapsedMilliseconds < 20000)
+                        {
+                            if (ReadFrame(reader, y) && feeder.Frames > 0) phone = !Pattern.Looks(y, FrameShare.Width, out detail);
+                        }
+                        Console.WriteLine((phone ? "PASS" : "FAIL") + " phone camera picture arrives (" + watch.ElapsedMilliseconds + " ms after start)");
+                        ok &= phone;
+                        if (phone)
+                        {
+                            long before = feeder.Frames;
+                            watch.Restart();
+                            int got = 0;
+                            while (watch.ElapsedMilliseconds < 5000) if (ReadFrame(reader, y)) got++;
+                            double phoneFps = (feeder.Frames - before) * 1000.0 / watch.ElapsedMilliseconds;
+                            double camFps = got * 1000.0 / watch.ElapsedMilliseconds;
+                            bool steady = phoneFps >= 15 && camFps >= 24;
+                            Console.WriteLine((steady ? "PASS" : "FAIL") + " phone " + phoneFps.ToString("0.0") + " fps decoded, camera " + camFps.ToString("0.0") + " fps");
+                            ok &= steady;
+                            long sum = 0;
+                            for (int i = 0; i < y.Length; i += 97) sum += y[i];
+                            Console.WriteLine("  mean brightness " + (sum * 97 / y.Length));
+                            string snap = Option(args, "--snapshot");
+                            if (snap != null) { SaveBmp(y, snap); Console.WriteLine("  snapshot " + snap); }
+                        }
+                    }
+                }
                 Console.WriteLine(ok ? "RESULT pass" : "RESULT fail");
                 return ok ? 0 : 1;
             }
@@ -208,6 +294,31 @@ namespace AndroidDC.VCam
                 if (reader != null) Marshal.ReleaseComObject(reader);
                 Destroy(camera);
             }
+        }
+
+        /// <summary>Writes an NV12 frame as a 24-bit BMP, to look at what the camera shows.</summary>
+        private static void SaveBmp(byte[] nv12, string path)
+        {
+            int w = FrameShare.Width, h = FrameShare.Height, rowBytes = w * 3;
+            var bmp = new byte[54 + rowBytes * h];
+            BitConverter.GetBytes((ushort)0x4D42).CopyTo(bmp, 0);
+            BitConverter.GetBytes(bmp.Length).CopyTo(bmp, 2);
+            BitConverter.GetBytes(54).CopyTo(bmp, 10);
+            BitConverter.GetBytes(40).CopyTo(bmp, 14);
+            BitConverter.GetBytes(w).CopyTo(bmp, 18);
+            BitConverter.GetBytes(-h).CopyTo(bmp, 22);   // top-down
+            BitConverter.GetBytes((ushort)1).CopyTo(bmp, 26);
+            BitConverter.GetBytes((ushort)24).CopyTo(bmp, 28);
+            for (int yy = 0; yy < h; yy++)
+                for (int x = 0; x < w; x++)
+                {
+                    int Y = nv12[yy * w + x] - 16, uv = w * h + (yy / 2) * w + (x & ~1);
+                    int U = nv12[uv] - 128, V = nv12[uv + 1] - 128;
+                    int r = (298 * Y + 409 * V + 128) >> 8, g = (298 * Y - 100 * U - 208 * V + 128) >> 8, b = (298 * Y + 516 * U + 128) >> 8;
+                    int o = 54 + yy * rowBytes + x * 3;
+                    bmp[o] = (byte)Math.Clamp(b, 0, 255); bmp[o + 1] = (byte)Math.Clamp(g, 0, 255); bmp[o + 2] = (byte)Math.Clamp(r, 0, 255);
+                }
+            System.IO.File.WriteAllBytes(path, bmp);
         }
 
         /// <summary>Activates the video capture device with this friendly name; IntPtr.Zero if none.</summary>
