@@ -12,6 +12,10 @@
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RollForward>LatestMajor</RollForward>
+    <!-- no debug info: it would carry this PC's folder path into the shipped DLL -->
+    <DebugType>none</DebugType>
+    <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=.</PathMap>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
