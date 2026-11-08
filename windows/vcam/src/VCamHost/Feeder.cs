@@ -30,6 +30,7 @@ namespace AndroidDC.VCam
         private readonly byte[] target = new byte[FrameShare.FrameBytes];
         private FrameShare share;
         private long frames;
+        private long lastOpenTry;
         private readonly StringBuilder serverLog = new StringBuilder();
 
         public long Frames { get { return Interlocked.Read(ref frames); } }
@@ -72,8 +73,6 @@ namespace AndroidDC.VCam
 
             NetworkStream stream = Connect(port);
             status("FEEDING");
-            share = FrameShare.Open();
-            if (share == null) throw new InvalidOperationException("the camera's shared picture is not there (is the camera on?)");
 
             using (var decoder = new H264Decoder())
             {
@@ -201,8 +200,17 @@ namespace AndroidDC.VCam
                     target[drow + x * 2 + 1] = src[srow + sx + 1];
                 }
             }
-            fixed (byte* p = target) share.Write(p);
             Interlocked.Increment(ref frames);
+            // The camera's source makes the shared section when an app first
+            // opens the camera; until then the pictures go nowhere.
+            if (share == null)
+            {
+                if (Environment.TickCount64 - lastOpenTry < 500) return;
+                lastOpenTry = Environment.TickCount64;
+                share = FrameShare.Open();
+                if (share == null) return;
+            }
+            fixed (byte* p = target) share.Write(p);
         }
 
         private string AdbText(params string[] args)

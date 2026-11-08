@@ -38,6 +38,7 @@ namespace AndroidDC.VCam
                     case "run": return Run(args);
                     case "selftest": return SelfTest(args);
                     case "list": Verbose = true; FindDevice("\u0001"); return 0;
+                    case "peek": return Peek(args);
                     default:
                         Console.WriteLine("usage: AndroidDC.VCamHost probe|run|selftest|list  [-s serial [--camera-id N|--camera-facing front|back] [--camera-size WxH] [--mirror] [--adb path] [--server path]]");
                         return 2;
@@ -171,6 +172,40 @@ namespace AndroidDC.VCam
             Console.WriteLine("STOPPED");
             return 0;
         }
+        // ---------------------------------------------------------------- peek
+        /// <summary>Opens the camera that is already on, like an app would, and says what it shows.</summary>
+        private static int Peek(string[] args)
+        {
+            IntPtr source = FindDevice(FriendlyName);
+            if (source == IntPtr.Zero) { Console.WriteLine("NONE the camera is not on"); return 1; }
+            IMFSourceReader reader;
+            try { Mf.Check(Mf.MFCreateSourceReaderFromMediaSource(source, IntPtr.Zero, out reader), "MFCreateSourceReaderFromMediaSource"); }
+            finally { Marshal.Release(source); }
+            try
+            {
+                var y = new byte[FrameShare.FrameBytes];
+                var watch = Stopwatch.StartNew();
+                int frames = 0, phone = 0;
+                long firstPhoneMs = -1;
+                string detail;
+                while (watch.ElapsedMilliseconds < 6000)
+                {
+                    if (!ReadFrame(reader, y)) continue;
+                    frames++;
+                    if (!Pattern.Looks(y, FrameShare.Width, out detail))
+                    {
+                        phone++;
+                        if (firstPhoneMs < 0) firstPhoneMs = watch.ElapsedMilliseconds;
+                    }
+                }
+                Console.WriteLine("FRAMES " + frames + " in 6 s, " + phone + " from the phone, first after " + firstPhoneMs + " ms");
+                string snap = Option(args, "--snapshot");
+                if (snap != null) SaveBmp(y, snap);
+                return phone > 0 ? 0 : 1;
+            }
+            finally { Marshal.ReleaseComObject(reader); }
+        }
+
         // ---------------------------------------------------------------- selftest
         private static int SelfTest(string[] args)
         {

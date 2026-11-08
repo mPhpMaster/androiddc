@@ -1,4 +1,4 @@
 out/
-bin/
 obj/
-*.log
+bin/*.pdb
+bin/*.log
