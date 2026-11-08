@@ -36,6 +36,9 @@ gnirehtet-run.cmd
 *.apk
 *.zip
 *.tar.gz
+# ...except the virtual camera, which is ours (built from windows\vcam\src)
+!windows/vcam/bin/*.exe
+!windows/vcam/bin/*.dll
 
 # --- local only --------------------------------------------------------------
 .idea/
